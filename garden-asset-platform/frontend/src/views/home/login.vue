@@ -174,9 +174,13 @@
           </el-form>
         </div>
 
-        <!-- 演示账号 -->
-        <div class="demo-accounts">
-          <div class="demo-title">快速登录</div>
+        <!-- 演示账号（仅开发环境可见） -->
+        <div v-if="showDemoAccounts" class="demo-accounts">
+          <div class="demo-title">
+            <el-icon><UserFilled /></el-icon>
+            快速体验
+            <el-tag size="small" type="warning" effect="plain">演示</el-tag>
+          </div>
           <div class="demo-list">
             <div class="demo-item" @click="fillDemo('admin', 'admin123')">
               <span class="demo-role">管理员</span>
@@ -198,11 +202,12 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { ElMessage } from 'element-plus'
-import { User, Lock, ArrowRight, HomeFilled } from '@element-plus/icons-vue'
+import { User, Lock, ArrowRight, HomeFilled, UserFilled } from '@element-plus/icons-vue'
 import * as THREE from 'three'
 
 const router = useRouter()
 const userStore = useUserStore()
+const showDemoAccounts = import.meta.env.DEV
 
 const formRef = ref()
 const loading = ref(false)
@@ -791,6 +796,9 @@ onUnmounted(() => {
   margin-top: 32px;
 
   .demo-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     font-size: 12px;
     font-weight: $font-weight-medium;
     color: $text-placeholder;

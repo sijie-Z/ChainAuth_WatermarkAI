@@ -39,7 +39,14 @@
     </div>
 
     <!-- 统计卡片 -->
-    <div class="stats-grid">
+    <el-skeleton v-if="loading" animated :rows="1" style="margin-bottom: 32px">
+      <template #template>
+        <div class="stats-grid">
+          <el-skeleton-item v-for="i in 4" :key="i" variant="rect" style="height: 160px; border-radius: 16px" />
+        </div>
+      </template>
+    </el-skeleton>
+    <div v-else class="stats-grid">
       <div
         class="stat-card"
         v-for="(stat, index) in statCards"
@@ -84,7 +91,12 @@
               <el-radio-button label="month">本月</el-radio-button>
             </el-radio-group>
           </div>
-          <div class="chart-container" ref="assetChartRef"></div>
+          <el-skeleton v-if="loading" animated :rows="1" style="padding: 20px">
+            <template #template>
+              <el-skeleton-item variant="rect" style="height: 300px; border-radius: 12px" />
+            </template>
+          </el-skeleton>
+          <div v-else class="chart-container" ref="assetChartRef"></div>
         </div>
 
         <!-- 水印处理趋势 -->
@@ -93,7 +105,12 @@
             <h3 class="card-title">水印处理趋势</h3>
             <el-tag size="small" type="success">实时更新</el-tag>
           </div>
-          <div class="chart-container" ref="watermarkChartRef"></div>
+          <el-skeleton v-if="loading" animated :rows="1" style="padding: 20px">
+            <template #template>
+              <el-skeleton-item variant="rect" style="height: 300px; border-radius: 12px" />
+            </template>
+          </el-skeleton>
+          <div v-else class="chart-container" ref="watermarkChartRef"></div>
         </div>
       </div>
 
@@ -118,7 +135,12 @@
             <h3 class="card-title">最近活动</h3>
             <el-button type="primary" link size="small">查看全部</el-button>
           </div>
-          <div class="activity-list">
+          <el-skeleton v-if="loading" animated :rows="4" style="padding: 16px" />
+          <div v-else class="activity-list">
+            <div v-if="recentActivities.length === 0" class="empty-mini">
+              <el-icon><Timer /></el-icon>
+              <span>暂无活动</span>
+            </div>
             <div class="activity-item" v-for="activity in recentActivities" :key="activity.id">
               <div class="activity-avatar" :style="{ background: activity.color }">
                 <el-icon><component :is="activity.icon" /></el-icon>
@@ -138,7 +160,12 @@
             <h3 class="card-title">待办事项</h3>
             <el-badge :value="pendingCount" type="danger" />
           </div>
-          <div class="todo-list">
+          <el-skeleton v-if="loading" animated :rows="2" style="padding: 16px" />
+          <div v-else class="todo-list">
+            <div v-if="todoList.length === 0" class="empty-mini">
+              <el-icon><CircleCheck /></el-icon>
+              <span>暂无待办</span>
+            </div>
             <div class="todo-item" v-for="todo in todoList" :key="todo.id">
               <div class="todo-priority" :class="todo.priority"></div>
               <div class="todo-content">
@@ -164,7 +191,8 @@
           <h3 class="card-title">最近上传资产</h3>
           <el-button type="primary" link>查看全部 →</el-button>
         </div>
-        <el-table :data="recentAssets" style="width: 100%" class="modern-table">
+        <el-skeleton v-if="loading" animated :rows="4" style="padding: 16px" />
+        <el-table v-else :data="recentAssets" style="width: 100%" class="modern-table">
           <el-table-column label="资产信息" min-width="280">
             <template #default="{ row }">
               <div class="asset-info">
@@ -1056,6 +1084,20 @@ onUnmounted(() => {
 @media (max-width: 1400px) {
   .main-content {
     grid-template-columns: 1fr 350px;
+  }
+}
+
+.empty-mini {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px;
+  color: $text-placeholder;
+  font-size: $font-size-sm;
+
+  .el-icon {
+    font-size: 28px;
   }
 }
 
