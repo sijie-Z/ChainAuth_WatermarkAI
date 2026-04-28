@@ -1,0 +1,96 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+eggs/
+.eggs/
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+.conda/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.iml
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Uploads & generated files
+uploads/*
+!uploads/.gitkeep
+test_uploads/
+extracted/
+watermarks/
+
+# Temp files
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup
+*.orig
+
+# Cache
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+__saved_files/
+.cache/
+
+# Node.js (frontend)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build output
+frontend/dist/
+**/dist/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Docker
+.docker/
+
+# Data files (keep structure, ignore content)
+data/watermark/*.png
+!data/watermark/default.png
+!data/watermark/.gitkeep
+data/models/*
+!data/models/.gitkeep
+
+# Claude Code
+.claude/plans/

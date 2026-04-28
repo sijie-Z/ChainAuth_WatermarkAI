@@ -1,0 +1,239 @@
+# OpenAPI 3.0 规范
+openapi: 3.0.0
+info:
+  title: 苏州园林数字资产平台 API
+  description: 基于数字水印和AI推理的苏州园林数字资产安全分发与溯源系统
+  version: 1.0.0
+  contact:
+    name: 挑战杯项目团队
+
+servers:
+  - url: http://localhost:5000/api
+    description: 开发服务器
+
+tags:
+  - name: auth
+    description: 认证相关接口
+  - name: asset
+    description: 资产管理接口
+  - name: watermark
+    description: 水印处理接口
+  - name: blockchain
+    description: 区块链存证接口
+  - name: license
+    description: 授权管理接口
+  - name: ai
+    description: AI智能接口
+
+paths:
+  # 认证接口
+  /register:
+    post:
+      tags: [auth]
+      summary: 用户注册
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                email:
+                  type: string
+      responses:
+        '200':
+          description: 注册成功
+
+  /login:
+    post:
+      tags: [auth]
+      summary: 用户登录
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  data:
+                    type: object
+                    properties:
+                      access_token:
+                        type: string
+                      refresh_token:
+                        type: string
+                      user:
+                        $ref: '#/components/schemas/User'
+
+  # 水印接口
+  /watermark/embed:
+    post:
+      tags: [watermark]
+      summary: 嵌入水印
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [asset_id]
+              properties:
+                asset_id:
+                  type: string
+                algorithm:
+                  type: string
+                  enum: [dct, lsb, vector]
+      responses:
+        '200':
+          description: 水印嵌入成功
+
+  /watermark/trace:
+    post:
+      tags: [watermark]
+      summary: 图片溯源
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: 溯源结果
+
+  # 区块链接口
+  /blockchain/register:
+    post:
+      tags: [blockchain]
+      summary: 上链存证
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [asset_id]
+              properties:
+                asset_id:
+                  type: string
+      responses:
+        '200':
+          description: 存证成功
+
+  /blockchain/certificate/{id}:
+    get:
+      tags: [blockchain]
+      summary: 获取存证证书
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 证书详情
+
+  # 授权接口
+  /license/apply:
+    post:
+      tags: [license]
+      summary: 申请授权
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [asset_id, license_type, purpose]
+              properties:
+                asset_id:
+                  type: string
+                license_type:
+                  type: string
+                  enum: [personal, academic, commercial, display, derivative]
+                purpose:
+                  type: string
+                valid_period:
+                  type: string
+      responses:
+        '200':
+          description: 申请提交成功
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    Asset:
+      type: object
+      properties:
+        id:
+          type: string
+        asset_code:
+          type: string
+        title:
+          type: string
+        asset_type:
+          type: string
+        watermark_status:
+          type: string
+        chain_status:
+          type: string
+
+    Certificate:
+      type: object
+      properties:
+        certificate_id:
+          type: string
+        tx_hash:
+          type: string
+        block_number:
+          type: integer
+        confirmed_at:
+          type: string
+          format: date-time

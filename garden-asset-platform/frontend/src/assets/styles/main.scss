@@ -1,0 +1,598 @@
+// ============================================
+// 苏州园林数字资产平台 - 主样式文件
+// Main Stylesheet
+// ============================================
+
+@use './variables.scss' as *;
+
+// === 全局重置 Global Reset ===
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: $font-family;
+  font-size: $font-size-base;
+  line-height: $line-height-normal;
+  color: $text-primary;
+  background-color: $bg-primary;
+  min-height: 100vh;
+}
+
+// === 滚动条美化 Scrollbar ===
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: $border-dark;
+  border-radius: $radius-full;
+
+  &:hover {
+    background: $text-placeholder;
+  }
+}
+
+// === 选中文本 Selection ===
+::selection {
+  background-color: rgba($primary-color, 0.2);
+  color: $text-primary;
+}
+
+// === 链接样式 Links ===
+a {
+  color: $primary-color;
+  text-decoration: none;
+  transition: color $transition-fast;
+
+  &:hover {
+    color: $primary-dark;
+  }
+}
+
+// === 工具类 Utility Classes ===
+
+// 文字截断
+.text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-truncate-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.text-truncate-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+// 玻璃态效果
+.glass {
+  background: $glass-bg;
+  backdrop-filter: $glass-blur;
+  -webkit-backdrop-filter: $glass-blur;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.glass-dark {
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: $glass-blur;
+  -webkit-backdrop-filter: $glass-blur;
+}
+
+// 渐变文字
+.gradient-text {
+  background: $primary-gradient;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+// === 现代卡片 Modern Card ===
+.modern-card {
+  background: $bg-card;
+  border-radius: $radius-xl;
+  box-shadow: $shadow-card;
+  border: 1px solid rgba(0, 0, 0, 0.02);
+  transition: all $transition-base;
+
+  &:hover {
+    box-shadow: $shadow-card-hover;
+    transform: translateY(-2px);
+  }
+}
+
+// 玻璃卡片
+.glass-card {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: $glass-blur;
+  border-radius: $radius-xl;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: $shadow-glass;
+}
+
+// === 统计卡片 Stat Card ===
+.stat-card {
+  @extend .modern-card;
+  padding: $spacing-2xl;
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: $primary-gradient;
+    border-radius: $radius-xl $radius-xl 0 0;
+  }
+
+  .stat-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: $radius-lg;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    margin-bottom: $spacing-lg;
+  }
+
+  .stat-value {
+    font-size: $font-size-4xl;
+    font-weight: $font-weight-bold;
+    color: $text-primary;
+    line-height: 1.2;
+    margin-bottom: $spacing-xs;
+  }
+
+  .stat-label {
+    font-size: $font-size-base;
+    color: $text-secondary;
+  }
+
+  .stat-trend {
+    display: flex;
+    align-items: center;
+    gap: $spacing-xs;
+    margin-top: $spacing-md;
+    font-size: $font-size-sm;
+
+    &.up {
+      color: $success-color;
+    }
+
+    &.down {
+      color: $error-color;
+    }
+  }
+}
+
+// === 按钮样式 Button Styles ===
+.btn-gradient {
+  background: $primary-gradient;
+  color: white;
+  border: none;
+  padding: $spacing-lg $spacing-2xl;
+  border-radius: $radius-lg;
+  font-weight: $font-weight-medium;
+  cursor: pointer;
+  transition: all $transition-base;
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left $transition-slow;
+  }
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba($primary-color, 0.3);
+
+    &::before {
+      left: 100%;
+    }
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+}
+
+// === 表格样式 Table Styles ===
+.modern-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+
+  th {
+    background: $bg-secondary;
+    color: $text-secondary;
+    font-weight: $font-weight-medium;
+    padding: $spacing-lg $spacing-xl;
+    text-align: left;
+    font-size: $font-size-sm;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid $border-color;
+
+    &:first-child {
+      border-radius: $radius-lg 0 0 0;
+    }
+
+    &:last-child {
+      border-radius: 0 $radius-lg 0 0;
+    }
+  }
+
+  td {
+    padding: $spacing-xl;
+    border-bottom: 1px solid $border-light;
+    vertical-align: middle;
+  }
+
+  tbody tr {
+    transition: background $transition-fast;
+
+    &:hover {
+      background: $bg-hover;
+    }
+
+    &:last-child td {
+      border-bottom: none;
+    }
+  }
+}
+
+// === 标签样式 Tag Styles ===
+.status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-xs;
+  padding: $spacing-xs $spacing-md;
+  border-radius: $radius-full;
+  font-size: $font-size-xs;
+  font-weight: $font-weight-medium;
+
+  &.success {
+    background: $success-bg;
+    color: $success-color;
+  }
+
+  &.warning {
+    background: $warning-bg;
+    color: $warning-color;
+  }
+
+  &.error {
+    background: $error-bg;
+    color: $error-color;
+  }
+
+  &.info {
+    background: $info-bg;
+    color: $info-color;
+  }
+
+  &.primary {
+    background: rgba($primary-color, 0.1);
+    color: $primary-color;
+  }
+}
+
+// === 头像 Avatar ===
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: $radius-full;
+  object-fit: cover;
+  border: 2px solid white;
+  box-shadow: $shadow-sm;
+}
+
+.avatar-group {
+  display: flex;
+
+  .avatar {
+    margin-left: -10px;
+
+    &:first-child {
+      margin-left: 0;
+    }
+  }
+}
+
+// === 进度条 Progress ===
+.progress-bar {
+  height: 8px;
+  background: $bg-secondary;
+  border-radius: $radius-full;
+  overflow: hidden;
+
+  .progress-fill {
+    height: 100%;
+    border-radius: $radius-full;
+    background: $primary-gradient;
+    transition: width $transition-slow;
+  }
+}
+
+// === 动画关键帧 Animations ===
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes countUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+// 动画类
+.animate-fade-in {
+  animation: fadeIn 0.5s ease forwards;
+}
+
+.animate-slide-in {
+  animation: slideInRight 0.3s ease forwards;
+}
+
+.animate-pulse {
+  animation: pulse 2s infinite;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+// 骨架屏
+.skeleton {
+  background: linear-gradient(90deg, $bg-secondary 25%, $bg-hover 50%, $bg-secondary 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: $radius-md;
+}
+
+// === 页面布局 Page Layout ===
+.page-container {
+  min-height: 100vh;
+  background: $bg-primary;
+}
+
+.page-header {
+  padding: $spacing-3xl $spacing-4xl;
+  background: white;
+  border-bottom: 1px solid $border-light;
+
+  .page-title {
+    font-size: $font-size-3xl;
+    font-weight: $font-weight-bold;
+    color: $text-primary;
+    margin-bottom: $spacing-sm;
+  }
+
+  .page-subtitle {
+    font-size: $font-size-base;
+    color: $text-secondary;
+  }
+}
+
+.page-content {
+  padding: $spacing-3xl;
+}
+
+// === 响应式断点 Responsive ===
+@media (max-width: $breakpoint-lg) {
+  .page-content {
+    padding: $spacing-xl;
+  }
+
+  .stat-card {
+    padding: $spacing-xl;
+  }
+}
+
+@media (max-width: $breakpoint-md) {
+  .page-header {
+    padding: $spacing-2xl;
+
+    .page-title {
+      font-size: $font-size-2xl;
+    }
+  }
+}
+
+// === Element Plus 覆盖 Element Plus Overrides ===
+.el-button--primary {
+  background: $primary-gradient !important;
+  border: none !important;
+
+  &:hover {
+    opacity: 0.9;
+  }
+}
+
+.el-card {
+  border-radius: $radius-xl !important;
+  border: 1px solid $border-light !important;
+  box-shadow: $shadow-card !important;
+}
+
+.el-input__wrapper {
+  border-radius: $radius-lg !important;
+  box-shadow: none !important;
+  border: 1px solid $border-color !important;
+
+  &:hover, &:focus-within {
+    border-color: $primary-color !important;
+    box-shadow: 0 0 0 3px rgba($primary-color, 0.1) !important;
+  }
+}
+
+.el-select .el-input__wrapper {
+  border-radius: $radius-lg !important;
+}
+
+.el-table {
+  border-radius: $radius-xl !important;
+  overflow: hidden;
+
+  th.el-table__cell {
+    background: $bg-secondary !important;
+    font-weight: $font-weight-medium !important;
+    color: $text-secondary !important;
+  }
+
+  td.el-table__cell {
+    border-bottom: 1px solid $border-light !important;
+  }
+
+  .el-table__row:hover td {
+    background: $bg-hover !important;
+  }
+}
+
+.el-tag {
+  border-radius: $radius-full !important;
+  border: none !important;
+  padding: 2px 12px !important;
+}
+
+.el-dialog {
+  border-radius: $radius-2xl !important;
+  overflow: hidden;
+
+  .el-dialog__header {
+    padding: $spacing-2xl $spacing-3xl;
+    border-bottom: 1px solid $border-light;
+  }
+
+  .el-dialog__body {
+    padding: $spacing-3xl;
+  }
+}
+
+.el-message-box {
+  border-radius: $radius-xl !important;
+}
+
+.el-notification {
+  border-radius: $radius-lg !important;
+  border-left: 4px solid $primary-color !important;
+}
+
+// === 园林特色装饰 Garden Theme Decorations ===
+.garden-bg-pattern {
+  position: relative;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%2310b981' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    pointer-events: none;
+    opacity: 0.5;
+  }
+}
+
+// 中国风边框装饰
+.chinese-border {
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60px;
+    height: 3px;
+    background: $primary-gradient;
+    border-radius: $radius-full;
+  }
+}
