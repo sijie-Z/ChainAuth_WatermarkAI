@@ -19,26 +19,34 @@ defineProps({
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@use '@/assets/styles/variables.scss' as *;
+
 .stat-card {
   display: flex;
   align-items: center;
   padding: 20px;
   background: #fff;
-  border-radius: 8px;
+  border-radius: $radius-lg;
   border-left: 4px solid;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  box-shadow: $shadow-card;
+  transition: $transition-base;
+
+  &:hover {
+    box-shadow: $shadow-lg;
+    transform: translateY(-2px);
+  }
 }
 
 .stat-icon {
   width: 56px;
   height: 56px;
-  border-radius: 8px;
+  border-radius: $radius-lg;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
-  margin-right: 16px;
+  margin-right: $spacing-md;
 }
 
 .stat-content {
@@ -46,14 +54,14 @@ defineProps({
 }
 
 .stat-value {
-  font-size: 28px;
-  font-weight: 600;
-  color: #303133;
+  font-size: $font-size-3xl;
+  font-weight: $font-weight-bold;
+  color: $text-primary;
 }
 
 .stat-label {
-  font-size: 14px;
-  color: #909399;
-  margin-top: 4px;
+  font-size: $font-size-sm;
+  color: $text-secondary;
+  margin-top: $spacing-xs;
 }
 </style>

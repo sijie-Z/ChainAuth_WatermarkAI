@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## [1.3.0] - 2026-05-08
+
+### Security
+- **XSS输入防护**：注册接口检测HTML标签，防止脚本注入
+- **输入验证工具**：新增 `has_html_tags()` 和 `sanitize_text()` 函数
+
+### Fixed
+- **admin_header测试fixture**：注册后直接在数据库中提升角色，绕过注册接口的角色强制
+- **test_watermark.py重复类**：移除重复的 `TestBlockchain` 类，补充水印嵌入/提取/溯源测试
+- **文档自相矛盾**：DEVELOPMENT.md 同时将 Docker/CI/CD 列为"已完成"和"待完成"
+- **虚假100%完成度**：修正核心模块完成度为实际值（80-95%）
+
+### Added
+- **区块链模拟数据增强**：生成FISCO BCOS风格的交易哈希、区块号、Gas消耗、合约地址
+- **BlockchainTransaction.to_dict()**：返回 `gas_used`、`from_address`、`block_hash`、`confirmations`
+- **Certificate.to_dict()**：返回 `file_hash`、`ownership_type`、`valid_from/until`
+- **前端共享组件注册**：StatCard、StatusTag、EmptyState 全局注册并集成到视图
+- **设计系统统一**：5个视图（detail、upload、license/apply、license/my、trace）从硬编码颜色迁移到SCSS变量
+- **资产详情骨架屏**：加载时显示骨架屏，加载失败显示错误状态+重试按钮
+- **授权流程测试**：双重审批完整流程测试、拒绝流程测试
+- **密码修改测试**：成功、旧密码错误、新密码太短
+- **注册角色注入测试**：验证 `role: "admin"` 被忽略
+- **adm1/adm2测试fixtures**：资产管理员认证头
+
 ## [1.2.0] - 2026-05-08
 
 ### Security (CRITICAL)

@@ -16,8 +16,8 @@
 
       <el-skeleton :loading="loading" animated :rows="6">
         <template #template>
-          <div style="padding: 12px 0" v-for="i in 6" :key="i" class="skeleton-row">
-            <div style="display: flex; gap: 24px; align-items: center; padding: 12px 0; border-bottom: 1px solid #ebeef5">
+          <div v-for="i in 6" :key="i" class="skeleton-row">
+            <div style="display: flex; gap: 24px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--el-border-color-lighter)">
               <el-skeleton-item variant="text" style="width: 160px" />
               <el-skeleton-item variant="text" style="flex: 1" />
               <el-skeleton-item variant="text" style="width: 80px" />
@@ -38,9 +38,7 @@
             </el-table-column>
             <el-table-column prop="status" label="状态" width="80">
               <template #default="{ row }">
-                <el-tag :type="getStatusType(row.status)" size="small">
-                  {{ getStatusName(row.status) }}
-                </el-tag>
+                <StatusTag :status="row.status" />
               </template>
             </el-table-column>
             <el-table-column prop="valid_until" label="有效期" width="140">
@@ -62,6 +60,14 @@
               </template>
             </el-table-column>
           </el-table>
+
+          <EmptyState
+            v-if="!loading && licenses.length === 0"
+            description="暂无授权记录"
+            :show-action="true"
+            action-text="申请授权"
+            @action="$router.push('/license/apply')"
+          />
         </template>
       </el-skeleton>
 
@@ -82,7 +88,7 @@
       <el-descriptions :column="2" border>
         <el-descriptions-item label="授权编码">{{ detail.license_code }}</el-descriptions-item>
         <el-descriptions-item label="状态">
-          <el-tag :type="getStatusType(detail.status)">{{ getStatusName(detail.status) }}</el-tag>
+          <StatusTag :status="detail.status" />
         </el-descriptions-item>
         <el-descriptions-item label="资产标题" :span="2">{{ detail.asset_title }}</el-descriptions-item>
         <el-descriptions-item label="授权类型">{{ getLicenseType(detail.license_type) }}</el-descriptions-item>
@@ -90,7 +96,7 @@
         <el-descriptions-item label="使用范围" :span="2">{{ detail.scope?.join('、') || '-' }}</el-descriptions-item>
         <el-descriptions-item label="使用目的" :span="2">{{ detail.purpose }}</el-descriptions-item>
         <el-descriptions-item label="区块链存证" :span="2">
-          <span v-if="detail.tx_hash" class="hash">{{ detail.tx_hash }}</span>
+          <span v-if="detail.tx_hash" class="mono">{{ detail.tx_hash }}</span>
           <span v-else>未上链</span>
         </el-descriptions-item>
         <el-descriptions-item label="审批意见" :span="2">{{ detail.approve_comment || '-' }}</el-descriptions-item>
@@ -171,28 +177,6 @@ function getLicenseType(type) {
   return map[type] || type
 }
 
-function getStatusName(status) {
-  const map = {
-    pending: '审批中',
-    active: '已生效',
-    rejected: '已拒绝',
-    expired: '已过期',
-    revoked: '已撤销'
-  }
-  return map[status] || status
-}
-
-function getStatusType(status) {
-  const map = {
-    pending: 'warning',
-    active: 'success',
-    rejected: 'danger',
-    expired: 'info',
-    revoked: 'danger'
-  }
-  return map[status] || 'info'
-}
-
 function formatDate(dateStr) {
   if (!dateStr) return ''
   return new Date(dateStr).toLocaleDateString('zh-CN')
@@ -203,11 +187,13 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@use '@/assets/styles/variables.scss' as *;
+
 .license-my {
-  padding: 20px;
+  padding: $spacing-lg;
   min-height: 100vh;
-  background: #f5f7fa;
+  background: $bg-primary;
 }
 
 .card-header {
@@ -216,9 +202,9 @@ onMounted(() => {
   align-items: center;
 }
 
-.hash {
-  font-family: monospace;
-  font-size: 12px;
+.mono {
+  font-family: 'Courier New', monospace;
+  font-size: $font-size-xs;
   word-break: break-all;
 }
 </style>

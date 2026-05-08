@@ -13,7 +13,7 @@
 <script setup>
 defineProps({
   description: { type: String, default: '暂无数据' },
-  imageSize: { type: Number, default: 120 },
+  imageSize: { type: Number, default: 160 },
   showAction: { type: Boolean, default: false },
   actionText: { type: String, default: '立即添加' }
 })
@@ -21,9 +21,11 @@ defineProps({
 defineEmits(['action'])
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@use '@/assets/styles/variables.scss' as *;
+
 .empty-state {
-  padding: 40px 0;
+  padding: $spacing-2xl 0;
   text-align: center;
 }
 </style>

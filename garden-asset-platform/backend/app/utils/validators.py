@@ -104,3 +104,36 @@ def validate_file_size(size_bytes, max_mb=100):
     if size_bytes > max_bytes:
         return False, f"文件大小不能超过 {max_mb}MB"
     return True, ""
+
+
+def sanitize_text(text):
+    """
+    清理文本中的HTML标签和脚本，防止XSS攻击
+
+    Args:
+        text: 原始文本
+
+    Returns:
+        清理后的文本
+    """
+    if not text:
+        return text
+    # 移除HTML标签
+    import html
+    text = html.escape(str(text))
+    return text
+
+
+def has_html_tags(text):
+    """
+    检查文本是否包含HTML标签
+
+    Args:
+        text: 待检查文本
+
+    Returns:
+        True如果包含HTML标签
+    """
+    if not text:
+        return False
+    return bool(re.search(r'<[^>]+>', str(text)))

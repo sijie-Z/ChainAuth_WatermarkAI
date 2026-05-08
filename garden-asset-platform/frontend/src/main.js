@@ -12,6 +12,7 @@ import '@/assets/styles/main.scss'
 
 import App from './App.vue'
 import router from './router'
+import GlobalComponents from '@/components'
 
 const app = createApp(App)
 
@@ -26,6 +27,9 @@ app.use(ElementPlus, {
   locale: zhCn,
   size: 'default'
 })
+
+// 全局组件
+app.use(GlobalComponents)
 
 // 注册所有图标
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {

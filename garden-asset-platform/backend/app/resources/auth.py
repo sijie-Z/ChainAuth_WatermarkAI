@@ -15,6 +15,7 @@ from app.extensions import db
 from app.models.user import User, UserToken
 from app.models.log import OperationLog
 from app.utils.middleware import rate_limit
+from app.utils.validators import has_html_tags
 
 
 class RegisterResource(Resource):
@@ -32,6 +33,10 @@ class RegisterResource(Resource):
 
         if not username or not password:
             return {'code': 400, 'message': '用户名和密码不能为空'}, 400
+
+        # 防止XSS注入
+        if has_html_tags(username) or has_html_tags(email) or has_html_tags(phone):
+            return {'code': 400, 'message': '输入包含非法字符'}, 400
 
         # 检查用户是否已存在
         if User.query.filter_by(username=username).first():

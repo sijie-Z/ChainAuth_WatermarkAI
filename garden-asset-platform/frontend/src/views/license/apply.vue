@@ -9,7 +9,7 @@
       </template>
 
       <!-- 资产信息 -->
-      <el-card shadow="hover" style="margin-bottom: 20px">
+      <el-card shadow="hover" class="asset-info-card">
         <template #header>资产信息</template>
         <el-descriptions :column="3" border>
           <el-descriptions-item label="资产编码">{{ asset.asset_code }}</el-descriptions-item>
@@ -17,14 +17,10 @@
           <el-descriptions-item label="类型">{{ getTypeName(asset.asset_type) }}</el-descriptions-item>
           <el-descriptions-item label="所属园林">{{ asset.garden_name }}</el-descriptions-item>
           <el-descriptions-item label="水印状态">
-            <el-tag :type="asset.watermark_status === 'embedded' ? 'success' : 'info'" size="small">
-              {{ asset.watermark_status === 'embedded' ? '已嵌入' : '未嵌入' }}
-            </el-tag>
+            <StatusTag :status="asset.watermark_status || 'pending'" />
           </el-descriptions-item>
           <el-descriptions-item label="存证状态">
-            <el-tag :type="asset.chain_status === 'confirmed' ? 'success' : 'info'" size="small">
-              {{ asset.chain_status === 'confirmed' ? '已存证' : '未存证' }}
-            </el-tag>
+            <StatusTag :status="asset.chain_status || 'pending'" />
           </el-descriptions-item>
         </el-descriptions>
       </el-card>
@@ -203,11 +199,13 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@use '@/assets/styles/variables.scss' as *;
+
 .license-apply {
-  padding: 20px;
+  padding: $spacing-lg;
   min-height: 100vh;
-  background: #f5f7fa;
+  background: $bg-primary;
 }
 
 .card-header {
@@ -216,20 +214,24 @@ onMounted(() => {
   align-items: center;
 }
 
+.asset-info-card {
+  margin-bottom: $spacing-lg;
+}
+
 .agreement-content {
   max-height: 400px;
   overflow-y: auto;
   line-height: 1.8;
-}
 
-.agreement-content h4 {
-  margin: 15px 0 10px;
-  color: #333;
-}
+  h4 {
+    margin: 15px 0 10px;
+    color: $text-primary;
+  }
 
-.agreement-content p {
-  margin: 5px 0;
-  color: #666;
-  font-size: 14px;
+  p {
+    margin: 5px 0;
+    color: $text-secondary;
+    font-size: $font-size-sm;
+  }
 }
 </style>

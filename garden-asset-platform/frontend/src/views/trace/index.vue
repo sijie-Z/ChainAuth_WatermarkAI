@@ -39,10 +39,12 @@
     <!-- 溯源结果 -->
     <el-card v-if="traceResult" class="result-card">
       <template #header>
-        <span>溯源结果</span>
-        <el-tag :type="traceResult.verified ? 'success' : 'danger'" style="margin-left: 10px">
-          {{ traceResult.verified ? '验证通过' : '验证失败' }}
-        </el-tag>
+        <div class="card-header">
+          <span>溯源结果</span>
+          <el-tag :type="traceResult.verified ? 'success' : 'danger'">
+            {{ traceResult.verified ? '验证通过' : '验证失败' }}
+          </el-tag>
+        </div>
       </template>
 
       <template v-if="traceResult.verified">
@@ -63,22 +65,24 @@
             <el-link type="primary" @click="viewCertificate">{{ traceResult.certificate_id }}</el-link>
           </el-descriptions-item>
           <el-descriptions-item label="交易哈希">
-            <span class="hash">{{ traceResult.tx_hash }}</span>
+            <span class="mono">{{ traceResult.tx_hash }}</span>
           </el-descriptions-item>
           <el-descriptions-item label="存证时间">{{ formatDate(traceResult.confirmed_at) }}</el-descriptions-item>
         </el-descriptions>
 
         <!-- 操作 -->
-        <div style="margin-top: 20px">
+        <div class="result-actions">
           <el-button type="primary" @click="viewAsset">查看资产详情</el-button>
           <el-button @click="downloadReport">下载溯源报告</el-button>
         </div>
       </template>
 
       <template v-else>
-        <el-empty description="未找到对应的资产记录，可能为未授权使用">
-          <el-button type="primary">举报侵权</el-button>
-        </el-empty>
+        <EmptyState description="未找到对应的资产记录，可能为未授权使用">
+          <template #action>
+            <el-button type="primary">举报侵权</el-button>
+          </template>
+        </EmptyState>
       </template>
     </el-card>
   </div>
@@ -111,12 +115,10 @@ async function doTrace() {
     let response
 
     if (activeTab.value === 'upload' && uploadedFile.value) {
-      // 上传图片溯源
       const formData = new FormData()
       formData.append('file', uploadedFile.value)
       response = await watermarkApi.trace(formData)
     } else if (activeTab.value === 'watermark' && watermarkId.value) {
-      // 水印ID溯源
       response = await blockchainApi.verifyByWatermark(watermarkId.value)
     } else {
       ElMessage.warning('请上传图片或输入水印ID')
@@ -213,20 +215,34 @@ function formatDate(dateStr) {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@use '@/assets/styles/variables.scss' as *;
+
 .trace-container {
-  padding: 20px;
+  padding: $spacing-lg;
   min-height: 100vh;
-  background: #f5f7fa;
+  background: $bg-primary;
 }
 
 .result-card {
-  margin-top: 20px;
+  margin-top: $spacing-lg;
 }
 
-.hash {
-  font-family: monospace;
-  font-size: 12px;
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.result-actions {
+  margin-top: $spacing-lg;
+  display: flex;
+  gap: $spacing-sm;
+}
+
+.mono {
+  font-family: 'Courier New', monospace;
+  font-size: $font-size-xs;
   word-break: break-all;
 }
 </style>

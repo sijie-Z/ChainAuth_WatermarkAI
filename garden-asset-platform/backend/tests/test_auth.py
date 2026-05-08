@@ -134,3 +134,74 @@ class TestAuth:
         assert response.status_code == 200
         data = response.get_json()
         assert 'access_token' in data['data']
+
+    def test_change_password_success(self, client, auth_header):
+        """测试修改密码成功"""
+        response = client.post('/api/user/change-password',
+            json={
+                'old_password': 'test123',
+                'new_password': 'newpass123'
+            },
+            headers=auth_header
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['code'] == 200
+
+    def test_change_password_wrong_old(self, client, auth_header):
+        """测试修改密码旧密码错误"""
+        response = client.post('/api/user/change-password',
+            json={
+                'old_password': 'wrongold',
+                'new_password': 'newpass123'
+            },
+            headers=auth_header
+        )
+
+        assert response.status_code == 400
+
+    def test_change_password_too_short(self, client, auth_header):
+        """测试修改密码新密码太短"""
+        response = client.post('/api/user/change-password',
+            json={
+                'old_password': 'test123',
+                'new_password': '123'
+            },
+            headers=auth_header
+        )
+
+        assert response.status_code == 400
+
+    def test_update_profile(self, client, auth_header):
+        """测试更新个人信息"""
+        response = client.put('/api/user/current',
+            json={
+                'email': 'updated@test.com',
+                'phone': '13800138000'
+            },
+            headers=auth_header
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['data']['email'] == 'updated@test.com'
+
+    def test_register_role_injection(self, client):
+        """测试注册角色注入攻击被阻止"""
+        response = client.post('/api/register', json={
+            'username': 'hacker',
+            'password': 'password123',
+            'email': 'hacker@test.com',
+            'role': 'admin'
+        })
+
+        assert response.status_code == 200
+
+        # 登录并验证角色是 user 而非 admin
+        response = client.post('/api/login', json={
+            'username': 'hacker',
+            'password': 'password123'
+        })
+        data = response.get_json()
+        assert data['data']['user']['role'] == 'user'

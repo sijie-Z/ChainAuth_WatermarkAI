@@ -2,6 +2,7 @@
 水印模块测试
 """
 import pytest
+import io
 
 
 class TestWatermark:
@@ -27,20 +28,47 @@ class TestWatermark:
 
         assert response.status_code == 400
 
+    def test_embed_asset_not_found(self, client, auth_header):
+        """测试嵌入水印到不存在的资产"""
+        response = client.post('/api/watermark/embed',
+            json={'asset_id': 'nonexistent-id'},
+            headers=auth_header
+        )
 
-class TestBlockchain:
-    """区块链测试类"""
+        assert response.status_code in [404, 400]
 
-    def test_get_blockchain_status(self, client):
-        """测试获取区块链状态"""
-        response = client.get('/api/blockchain/status')
+    def test_extract_asset_not_found(self, client, auth_header):
+        """测试从不存在的资产提取水印"""
+        response = client.post('/api/watermark/extract',
+            json={'asset_id': 'nonexistent-id'},
+            headers=auth_header
+        )
 
-        assert response.status_code == 200
-        data = response.get_json()
-        assert 'connected' in data['data']
+        assert response.status_code in [404, 400]
 
-    def test_get_certificate_not_found(self, client):
-        """测试获取不存在的证书"""
-        response = client.get('/api/blockchain/certificate/nonexistent')
+    def test_embed_unauthorized(self, client):
+        """测试未认证嵌入水印"""
+        response = client.post('/api/watermark/embed',
+            json={'asset_id': 'some-id'}
+        )
 
-        assert response.status_code == 404
+        assert response.status_code == 401
+
+    def test_trace_with_file(self, client):
+        """测试上传文件溯源"""
+        data = {
+            'file': (io.BytesIO(b'\x89PNG\r\n\x1a\n' + b'\x00' * 100), 'test.png')
+        }
+        response = client.post('/api/watermark/trace',
+            data=data,
+            content_type='multipart/form-data'
+        )
+
+        # 应该返回结果（可能未找到匹配，但不应500）
+        assert response.status_code in [200, 404]
+
+    def test_get_logs_unauthorized(self, client):
+        """测试未认证获取水印日志"""
+        response = client.get('/api/watermark/logs')
+
+        assert response.status_code == 401

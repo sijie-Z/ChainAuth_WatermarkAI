@@ -98,3 +98,58 @@ class TestLicense:
         )
 
         assert response.status_code == 404
+
+    def test_dual_approval_workflow(self, client, auth_header, admin_header, sample_asset):
+        """测试双重审批流程：adm1审批 → adm2审批 → 生成授权"""
+        # 1. 普通用户提交申请
+        resp = client.post('/api/license/apply',
+            json={
+                'asset_id': sample_asset,
+                'license_type': 'personal',
+                'purpose': '学术研究',
+                'valid_period': '1y',
+                'contact': 'test@test.com'
+            },
+            headers=auth_header
+        )
+        assert resp.status_code == 200
+        app_id = resp.get_json()['data']['id']
+
+        # 2. 管理员第一步审批（adm1）
+        resp = client.post(f'/api/license/approve/{app_id}',
+            json={'action': 'approve', 'comment': '资产审核通过'},
+            headers=admin_header
+        )
+        assert resp.status_code == 200
+
+        # 3. 管理员第二步审批（adm2）
+        resp = client.post(f'/api/license/approve/{app_id}',
+            json={'action': 'approve', 'comment': '授权审核通过'},
+            headers=admin_header
+        )
+        assert resp.status_code == 200
+
+        # 4. 验证授权已创建
+        resp = client.get('/api/license/my', headers=auth_header)
+        assert resp.status_code == 200
+
+    def test_reject_workflow(self, client, auth_header, admin_header, sample_asset):
+        """测试拒绝审批流程"""
+        # 提交申请
+        resp = client.post('/api/license/apply',
+            json={
+                'asset_id': sample_asset,
+                'license_type': 'commercial',
+                'purpose': '商业用途',
+                'contact': 'test@test.com'
+            },
+            headers=auth_header
+        )
+        app_id = resp.get_json()['data']['id']
+
+        # 拒绝申请
+        resp = client.post(f'/api/license/approve/{app_id}',
+            json={'action': 'reject', 'comment': '不符合授权条件'},
+            headers=admin_header
+        )
+        assert resp.status_code == 200

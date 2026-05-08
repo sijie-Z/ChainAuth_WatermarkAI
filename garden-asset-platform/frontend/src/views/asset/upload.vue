@@ -86,10 +86,10 @@
     </el-card>
 
     <!-- 上传进度 -->
-    <el-card v-if="uploadProgress > 0" style="margin-top: 20px">
+    <el-card v-if="uploadProgress > 0" class="progress-card">
       <template #header>上传进度</template>
       <el-progress :percentage="uploadProgress" :status="uploadStatus" />
-      <div style="margin-top: 10px">{{ uploadMessage }}</div>
+      <div class="progress-message">{{ uploadMessage }}</div>
     </el-card>
   </div>
 </template>
@@ -245,16 +245,28 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@use '@/assets/styles/variables.scss' as *;
+
 .upload-container {
-  padding: 20px;
+  padding: $spacing-lg;
   min-height: 100vh;
-  background: #f5f7fa;
+  background: $bg-primary;
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.progress-card {
+  margin-top: $spacing-lg;
+}
+
+.progress-message {
+  margin-top: $spacing-sm;
+  color: $text-secondary;
+  font-size: $font-size-sm;
 }
 </style>

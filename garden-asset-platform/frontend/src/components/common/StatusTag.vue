@@ -1,19 +1,19 @@
 <template>
-  <div class="status-tag" :class="`status-${status}`">
-    <el-tag :type="tagType" size="small">
-      <el-icon v-if="showIcon"><component :is="statusIcon" /></el-icon>
-      {{ statusText }}
-    </el-tag>
-  </div>
+  <el-tag :type="tagType" :size="size" :effect="effect">
+    <el-icon v-if="showIcon" class="tag-icon"><component :is="statusIcon" /></el-icon>
+    {{ statusText }}
+  </el-tag>
 </template>
 
 <script setup>
 import { computed } from 'vue'
-import { CircleCheck, CircleClose, Loading, Clock } from '@element-plus/icons-vue'
+import { CircleCheck, CircleClose, Loading, Clock, Warning } from '@element-plus/icons-vue'
 
 const props = defineProps({
   status: { type: String, default: 'pending' },
-  type: { type: String, default: 'default' } // asset, watermark, license, blockchain
+  type: { type: String, default: 'default' },
+  size: { type: String, default: 'small' },
+  effect: { type: String, default: 'light' }
 })
 
 const statusConfig = {
@@ -25,7 +25,10 @@ const statusConfig = {
   approved: { text: '已通过', tag: 'success', icon: CircleCheck },
   rejected: { text: '已拒绝', tag: 'danger', icon: CircleClose },
   expired: { text: '已过期', tag: 'info', icon: Clock },
-  failed: { text: '失败', tag: 'danger', icon: CircleClose }
+  failed: { text: '失败', tag: 'danger', icon: CircleClose },
+  published: { text: '已发布', tag: 'success', icon: CircleCheck },
+  draft: { text: '草稿', tag: 'info', icon: Warning },
+  revoked: { text: '已撤销', tag: 'danger', icon: CircleClose }
 }
 
 const tagType = computed(() => statusConfig[props.status]?.tag || 'info')
@@ -35,7 +38,8 @@ const showIcon = computed(() => props.type !== 'default')
 </script>
 
 <style scoped>
-.status-tag {
-  display: inline-flex;
+.tag-icon {
+  margin-right: 4px;
+  vertical-align: middle;
 }
 </style>

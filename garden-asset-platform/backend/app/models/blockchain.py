@@ -53,7 +53,12 @@ class BlockchainTransaction(db.Model):
             'tx_type': self.tx_type,
             'asset_id': self.asset_id,
             'block_number': self.block_number,
+            'block_hash': self.block_hash,
+            'from_address': self.from_address,
+            'to_address': self.to_address,
+            'gas_used': self.gas_used,
             'status': self.status,
+            'confirmations': self.confirmations,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'confirmed_at': self.confirmed_at.isoformat() if self.confirmed_at else None
         }
@@ -109,8 +114,13 @@ class Certificate(db.Model):
             'certificate_id': self.certificate_id,
             'asset_id': self.asset_id,
             'tx_hash': self.tx_hash,
+            'block_number': self.block_number,
             'watermark_id': self.watermark_id,
+            'file_hash': self.file_hash,
             'creator_name': self.creator_name,
+            'ownership_type': self.ownership_type,
+            'valid_from': self.valid_from.isoformat() if self.valid_from else None,
+            'valid_until': self.valid_until.isoformat() if self.valid_until else None,
             'status': self.status,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }

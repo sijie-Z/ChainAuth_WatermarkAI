@@ -80,9 +80,24 @@ class BlockchainService:
 
     @staticmethod
     def generate_tx_hash() -> str:
-        """生成模拟的交易哈希"""
+        """生成模拟的FISCO BCOS风格交易哈希"""
         import uuid
-        return f"0x{uuid.uuid4().hex}"
+        import time
+        # FISCO BCOS交易哈希格式: 0x + 64位hex
+        raw = f"{uuid.uuid4().hex}{uuid.uuid4().hex}"[:64]
+        return f"0x{raw}"
+
+    @staticmethod
+    def generate_block_number() -> int:
+        """生成模拟的区块号（递增风格）"""
+        import random
+        return random.randint(3000000, 9000000)
+
+    @staticmethod
+    def generate_gas_used() -> int:
+        """生成模拟的Gas消耗"""
+        import random
+        return random.randint(21000, 300000)
 
     def register_asset(self, asset: Asset, user=None) -> Dict[str, Any]:
         """
@@ -138,12 +153,17 @@ class BlockchainService:
                 tx.status = 'failed'
                 tx.error_message = result.get('message')
         else:
-            # 模拟模式
+            # 模拟模式（生成逼真的FISCO BCOS数据）
             tx.tx_hash = self.generate_tx_hash()
-            tx.block_number = 1
+            tx.block_number = self.generate_block_number()
+            tx.block_hash = self.generate_tx_hash()  # 区块哈希也是64位hex
+            tx.gas_used = self.generate_gas_used()
+            tx.from_address = f"0x{hashlib.sha256(b'garden-asset-platform').hexdigest()[:40]}"
+            tx.to_address = f"0x{hashlib.sha256(b'asset-registry-contract').hexdigest()[:40]}"
+            tx.confirmations = 12  # FISCO BCOS典型确认数
             tx.status = 'confirmed'
             tx.confirmed_at = datetime.utcnow()
-            logger.info(f"模拟存证: {asset.asset_code}")
+            logger.info(f"模拟存证: {asset.asset_code}, tx={tx.tx_hash}")
 
         db.session.add(tx)
 

@@ -54,14 +54,20 @@ def auth_header(client):
 
 
 @pytest.fixture
-def admin_header(client):
+def admin_header(client, app):
     """创建管理员认证头"""
+    # 注册用户（角色会被强制设为 user）
     client.post('/api/register', json={
         'username': 'admin',
         'password': 'admin123',
-        'email': 'admin@test.com',
-        'role': 'admin'
+        'email': 'admin@test.com'
     })
+
+    # 直接在数据库中提升为管理员
+    with app.app_context():
+        user = User.query.filter_by(username='admin').first()
+        user.role = 'admin'
+        db.session.commit()
 
     response = client.post('/api/login', json={
         'username': 'admin',
@@ -71,6 +77,40 @@ def admin_header(client):
     data = response.get_json()
     token = data['data']['access_token']
 
+    return {'Authorization': f'Bearer {token}'}
+
+
+@pytest.fixture
+def adm1_header(client, app):
+    """创建资产管理员认证头"""
+    client.post('/api/register', json={
+        'username': 'adm1',
+        'password': 'adm1123',
+        'email': 'adm1@test.com'
+    })
+    with app.app_context():
+        user = User.query.filter_by(username='adm1').first()
+        user.role = 'adm1'
+        db.session.commit()
+    response = client.post('/api/login', json={'username': 'adm1', 'password': 'adm1123'})
+    token = response.get_json()['data']['access_token']
+    return {'Authorization': f'Bearer {token}'}
+
+
+@pytest.fixture
+def adm2_header(client, app):
+    """创建授权管理员认证头"""
+    client.post('/api/register', json={
+        'username': 'adm2',
+        'password': 'adm2123',
+        'email': 'adm2@test.com'
+    })
+    with app.app_context():
+        user = User.query.filter_by(username='adm2').first()
+        user.role = 'adm2'
+        db.session.commit()
+    response = client.post('/api/login', json={'username': 'adm2', 'password': 'adm2123'})
+    token = response.get_json()['data']['access_token']
     return {'Authorization': f'Bearer {token}'}
 
 
