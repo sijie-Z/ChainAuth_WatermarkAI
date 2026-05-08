@@ -44,6 +44,9 @@ def create_app(config_name='default'):
     # 注册API资源
     register_api_resources(app)
 
+    # 初始化业务服务
+    init_services(app)
+
     # 创建必要的目录
     create_folders(app)
 
@@ -95,13 +98,14 @@ def register_api_resources(app):
     from app.resources.auth import (
         RegisterResource, LoginResource, LogoutResource,
         RefreshTokenResource, CurrentUserResource,
-        UserListResource, UserResource
+        UserListResource, UserResource, ChangePasswordResource
     )
     api.add_resource(RegisterResource, '/register')
     api.add_resource(LoginResource, '/login')
     api.add_resource(LogoutResource, '/logout')
     api.add_resource(RefreshTokenResource, '/refresh')
     api.add_resource(CurrentUserResource, '/user/current')
+    api.add_resource(ChangePasswordResource, '/user/change-password')
     api.add_resource(UserListResource, '/users')
     api.add_resource(UserResource, '/users/<int:user_id>')
 
@@ -175,6 +179,15 @@ def register_api_resources(app):
     api.add_resource(LicenseApproveResource, '/license/approve/<int:application_id>')
     api.add_resource(LicenseApprovedResource, '/license/approved')
     api.add_resource(MyLicenseResource, '/license/my')
+
+
+def init_services(app):
+    """初始化业务服务"""
+    from app.services.ai_service import ai_service
+    from app.services.blockchain_service import blockchain_service
+
+    ai_service.init_app(app)
+    blockchain_service.init_app(app)
 
 
 def create_folders(app):

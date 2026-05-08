@@ -50,8 +50,8 @@ def rate_limit(limit=100, window=60):
                         redis_client.expire(key, window)
                     if count > limit:
                         return jsonify({'code': 429, 'message': '请求过于频繁'}), 429
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f'限流检查失败（Redis不可用）: {e}')
             return f(*args, **kwargs)
         return wrapped
     return decorator

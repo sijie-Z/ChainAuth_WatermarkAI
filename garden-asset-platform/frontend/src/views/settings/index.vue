@@ -120,6 +120,7 @@
 <script setup>
 import { ref, computed, reactive } from 'vue'
 import { useUserStore } from '@/stores/user'
+import { userApi } from '@/api/modules'
 import { ElMessage } from 'element-plus'
 import { User, Lock, Bell } from '@element-plus/icons-vue'
 
@@ -180,26 +181,48 @@ const notifications = reactive({
   system: false
 })
 
-function saveProfile() {
+async function saveProfile() {
   saving.value = true
-  setTimeout(() => {
+  try {
+    const data = {}
+    if (profileForm.email) data.email = profileForm.email
+    if (profileForm.phone) data.phone = profileForm.phone
+    const res = await userApi.updateProfile(data)
+    if (res.data?.code === 200) {
+      ElMessage.success('个人信息已更新')
+    } else {
+      ElMessage.error(res.data?.message || '更新失败')
+    }
+  } catch (e) {
+    ElMessage.error(e.response?.data?.message || '更新失败')
+  } finally {
     saving.value = false
-    ElMessage.success('个人信息已更新')
-  }, 500)
+  }
 }
 
 function changePassword() {
-  passwordFormRef.value?.validate((valid) => {
+  passwordFormRef.value?.validate(async (valid) => {
     if (!valid) return
 
     changingPassword.value = true
-    setTimeout(() => {
+    try {
+      const res = await userApi.changePassword({
+        old_password: passwordForm.currentPassword,
+        new_password: passwordForm.newPassword
+      })
+      if (res.data?.code === 200) {
+        ElMessage.success('密码已更新，请重新登录')
+        passwordForm.currentPassword = ''
+        passwordForm.newPassword = ''
+        passwordForm.confirmPassword = ''
+      } else {
+        ElMessage.error(res.data?.message || '修改失败')
+      }
+    } catch (e) {
+      ElMessage.error(e.response?.data?.message || '修改失败')
+    } finally {
       changingPassword.value = false
-      ElMessage.success('密码已更新，请重新登录')
-      passwordForm.currentPassword = ''
-      passwordForm.newPassword = ''
-      passwordForm.confirmPassword = ''
-    }, 800)
+    }
   })
 }
 </script>

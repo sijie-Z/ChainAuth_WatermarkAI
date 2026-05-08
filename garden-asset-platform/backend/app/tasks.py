@@ -5,7 +5,7 @@
 from celery import Celery
 from app.extensions import db
 from app.services.watermark_service import WatermarkService
-from app.services.ai_service import AIService
+from app.services.ai_service import ai_service
 from app.models.asset import Asset
 
 celery = Celery('garden_asset')
@@ -56,7 +56,7 @@ def analyze_asset_task(asset_id):
     """异步分析资产"""
     asset = Asset.query.get(asset_id)
     if asset:
-        result = AIService.analyze_asset(asset)
+        result = ai_service.process_asset(asset)
         return {'success': result['success'], 'data': result.get('data')}
     return {'success': False, 'message': '资产不存在'}
 

@@ -1,5 +1,32 @@
 # CHANGELOG
 
+## [1.2.0] - 2026-05-08
+
+### Security (CRITICAL)
+- **注册接口角色注入漏洞**：用户可在注册时传入 `role: "admin"` 获取管理员权限，已强制硬编码为 `user` 角色
+- **JWT Token 配置类型错误**：`JWT_ACCESS_TOKEN_EXPIRES` 为整数而非 `timedelta`，导致 Token 过期时间异常
+- **CORS 允许所有来源**：`CORS(app)` 无限制，改为从 `CORS_ORIGINS` 环境变量读取白名单
+- **生产环境安全加固**：新增 `ProductionConfig`，启用 `SESSION_COOKIE_SECURE`、`HTTPONLY`、`PREFERRED_URL_SCHEME=https`
+
+### Fixed
+- **AI/区块链服务未初始化**：`create_app()` 未调用 `ai_service.init_app()` 和 `blockchain_service.init_app()`
+- **裸 except 捕获**：security.py、log.py、blockchain_service.py 中的 `except:` 改为具体异常类型
+- **tasks.py 方法调用错误**：`AIService.analyze_asset(asset)` 修正为 `ai_service.process_asset(asset)`
+- **限流静默失败**：Redis 不可用时 `except Exception: pass` 改为记录警告日志
+- **资产预览 404**：detail.vue 引用不存在的 `/api/assets/{id}/preview`，改为使用 `thumbnail_path` 或 SVG 占位图
+- **设置页面虚假 API**：使用 `setTimeout` 模拟，已接入 `userApi.updateProfile` 和 `userApi.changePassword`
+- **路由守卫问题**：未登录访问受保护页面无反馈、已登录用户访问 /login 无重定向、子路由角色权限继承失效
+
+### Added
+- **修改密码端点**：`POST /api/user/change-password`，验证旧密码后更新
+- **用户信息更新端点**：`PUT /api/user/current`，支持更新昵称、邮箱、手机号
+- **前端 userApi 模块**：新增 `updateProfile` 和 `changePassword` API 方法
+- **路由守卫增强**：`ElMessage.warning` 权限不足提示、已登录用户自动重定向到 /assets
+- **requirements.txt 清理**：移除未使用的 pandas/pytz，新增 gunicorn、opencv-python-headless、scipy
+
+### Changed
+- `MAX_CONTENT_LENGTH` 配置支持环境变量覆盖（默认 500MB）
+
 ## [1.1.0] - 2026-05-08
 
 ### Fixed

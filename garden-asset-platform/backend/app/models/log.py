@@ -85,7 +85,7 @@ class OperationLog(db.Model):
         db.session.add(log)
         try:
             db.session.commit()
-        except:
+        except Exception:
             db.session.rollback()
 
         return log

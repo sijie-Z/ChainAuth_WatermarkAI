@@ -2,6 +2,7 @@
 应用配置模块
 """
 import os
+from datetime import timedelta
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -11,8 +12,8 @@ class Config:
     """基础配置"""
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'dev-jwt-secret-change-in-production'
-    JWT_ACCESS_TOKEN_EXPIRES = 24 * 60 * 60  # 24小时
-    JWT_REFRESH_TOKEN_EXPIRES = 30 * 24 * 60 * 60  # 30天
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=24)
+    JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
 
     # 数据库配置
     SQLALCHEMY_DATABASE_URI = os.environ.get(
@@ -53,6 +54,12 @@ class Config:
     WATERMARK_FOLDER = os.environ.get('WATERMARK_FOLDER', './watermarks')
     EXTRACTED_FOLDER = os.environ.get('EXTRACTED_FOLDER', './extracted')
 
+    # 文件上传大小限制 (500MB)
+    MAX_CONTENT_LENGTH = int(os.environ.get('MAX_CONTENT_LENGTH', str(500 * 1024 * 1024)))
+
+    # CORS 配置
+    CORS_ORIGINS = os.environ.get('CORS_ORIGINS', '*')
+
     # 限流配置
     RATELIMIT_LOGIN = int(os.environ.get('RATELIMIT_LOGIN', '5'))
     RATELIMIT_LOGIN_WINDOW = int(os.environ.get('RATELIMIT_LOGIN_WINDOW', '60'))
@@ -70,6 +77,9 @@ class DevelopmentConfig(Config):
 class ProductionConfig(Config):
     """生产环境配置"""
     DEBUG = False
+    SESSION_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+    PREFERRED_URL_SCHEME = 'https'
 
 
 class TestingConfig(Config):

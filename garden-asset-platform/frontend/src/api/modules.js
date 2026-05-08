@@ -77,5 +77,7 @@ export const licenseApi = {
 export const userApi = {
   getUsers: () => api.get('/users'),
   updateUser: (userId, data) => api.put(`/users/${userId}`, data),
-  getCurrentUser: () => api.get('/user/current')
+  getCurrentUser: () => api.get('/user/current'),
+  updateProfile: (data) => api.put('/user/current', data),
+  changePassword: (data) => api.post('/user/change-password', data)
 }

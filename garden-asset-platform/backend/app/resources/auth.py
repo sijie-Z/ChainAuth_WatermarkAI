@@ -43,18 +43,18 @@ class RegisterResource(Resource):
         if phone and User.query.filter_by(phone=phone).first():
             return {'code': 400, 'message': '手机号已被注册'}, 400
 
-        # 创建用户
+        # 密码强度校验
+        if len(password) < 6:
+            return {'code': 400, 'message': '密码长度不能少于6位'}, 400
+
+        # 创建用户（角色强制为 user，防止提权攻击）
         user = User(
             username=username,
             email=email,
             phone=phone,
-            role=data.get('role', 'user')
+            role='user'
         )
         user.set_password(password)
-
-        # 如果是管理员，记录管理员编号
-        if user.role == 'admin':
-            user.user_number = data.get('user_number')
 
         try:
             db.session.add(user)
@@ -186,6 +186,68 @@ class CurrentUserResource(Resource):
             'code': 200,
             'data': user.to_dict()
         }, 200
+
+    @jwt_required()
+    def put(self):
+        """更新当前用户信息"""
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+
+        if not user:
+            return {'code': 404, 'message': '用户不存在'}, 404
+
+        data = request.get_json()
+
+        if 'nickname' in data:
+            user.nickname = data['nickname']
+        if 'email' in data:
+            # 检查邮箱是否已被其他用户使用
+            existing = User.query.filter(User.email == data['email'], User.id != user_id).first()
+            if existing:
+                return {'code': 400, 'message': '邮箱已被使用'}, 400
+            user.email = data['email']
+        if 'phone' in data:
+            existing = User.query.filter(User.phone == data['phone'], User.id != user_id).first()
+            if existing:
+                return {'code': 400, 'message': '手机号已被使用'}, 400
+            user.phone = data['phone']
+
+        try:
+            db.session.commit()
+            return {'code': 200, 'message': '更新成功', 'data': user.to_dict()}
+        except Exception as e:
+            db.session.rollback()
+            return {'code': 500, 'message': '更新失败'}, 500
+
+
+class ChangePasswordResource(Resource):
+    """修改密码"""
+
+    @jwt_required()
+    def post(self):
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+
+        if not user:
+            return {'code': 404, 'message': '用户不存在'}, 404
+
+        data = request.get_json()
+        old_password = data.get('old_password')
+        new_password = data.get('new_password')
+
+        if not old_password or not new_password:
+            return {'code': 400, 'message': '请填写完整'}, 400
+
+        if not user.check_password(old_password):
+            return {'code': 400, 'message': '原密码错误'}, 400
+
+        if len(new_password) < 6:
+            return {'code': 400, 'message': '新密码长度不能少于6位'}, 400
+
+        user.set_password(new_password)
+        db.session.commit()
+
+        return {'code': 200, 'message': '密码修改成功'}
 
 
 class UserListResource(Resource):

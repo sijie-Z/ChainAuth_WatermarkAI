@@ -46,7 +46,7 @@ def verify_password(password, hashed):
             100000
         )
         return hmac.compare_digest(key, base64.b64encode(new_key).decode())
-    except:
+    except (ValueError, AttributeError):
         return False
 
 

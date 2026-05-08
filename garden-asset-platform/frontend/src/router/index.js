@@ -149,16 +149,24 @@ router.beforeEach((to, from, next) => {
 
   const userStore = useUserStore()
 
+  // 已登录用户访问登录/注册页时重定向
+  if (userStore.isLoggedIn && (to.path === '/login' || to.path === '/register')) {
+    return next('/assets')
+  }
+
   // 需要认证的路由
   if (to.meta.requiresAuth) {
     if (!userStore.isLoggedIn) {
       return next('/login')
     }
 
-    // 角色权限检查
-    if (to.meta.roles && to.meta.roles.length > 0) {
+    // 角色权限检查：遍历 matched 路由收集所有允许的角色
+    const allowedRoles = to.matched
+      .flatMap(record => record.meta.roles || [])
+    if (allowedRoles.length > 0) {
       const userRole = userStore.user?.role
-      if (!to.meta.roles.includes(userRole)) {
+      if (!allowedRoles.includes(userRole)) {
+        ElMessage.warning('无权限访问该页面')
         return next('/home')
       }
     }
