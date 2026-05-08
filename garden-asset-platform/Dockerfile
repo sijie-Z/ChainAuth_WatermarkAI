@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y \
     libgeos-dev \
     gdal-bin \
     libgdal-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
@@ -33,7 +34,7 @@ COPY backend/ ./
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
 # Create necessary directories
-RUN mkdir -p uploads/watermarks uploads/assets logs
+RUN mkdir -p uploads/watermarks uploads/assets logs data/watermark data/models
 
 # Set environment variables
 ENV FLASK_APP=run.py
@@ -44,8 +45,8 @@ ENV PYTHONUNBUFFERED=1
 EXPOSE 5000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:5000/api/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:5000/health || exit 1
 
-# Run the application
-CMD ["python", "run.py"]
+# Run with Gunicorn
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--timeout", "120", "--access-logfile", "-", "app:create_app()"]

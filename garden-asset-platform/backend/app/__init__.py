@@ -47,13 +47,29 @@ def create_app(config_name='default'):
     # 初始化业务服务
     init_services(app)
 
+    # 初始化任务调度器
+    init_scheduler(app)
+
     # 创建必要的目录
     create_folders(app)
+
+    # 初始化配置（密钥检查等）
+    config_cls = config.get(config_name, config['default'])
+    if hasattr(config_cls, 'init_app'):
+        config_cls.init_app(app)
 
     # 健康检查端点
     @app.route('/health')
     def health_check():
-        return jsonify({'status': 'healthy', 'service': 'garden-asset-platform'})
+        from app.extensions import db
+        status = {'status': 'healthy', 'service': 'garden-asset-platform'}
+        try:
+            db.session.execute(db.text('SELECT 1'))
+            status['database'] = 'connected'
+        except Exception:
+            status['database'] = 'disconnected'
+            status['status'] = 'degraded'
+        return jsonify(status), 200 if status['status'] == 'healthy' else 503
 
     return app
 
@@ -188,6 +204,18 @@ def init_services(app):
 
     ai_service.init_app(app)
     blockchain_service.init_app(app)
+
+
+def init_scheduler(app):
+    """初始化任务调度器"""
+    if app.config.get('TESTING') or app.config.get('DEBUG'):
+        return
+    try:
+        from app.utils.scheduler import init_scheduler as _init
+        _init(app)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f'调度器初始化失败（非致命）: {e}')
 
 
 def create_folders(app):

@@ -26,7 +26,7 @@
           <el-input
             v-model="watermarkId"
             placeholder="请输入水印ID，如：ZY-IMG-20260315143522-A3F8"
-            style="width: 400px"
+            class="watermark-input"
           />
         </el-tab-pane>
       </el-tabs>
@@ -228,6 +228,11 @@ function formatDate(dateStr) {
   margin-top: $spacing-lg;
 }
 
+.watermark-input {
+  width: 400px;
+  max-width: 100%;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -244,5 +249,19 @@ function formatDate(dateStr) {
   font-family: 'Courier New', monospace;
   font-size: $font-size-xs;
   word-break: break-all;
+}
+
+@media (max-width: $breakpoint-sm) {
+  .trace-container {
+    padding: $spacing-md;
+  }
+
+  .result-actions {
+    flex-direction: column;
+  }
+
+  :deep(.el-input) {
+    width: 100% !important;
+  }
 }
 </style>

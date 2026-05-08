@@ -2,12 +2,11 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
-import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 
-// 引入Element Plus样式
+// Element Plus样式
 import 'element-plus/dist/index.css'
 
-// 引入自定义样式
+// 自定义样式
 import '@/assets/styles/main.scss'
 
 import App from './App.vue'
@@ -16,7 +15,7 @@ import GlobalComponents from '@/components'
 
 const app = createApp(App)
 
-// Pinia状态管理
+// Pinia
 app.use(createPinia())
 
 // 路由
@@ -31,15 +30,10 @@ app.use(ElementPlus, {
 // 全局组件
 app.use(GlobalComponents)
 
-// 注册所有图标
-for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
-  app.component(key, component)
-}
-
 // 全局错误处理
 app.config.errorHandler = (err, vm, info) => {
-  console.error('Global error:', err)
-  console.error('Info:', info)
+  console.error('[Vue Error]', err, info)
+  // 生产环境可上报到监控服务
 }
 
 // 全局属性
@@ -56,5 +50,4 @@ app.config.globalProperties.$formatSize = (bytes) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
-// 挂载应用
 app.mount('#app')

@@ -269,4 +269,10 @@ onMounted(() => {
   color: $text-secondary;
   font-size: $font-size-sm;
 }
+
+@media (max-width: $breakpoint-sm) {
+  .upload-container {
+    padding: $spacing-md;
+  }
+}
 </style>

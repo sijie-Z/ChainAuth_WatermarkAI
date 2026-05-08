@@ -79,6 +79,12 @@ const routes = [
     meta: { title: '账号设置', requiresAuth: true }
   },
   {
+    path: '/403',
+    name: 'Forbidden',
+    component: () => import('@/views/error/403.vue'),
+    meta: { title: '权限不足' }
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
     component: () => import('@/views/error/404.vue'),
@@ -166,8 +172,7 @@ router.beforeEach((to, from, next) => {
     if (allowedRoles.length > 0) {
       const userRole = userStore.user?.role
       if (!allowedRoles.includes(userRole)) {
-        ElMessage.warning('无权限访问该页面')
-        return next('/home')
+        return next('/403')
       }
     }
   }

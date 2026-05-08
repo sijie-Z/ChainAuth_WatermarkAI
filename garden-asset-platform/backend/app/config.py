@@ -10,8 +10,24 @@ load_dotenv()
 
 class Config:
     """基础配置"""
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
-    JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'dev-jwt-secret-change-in-production'
+    SECRET_KEY = os.environ.get('SECRET_KEY', '')
+    JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', '')
+
+    # 生产环境必须配置密钥
+    @staticmethod
+    def init_app(app):
+        if not app.config.get('SECRET_KEY') or app.config['SECRET_KEY'] == '':
+            if not app.config.get('TESTING'):
+                import warnings
+                warnings.warn('SECRET_KEY 未设置！使用随机密钥（重启后会话失效）')
+                import secrets
+                app.config['SECRET_KEY'] = secrets.token_hex(32)
+        if not app.config.get('JWT_SECRET_KEY') or app.config['JWT_SECRET_KEY'] == '':
+            if not app.config.get('TESTING'):
+                import warnings
+                warnings.warn('JWT_SECRET_KEY 未设置！使用随机密钥（重启后Token失效）')
+                import secrets
+                app.config['JWT_SECRET_KEY'] = secrets.token_hex(32)
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=24)
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
 

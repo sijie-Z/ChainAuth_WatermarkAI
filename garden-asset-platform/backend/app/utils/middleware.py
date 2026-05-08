@@ -5,8 +5,28 @@ import time
 import logging
 from flask import request, g, current_app, jsonify
 from functools import wraps
+from collections import defaultdict
+from threading import Lock
 
 logger = logging.getLogger(__name__)
+
+# 内存限流降级方案
+_memory_rate_limits = defaultdict(list)
+_memory_lock = Lock()
+
+
+def _check_rate_limit_memory(key, limit, window):
+    """内存限流降级（多进程不共享，仅单实例有效）"""
+    now = time.time()
+    with _memory_lock:
+        # 清理过期记录
+        _memory_rate_limits[key] = [
+            t for t in _memory_rate_limits[key] if now - t < window
+        ]
+        if len(_memory_rate_limits[key]) >= limit:
+            return False
+        _memory_rate_limits[key].append(now)
+        return True
 
 
 def request_logger(app):
@@ -37,21 +57,29 @@ def request_logger(app):
 
 
 def rate_limit(limit=100, window=60):
-    """请求频率限制装饰器（需配置Redis）"""
+    """请求频率限制装饰器（Redis优先，内存降级）"""
     def decorator(f):
         @wraps(f)
         def wrapped(*args, **kwargs):
+            key = f'rate_limit:{request.remote_addr}:{request.path}'
+
+            # 优先使用Redis
             try:
                 redis_client = current_app.extensions.get('redis')
                 if redis_client:
-                    key = f'rate_limit:{request.remote_addr}:{request.path}'
                     count = redis_client.incr(key)
                     if count == 1:
                         redis_client.expire(key, window)
                     if count > limit:
-                        return jsonify({'code': 429, 'message': '请求过于频繁'}), 429
+                        return jsonify({'code': 429, 'message': '请求过于频繁，请稍后再试'}), 429
+                    return f(*args, **kwargs)
             except Exception as e:
-                logger.warning(f'限流检查失败（Redis不可用）: {e}')
+                logger.warning(f'Redis限流失败，切换到内存限流: {e}')
+
+            # 降级到内存限流
+            if not _check_rate_limit_memory(key, limit, window):
+                return jsonify({'code': 429, 'message': '请求过于频繁，请稍后再试'}), 429
+
             return f(*args, **kwargs)
         return wrapped
     return decorator
@@ -66,6 +94,10 @@ def security_headers(app):
         response.headers['X-XSS-Protection'] = '1; mode=block'
         response.headers['X-Permitted-Cross-Domain-Policies'] = 'none'
         response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+
+        # HSTS: 生产环境强制HTTPS
+        if not app.config.get('DEBUG', False):
+            response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
 
         # CSP: allow Element Plus inline styles, THREE.js, and blob images
         script_src = "'self' 'unsafe-eval'" if app.config.get('DEBUG', False) else "'self'"

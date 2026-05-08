@@ -1,9 +1,11 @@
 <template>
-  <router-view v-slot="{ Component, route }">
-    <transition name="fade-slide" mode="out-in">
-      <component :is="Component" :key="route.path" />
-    </transition>
-  </router-view>
+  <ErrorBoundary>
+    <router-view v-slot="{ Component, route }">
+      <transition name="fade-slide" mode="out-in">
+        <component :is="Component" :key="route.path" />
+      </transition>
+    </router-view>
+  </ErrorBoundary>
 </template>
 
 <script setup>
@@ -13,7 +15,6 @@ import { useUserStore } from '@/stores/user'
 const userStore = useUserStore()
 
 onMounted(() => {
-  // 初始化用户状态
   userStore.initStore()
 })
 </script>
@@ -21,7 +22,6 @@ onMounted(() => {
 <style lang="scss">
 @use '@/assets/styles/variables.scss' as *;
 
-// 全局重置
 *,
 *::before,
 *::after {
@@ -51,7 +51,6 @@ body {
   min-height: 100vh;
 }
 
-// 滚动条美化
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -70,13 +69,11 @@ body {
   }
 }
 
-// 选中文本
 ::selection {
   background-color: rgba($primary-color, 0.2);
   color: $text-primary;
 }
 
-// 链接
 a {
   color: $primary-color;
   text-decoration: none;
@@ -87,7 +84,6 @@ a {
   }
 }
 
-// 图片
 img {
   max-width: 100%;
   height: auto;

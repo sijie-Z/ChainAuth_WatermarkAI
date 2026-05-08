@@ -1,5 +1,33 @@
 # CHANGELOG
 
+## [1.4.0] - 2026-05-08
+
+### Security
+- **Redis限流初始化**：`extensions.py` 新增 Redis 客户端初始化，限流功能真正生效
+- **内存限流降级**：Redis 不可用时自动降级到内存限流（单实例有效），不再静默跳过
+- **HSTS安全头**：生产环境自动添加 `Strict-Transport-Security` 头
+- **密钥缺失保护**：`SECRET_KEY`/`JWT_SECRET_KEY` 未配置时自动生成随机密钥并告警，不再使用硬编码默认值
+- **健康检查增强**：`/health` 端点现在检查数据库连接，异常时返回 503
+
+### Fixed
+- **重复Axios实例**：移除死代码 `utils/request.js`，统一使用 `api/index.js`
+- **Token刷新双倍错误**：修复刷新失败时显示两条错误消息的问题
+- **Token刷新并发**：添加队列机制防止多个请求同时触发刷新
+- **根Dockerfile**：从 `python run.py` 改为 `gunicorn`，修复健康检查路径 `/api/health` → `/health`
+- **路由守卫403**：权限不足时跳转 `/403` 页面而非 `/home`
+
+### Performance
+- **THREE.js代码分割**：从主包分离为独立chunk（444KB），仅首页加载
+- **Element Plus图标优化**：移除全局注册循环，依赖 unplugin 自动导入，减少 135KB
+- **ECharts保持独立chunk**：1022KB独立加载
+
+### Added
+- **403错误页面**：专用权限不足页面
+- **ErrorBoundary组件**：Vue错误边界，防止组件渲染错误导致白屏
+- **移动端响应式**：5个用户页面添加 @media 查询（detail、upload、license/apply、license/my、trace）
+- **SEO元标签**：Open Graph、robots、theme-color
+- **任务调度器初始化**：生产环境自动启动备份/清理/授权过期检查
+
 ## [1.3.0] - 2026-05-08
 
 ### Security

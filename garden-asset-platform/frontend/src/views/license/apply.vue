@@ -234,4 +234,14 @@ onMounted(() => {
     font-size: $font-size-sm;
   }
 }
+
+@media (max-width: $breakpoint-sm) {
+  .license-apply {
+    padding: $spacing-md;
+  }
+
+  .asset-info-card {
+    margin-bottom: $spacing-md;
+  }
+}
 </style>

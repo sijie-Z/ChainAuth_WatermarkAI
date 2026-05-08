@@ -59,8 +59,9 @@ export default defineConfig({
         assetFileNames: 'assets/[ext]/[name]-[hash].[ext]',
         manualChunks: {
           vue: ['vue', 'vue-router', 'pinia'],
-          elementPlus: ['element-plus', '@element-plus/icons-vue'],
-          echarts: ['echarts']
+          elementPlus: ['element-plus'],
+          echarts: ['echarts'],
+          three: ['three']
         }
       }
     }

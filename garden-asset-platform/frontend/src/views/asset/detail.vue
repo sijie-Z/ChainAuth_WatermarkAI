@@ -42,7 +42,7 @@
         <template v-else>
           <el-row :gutter="20">
             <!-- 左侧：资产预览 -->
-            <el-col :span="16">
+            <el-col :xs="24" :sm="24" :md="16">
               <el-card>
                 <template #header>
                   <div class="card-header">
@@ -72,7 +72,7 @@
             </el-col>
 
             <!-- 右侧：状态与操作 -->
-            <el-col :span="8">
+            <el-col :xs="24" :sm="24" :md="8">
               <!-- 水印状态 -->
               <el-card class="status-card">
                 <template #header>
@@ -353,5 +353,19 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+@media (max-width: $breakpoint-sm) {
+  .asset-detail-container {
+    padding: $spacing-md;
+  }
+
+  .preview-area {
+    min-height: 250px;
+  }
+
+  .status-item .value {
+    max-width: 120px;
+  }
 }
 </style>

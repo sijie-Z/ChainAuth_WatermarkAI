@@ -200,11 +200,24 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: $spacing-sm;
 }
 
 .mono {
   font-family: 'Courier New', monospace;
   font-size: $font-size-xs;
   word-break: break-all;
+}
+
+@media (max-width: $breakpoint-sm) {
+  .license-my {
+    padding: $spacing-md;
+  }
+
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 </style>
