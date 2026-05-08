@@ -15,6 +15,7 @@ from app.models.asset import Asset, AssetTag, AssetFeature
 from app.models.garden import Garden
 from app.models.license import LicenseApplication, License
 from app.models.log import OperationLog
+from app.utils.middleware import rate_limit
 from sqlalchemy import func
 
 
@@ -272,6 +273,7 @@ class AssetUploadResource(Resource):
     """资产上传"""
 
     @jwt_required()
+    @rate_limit(limit=10, window=60)
     def post(self):
         """上传资产"""
         user_id = get_jwt_identity()
@@ -439,14 +441,20 @@ class AssetDownloadResource(Resource):
             request=request
         )
 
-        return {
-            'code': 200,
-            'data': {
-                'download_url': f'/api/assets/{asset_id}/file',
-                'asset_code': asset.asset_code,
-                'file_format': asset.file_format
-            }
-        }, 200
+        from flask import send_file as flask_send_file
+
+        # 优先返回嵌入水印后的文件，否则返回原始文件
+        file_path = asset.watermarked_path or asset.storage_path
+        if not file_path or not os.path.exists(file_path):
+            return {'code': 404, 'message': '文件不存在'}, 404
+
+        download_name = f"{asset.asset_code}.{asset.file_format.lower()}" if asset.file_format else asset.asset_code
+
+        return flask_send_file(
+            file_path,
+            as_attachment=True,
+            download_name=download_name
+        )
 
 
 class AssetFavoriteResource(Resource):

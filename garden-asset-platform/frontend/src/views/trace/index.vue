@@ -146,8 +146,65 @@ function viewCertificate() {
 }
 
 function downloadReport() {
-  ElMessage.info('报告生成中...')
-  // TODO: 实现报告下载
+  const r = traceResult.value
+  if (!r) {
+    ElMessage.warning('无溯源结果可下载')
+    return
+  }
+  const reportHtml = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>溯源报告 - ${r.watermark_id || r.asset_code || ''}</title>
+<style>
+  body { font-family: "Microsoft YaHei", sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; color: #333; }
+  h1 { text-align: center; border-bottom: 2px solid #409EFF; padding-bottom: 16px; }
+  .section { margin: 24px 0; }
+  .section h2 { font-size: 16px; border-left: 4px solid #409EFF; padding-left: 10px; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 10px 14px; border: 1px solid #e0e0e0; }
+  td:first-child { background: #f5f7fa; font-weight: bold; width: 140px; }
+  .verified { color: #67c23a; font-weight: bold; }
+  .failed { color: #f56c6c; font-weight: bold; }
+  .hash { font-family: monospace; font-size: 12px; word-break: break-all; }
+  .footer { text-align: center; color: #999; font-size: 12px; margin-top: 40px; border-top: 1px solid #eee; padding-top: 16px; }
+  @media print { body { margin: 0; padding: 20px; } }
+</style>
+</head>
+<body>
+<h1>数字资产溯源报告</h1>
+<div class="section">
+  <h2>溯源状态</h2>
+  <p class="${r.verified ? 'verified' : 'failed'}">${r.verified ? '验证通过 — 该资产已在平台注册并获得合法授权' : '验证失败 — 未找到对应资产记录'}</p>
+</div>
+${r.asset_code ? `<div class="section"><h2>资产信息</h2><table>
+  <tr><td>资产编码</td><td>${r.asset_code || '-'}</td></tr>
+  <tr><td>标题</td><td>${r.title || '-'}</td></tr>
+  <tr><td>水印ID</td><td>${r.watermark_id || '-'}</td></tr>
+  <tr><td>创建时间</td><td>${formatDate(r.created_at)}</td></tr>
+</table></div>` : ''}
+${r.tx_hash ? `<div class="section"><h2>区块链存证</h2><table>
+  <tr><td>存证状态</td><td><span class="verified">已存证</span></td></tr>
+  <tr><td>证书ID</td><td>${r.certificate_id || '-'}</td></tr>
+  <tr><td>交易哈希</td><td class="hash">${r.tx_hash}</td></tr>
+  <tr><td>存证时间</td><td>${formatDate(r.confirmed_at)}</td></tr>
+</table></div>` : ''}
+<div class="footer">
+  <p>本报告由苏州园林数字资产平台生成</p>
+  <p>报告生成时间：${new Date().toLocaleString('zh-CN')}</p>
+</div>
+</body>
+</html>`
+  const blob = new Blob([reportHtml], { type: 'text/html;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `溯源报告_${r.watermark_id || r.asset_code || 'report'}.html`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+  ElMessage.success('报告已下载')
 }
 
 function formatDate(dateStr) {

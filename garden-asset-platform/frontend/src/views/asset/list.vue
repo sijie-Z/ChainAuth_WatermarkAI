@@ -18,15 +18,28 @@
 
     <!-- 统计卡片 -->
     <div class="stats-section">
-      <div class="stat-card" v-for="stat in stats" :key="stat.key">
-        <div class="stat-icon" :style="{ background: stat.gradient }">
-          <el-icon><component :is="stat.icon" /></el-icon>
-        </div>
-        <div class="stat-info">
-          <div class="stat-value">{{ stat.value }}</div>
-          <div class="stat-label">{{ stat.label }}</div>
-        </div>
-      </div>
+      <el-skeleton :loading="statsLoading" animated :count="4">
+        <template #template>
+          <div class="stat-card" v-for="i in 4" :key="i">
+            <el-skeleton-item variant="circle" style="width: 56px; height: 56px; flex-shrink: 0" />
+            <div class="stat-info">
+              <el-skeleton-item variant="text" style="width: 60px; height: 28px" />
+              <el-skeleton-item variant="text" style="width: 40px; height: 14px; margin-top: 4px" />
+            </div>
+          </div>
+        </template>
+        <template #default>
+          <div class="stat-card" v-for="stat in stats" :key="stat.key">
+            <div class="stat-icon" :style="{ background: stat.gradient }">
+              <el-icon><component :is="stat.icon" /></el-icon>
+            </div>
+            <div class="stat-info">
+              <div class="stat-value">{{ stat.value }}</div>
+              <div class="stat-label">{{ stat.label }}</div>
+            </div>
+          </div>
+        </template>
+      </el-skeleton>
     </div>
 
     <!-- 搜索筛选区 -->
@@ -92,7 +105,19 @@
       </div>
 
       <!-- 网格视图 -->
-      <div v-if="viewMode === 'grid'" class="assets-grid" v-loading="loading">
+      <div v-if="viewMode === 'grid'" class="assets-grid">
+        <el-skeleton :loading="loading" animated :count="8">
+          <template #template>
+            <div class="asset-card" v-for="i in 8" :key="i">
+              <el-skeleton-item variant="image" style="height: 180px" />
+              <div class="asset-content">
+                <el-skeleton-item variant="text" style="width: 70%; height: 18px" />
+                <el-skeleton-item variant="text" style="width: 40%; height: 12px; margin: 4px 0 12px" />
+                <el-skeleton-item variant="text" style="width: 50%; height: 12px" />
+              </div>
+            </div>
+          </template>
+          <template #default>
         <div
           class="asset-card"
           v-for="asset in assets"
@@ -127,6 +152,8 @@
             </div>
           </div>
         </div>
+        </template>
+        </el-skeleton>
       </div>
 
       <!-- 列表视图 -->
@@ -219,6 +246,7 @@ const router = useRouter()
 const route = useRoute()
 
 const loading = ref(false)
+const statsLoading = ref(true)
 const assets = ref([])
 const gardens = ref([])
 const viewMode = ref('grid')
@@ -245,6 +273,7 @@ const stats = ref([
 ])
 
 async function loadStats() {
+  statsLoading.value = true
   try {
     const response = await publicApi.getStats()
     if (response.data?.code === 200) {
@@ -258,6 +287,8 @@ async function loadStats() {
     }
   } catch {
     // 保持默认值
+  } finally {
+    statsLoading.value = false
   }
 }
 

@@ -21,7 +21,8 @@ export const assetApi = {
   getDetail: (id) => api.get(`/assets/${id}`),
   create: (formData) => api.post('/assets/upload', formData),
   update: (id, data) => api.put(`/assets/${id}`, data),
-  delete: (id) => api.delete(`/assets/${id}`)
+  delete: (id) => api.delete(`/assets/${id}`),
+  download: (id) => api.get(`/assets/${id}/download`, { responseType: 'blob' })
 }
 
 // 园林相关API

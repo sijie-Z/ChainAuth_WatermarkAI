@@ -26,7 +26,12 @@ class WatermarkService:
     @staticmethod
     def get_watermark_path():
         """获取默认水印路径"""
-        # TODO: 应该从配置或数据库获取
+        try:
+            path = current_app.config.get('WATERMARK_DEFAULT_PATH')
+            if path:
+                return path
+        except RuntimeError:
+            pass
         return os.path.join(os.getcwd(), 'data', 'watermark', 'default.png')
 
     @staticmethod

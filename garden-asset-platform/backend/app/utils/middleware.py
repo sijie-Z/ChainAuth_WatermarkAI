@@ -57,16 +57,6 @@ def rate_limit(limit=100, window=60):
     return decorator
 
 
-def cors_headers(app):
-    """CORS头中间件"""
-    @app.after_request
-    def after_request(response):
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-        return response
-
-
 def security_headers(app):
     """安全头中间件"""
     @app.after_request
@@ -74,4 +64,23 @@ def security_headers(app):
         response.headers['X-Content-Type-Options'] = 'nosniff'
         response.headers['X-Frame-Options'] = 'DENY'
         response.headers['X-XSS-Protection'] = '1; mode=block'
+        response.headers['X-Permitted-Cross-Domain-Policies'] = 'none'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+
+        # CSP: allow Element Plus inline styles, THREE.js, and blob images
+        script_src = "'self' 'unsafe-eval'" if app.config.get('DEBUG', False) else "'self'"
+        csp = (
+            f"default-src 'self'; "
+            f"script-src {script_src}; "
+            f"style-src 'self' 'unsafe-inline'; "
+            f"img-src 'self' data: blob:; "
+            f"font-src 'self' data:; "
+            f"connect-src 'self' blob:; "
+            f"media-src 'self'; "
+            f"object-src 'none'; "
+            f"frame-ancestors 'none'; "
+            f"base-uri 'self'; "
+            f"form-action 'self'"
+        )
+        response.headers['Content-Security-Policy'] = csp
         return response

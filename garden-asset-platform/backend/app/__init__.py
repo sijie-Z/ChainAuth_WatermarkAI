@@ -116,13 +116,13 @@ def register_api_resources(app):
     api.add_resource(AssetListResource, '/assets')
     api.add_resource(AssetResource, '/assets/<string:asset_id>')
     api.add_resource(AssetUploadResource, '/assets/upload')
-    api.add_resource(AssetDownloadResource, '/assets/<int:asset_id>/download')
-    api.add_resource(AssetFavoriteResource, '/assets/<int:asset_id>/favorite')
+    api.add_resource(AssetDownloadResource, '/assets/<string:asset_id>/download')
+    api.add_resource(AssetFavoriteResource, '/assets/<string:asset_id>/favorite')
     api.add_resource(AssetStatsResource, '/assets/stats')
     api.add_resource(MyAssetsResource, '/assets/my')
-    api.add_resource(AssetTagsResource, '/assets/<int:asset_id>/tags')
-    api.add_resource(AssetPublishResource, '/assets/<int:asset_id>/publish')
-    api.add_resource(AssetApproveResource, '/assets/<int:asset_id>/approve')
+    api.add_resource(AssetTagsResource, '/assets/<string:asset_id>/tags')
+    api.add_resource(AssetPublishResource, '/assets/<string:asset_id>/publish')
+    api.add_resource(AssetApproveResource, '/assets/<string:asset_id>/approve')
 
     # 园林相关
     from app.resources.garden import GardenListResource, GardenResource, GardenStatsResource

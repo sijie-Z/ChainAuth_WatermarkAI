@@ -131,7 +131,13 @@ function viewDetail(row) {
 }
 
 function downloadContract(row) {
-  ElMessage.info('合同下载功能开发中...')
+  if (row.contract_file) {
+    window.open(row.contract_file, '_blank')
+  } else if (row.asset_id) {
+    window.open(`/api/assets/${row.asset_id}/download`, '_blank')
+  } else {
+    ElMessage.warning('暂无合同文件')
+  }
 }
 
 function getLicenseType(type) {

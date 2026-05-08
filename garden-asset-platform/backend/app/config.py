@@ -53,6 +53,14 @@ class Config:
     WATERMARK_FOLDER = os.environ.get('WATERMARK_FOLDER', './watermarks')
     EXTRACTED_FOLDER = os.environ.get('EXTRACTED_FOLDER', './extracted')
 
+    # 限流配置
+    RATELIMIT_LOGIN = int(os.environ.get('RATELIMIT_LOGIN', '5'))
+    RATELIMIT_LOGIN_WINDOW = int(os.environ.get('RATELIMIT_LOGIN_WINDOW', '60'))
+    RATELIMIT_REGISTER = int(os.environ.get('RATELIMIT_REGISTER', '3'))
+    RATELIMIT_REGISTER_WINDOW = int(os.environ.get('RATELIMIT_REGISTER_WINDOW', '3600'))
+    RATELIMIT_API = int(os.environ.get('RATELIMIT_API', '100'))
+    RATELIMIT_API_WINDOW = int(os.environ.get('RATELIMIT_API_WINDOW', '60'))
+
 
 class DevelopmentConfig(Config):
     """开发环境配置"""

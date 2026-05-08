@@ -14,40 +14,56 @@
         </div>
       </template>
 
-      <el-table :data="licenses" v-loading="loading" stripe>
-        <el-table-column prop="license_code" label="授权编码" width="180" />
-        <el-table-column prop="asset_title" label="资产标题" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="license_type" label="类型" width="100">
-          <template #default="{ row }">
-            <el-tag size="small">{{ getLicenseType(row.license_type) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="status" label="状态" width="80">
-          <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)" size="small">
-              {{ getStatusName(row.status) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="valid_until" label="有效期" width="140">
-          <template #default="{ row }">
-            {{ row.valid_until ? formatDate(row.valid_until) : '永久' }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="created_at" label="申请时间" width="140">
-          <template #default="{ row }">
-            {{ formatDate(row.created_at) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
-          <template #default="{ row }">
-            <el-button size="small" @click="viewDetail(row)">详情</el-button>
-            <el-button size="small" type="primary" @click="downloadAsset(row)" :disabled="row.status !== 'active'">
-              下载
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <el-skeleton :loading="loading" animated :rows="6">
+        <template #template>
+          <div style="padding: 12px 0" v-for="i in 6" :key="i" class="skeleton-row">
+            <div style="display: flex; gap: 24px; align-items: center; padding: 12px 0; border-bottom: 1px solid #ebeef5">
+              <el-skeleton-item variant="text" style="width: 160px" />
+              <el-skeleton-item variant="text" style="flex: 1" />
+              <el-skeleton-item variant="text" style="width: 80px" />
+              <el-skeleton-item variant="text" style="width: 60px" />
+              <el-skeleton-item variant="text" style="width: 120px" />
+              <el-skeleton-item variant="text" style="width: 120px" />
+            </div>
+          </div>
+        </template>
+        <template #default>
+          <el-table :data="licenses" stripe>
+            <el-table-column prop="license_code" label="授权编码" width="180" />
+            <el-table-column prop="asset_title" label="资产标题" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="license_type" label="类型" width="100">
+              <template #default="{ row }">
+                <el-tag size="small">{{ getLicenseType(row.license_type) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="status" label="状态" width="80">
+              <template #default="{ row }">
+                <el-tag :type="getStatusType(row.status)" size="small">
+                  {{ getStatusName(row.status) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="valid_until" label="有效期" width="140">
+              <template #default="{ row }">
+                {{ row.valid_until ? formatDate(row.valid_until) : '永久' }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="created_at" label="申请时间" width="140">
+              <template #default="{ row }">
+                {{ formatDate(row.created_at) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="160" fixed="right">
+              <template #default="{ row }">
+                <el-button size="small" @click="viewDetail(row)">详情</el-button>
+                <el-button size="small" type="primary" @click="downloadAsset(row)" :disabled="row.status !== 'active'">
+                  下载
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </template>
+      </el-skeleton>
 
       <el-pagination
         v-model:current-page="page"
@@ -86,7 +102,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { licenseApi } from '@/api/modules'
+import { licenseApi, assetApi } from '@/api/modules'
 
 const loading = ref(false)
 const licenses = ref([])
@@ -123,8 +139,25 @@ function viewDetail(row) {
   detailVisible.value = true
 }
 
-function downloadAsset(row) {
-  ElMessage.info('下载功能开发中...')
+async function downloadAsset(row) {
+  if (!row.asset_id) {
+    ElMessage.warning('资产信息缺失')
+    return
+  }
+  try {
+    const response = await assetApi.download(row.asset_id)
+    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', row.asset_code || 'asset')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    ElMessage.success('下载开始')
+  } catch {
+    ElMessage.error('下载失败，请确认已获得授权')
+  }
 }
 
 function getLicenseType(type) {

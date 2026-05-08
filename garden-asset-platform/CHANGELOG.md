@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## [1.1.0] - 2026-05-08
+
+### Fixed
+- CSP `script-src` 指令在 DEBUG 模式下产生重复项，现在统一为单条指令
+- nginx.conf 缺少 `client_max_body_size`（默认 1MB 导致上传失败），设置为 500m
+- docker-compose 中数据库凭证硬编码，改为环境变量引用
+- docker-compose 中 `depends_on` 缺少健康检查条件，backend 可能在 DB 就绪前启动
+- 移除 middleware.py 中未使用的 `cors_headers` 死代码
+
+### Added
+- 登录接口限流（5次/分钟）和注册接口限流（3次/小时）
+- 资产上传接口限流（10次/分钟）
+- config.py 中新增限流配置项（RATELIMIT_LOGIN/REGISTER/API）
+- nginx.conf 安全响应头（X-Content-Type-Options, X-Frame-Options, CSP 等）
+- docker-compose 中 PostgreSQL/Redis/MinIO 健康检查
+- backend/.dockerignore 和 frontend/.dockerignore
+- 项目根目录 .env.example（Docker Compose 环境变量模板）
+- 测试用例：园林模块（7个）、授权模块（9个）、区块链模块（8个）
+- 共享测试 fixtures：admin_header, sample_garden, sample_asset
+- 前端骨架屏：资产列表页统计卡片+网格、我的授权页表格、管理后台资产表格
+
+### Changed
+- conftest.py 扩展测试 fixtures 体系
+
 ## [1.0.0] - 2026-04-26
 
 ### Added

@@ -40,7 +40,20 @@
       </el-form>
 
       <!-- 表格 -->
-      <el-table :data="assets" v-loading="loading" stripe>
+      <el-skeleton :loading="loading" animated :rows="8">
+        <template #template>
+          <div v-for="i in 8" :key="i" style="display: flex; gap: 16px; padding: 14px 0; border-bottom: 1px solid #ebeef5">
+            <el-skeleton-item variant="text" style="width: 160px" />
+            <el-skeleton-item variant="text" style="flex: 1" />
+            <el-skeleton-item variant="text" style="width: 60px" />
+            <el-skeleton-item variant="text" style="width: 60px" />
+            <el-skeleton-item variant="text" style="width: 60px" />
+            <el-skeleton-item variant="text" style="width: 80px" />
+            <el-skeleton-item variant="text" style="width: 120px" />
+          </div>
+        </template>
+        <template #default>
+      <el-table :data="assets" stripe>
         <el-table-column prop="asset_code" label="编码" width="180" />
         <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
         <el-table-column prop="asset_type" label="类型" width="80">
@@ -86,6 +99,8 @@
           </template>
         </el-table-column>
       </el-table>
+        </template>
+      </el-skeleton>
 
       <!-- 分页 -->
       <el-pagination

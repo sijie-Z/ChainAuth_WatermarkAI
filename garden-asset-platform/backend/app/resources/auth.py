@@ -14,11 +14,13 @@ from flask_jwt_extended import (
 from app.extensions import db
 from app.models.user import User, UserToken
 from app.models.log import OperationLog
+from app.utils.middleware import rate_limit
 
 
 class RegisterResource(Resource):
     """用户注册"""
 
+    @rate_limit(limit=3, window=3600)
     def post(self):
         data = request.get_json()
 
@@ -83,6 +85,7 @@ class RegisterResource(Resource):
 class LoginResource(Resource):
     """用户登录"""
 
+    @rate_limit(limit=5, window=60)
     def post(self):
         data = request.get_json()
 
