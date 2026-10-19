@@ -102,7 +102,7 @@ export function createLicenseTypeChart(data) {
           data.derivative
         ],
         itemStyle: {
-          color: '#409eff'
+          color: '#2f6b5a'
         }
       }
     ]

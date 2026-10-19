@@ -33,7 +33,7 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
-    open: true,
+    open: false,
     proxy: {
       '/api': {
         target: 'http://localhost:5000',
@@ -60,8 +60,7 @@ export default defineConfig({
         manualChunks: {
           vue: ['vue', 'vue-router', 'pinia'],
           elementPlus: ['element-plus'],
-          echarts: ['echarts'],
-          three: ['three']
+          echarts: ['echarts']
         }
       }
     }

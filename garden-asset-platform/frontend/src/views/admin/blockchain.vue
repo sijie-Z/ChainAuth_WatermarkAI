@@ -221,12 +221,12 @@ onMounted(() => {
 .stat-value {
   font-size: 32px;
   font-weight: 600;
-  color: #409eff;
+  color: #2f6b5a;
 }
 
 .stat-label {
   font-size: 14px;
-  color: #999;
+  color: #5b675f;
   margin-top: 10px;
 }
 

@@ -237,7 +237,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, shallowRef } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { assetApi, gardenApi, publicApi } from '@/api/modules'
 import { Upload, Search, Grid, List, Calendar, Picture, Document, VideoCamera, Collection, Link } from '@element-plus/icons-vue'
@@ -265,11 +265,11 @@ const pagination = reactive({
 })
 
 // 统计数据
-const stats = ref([
-  { key: 'total', label: '总资产', value: 0, icon: 'Picture', gradient: 'linear-gradient(135deg, #10b981, #059669)' },
-  { key: 'image', label: '影像', value: 0, icon: 'Picture', gradient: 'linear-gradient(135deg, #3b82f6, #1d4ed8)' },
-  { key: 'model', label: '模型', value: 0, icon: 'Collection', gradient: 'linear-gradient(135deg, #8b5cf6, #6d28d9)' },
-  { key: 'vector', label: '矢量', value: 0, icon: 'Document', gradient: 'linear-gradient(135deg, #f59e0b, #d97706)' }
+const stats = shallowRef([
+  { key: 'total', label: '总资产', value: 0, icon: Picture, gradient: '#eaf0eb' },
+  { key: 'image', label: '影像', value: 0, icon: Picture, gradient: '#eaf0eb' },
+  { key: 'model', label: '模型', value: 0, icon: Collection, gradient: '#eaf0eb' },
+  { key: 'vector', label: '矢量', value: 0, icon: Document, gradient: '#eaf0eb' }
 ])
 
 async function loadStats() {
@@ -279,10 +279,10 @@ async function loadStats() {
     if (response.data?.code === 200) {
       const d = response.data.data
       stats.value = [
-        { key: 'total', label: '总资产', value: d.total_assets || 0, icon: 'Picture', gradient: 'linear-gradient(135deg, #10b981, #059669)' },
-        { key: 'image', label: '影像', value: d.by_type?.image || 0, icon: 'Picture', gradient: 'linear-gradient(135deg, #3b82f6, #1d4ed8)' },
-        { key: 'model', label: '模型', value: d.by_type?.model || 0, icon: 'Collection', gradient: 'linear-gradient(135deg, #8b5cf6, #6d28d9)' },
-        { key: 'vector', label: '矢量', value: d.by_type?.vector || 0, icon: 'Document', gradient: 'linear-gradient(135deg, #f59e0b, #d97706)' }
+        { key: 'total', label: '总资产', value: d.total_assets || 0, icon: Picture, gradient: '#eaf0eb' },
+        { key: 'image', label: '影像', value: d.by_type?.image || 0, icon: Picture, gradient: '#eaf0eb' },
+        { key: 'model', label: '模型', value: d.by_type?.model || 0, icon: Collection, gradient: '#eaf0eb' },
+        { key: 'vector', label: '矢量', value: d.by_type?.vector || 0, icon: Document, gradient: '#eaf0eb' }
       ]
     }
   } catch {
@@ -351,8 +351,8 @@ function applyLicense(id) {
 
 function getThumbnail(asset) {
   if (asset.thumbnail_path) return asset.thumbnail_path
-  const colors = { image: '#10b981', vector: '#3b82f6', model: '#8b5cf6', document: '#f59e0b', video: '#ef4444' }
-  const color = (colors[asset.asset_type] || '#6b7280').replace('#', '')
+  const colors = { image: '#2f6b5a', vector: '#4c6e8a', model: '#6d5b7a', document: '#b07a2a', video: '#a6402f' }
+  const color = (colors[asset.asset_type] || '#5b675f').replace('#', '')
   const label = (asset.asset_type || 'FILE').substring(0, 3).toUpperCase()
   return `data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="300"%3E%3Crect fill="%23${color}" width="400" height="300" rx="8"/%3E%3Ctext x="200" y="160" text-anchor="middle" fill="white" font-size="28"%3E${label}%3C/text%3E%3C/svg%3E`
 }
@@ -404,8 +404,8 @@ onMounted(() => {
 
 // 页面头部
 .page-header {
-  background: white;
-  padding: 32px 48px;
+  background: $bg-card;
+  padding: 28px 40px;
   border-bottom: 1px solid $border-light;
 
   .header-content {
@@ -418,10 +418,11 @@ onMounted(() => {
 
   .title-section {
     .page-title {
-      font-size: 28px;
-      font-weight: $font-weight-bold;
+      font-family: $font-display;
+      font-size: 26px;
+      font-weight: 600;
       color: $text-primary;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
 
     .page-subtitle {
@@ -431,14 +432,11 @@ onMounted(() => {
   }
 
   .upload-btn {
-    background: $primary-gradient;
-    border: none;
-    padding: 12px 24px;
+    background: $primary-color;
+    border: 1px solid $primary-dark;
+    padding: 10px 20px;
+    border-radius: $radius-sm;
     font-weight: $font-weight-medium;
-
-    &:hover {
-      opacity: 0.9;
-    }
   }
 }
 
@@ -452,36 +450,39 @@ onMounted(() => {
   gap: 20px;
 
   .stat-card {
-    background: white;
-    border-radius: $radius-xl;
-    padding: 24px;
+    background: $bg-card;
+    border: 1px solid $border-color;
+    border-radius: $radius-lg;
+    padding: 18px;
     display: flex;
     align-items: center;
-    gap: 16px;
-    box-shadow: $shadow-card;
-    transition: all $transition-base;
+    gap: 14px;
+    box-shadow: $shadow-sm;
+    transition: border-color $transition-fast;
 
     &:hover {
-      transform: translateY(-2px);
-      box-shadow: $shadow-card-hover;
+      border-color: $border-dark;
     }
 
     .stat-icon {
-      width: 56px;
-      height: 56px;
-      border-radius: $radius-lg;
+      width: 42px;
+      height: 42px;
+      border-radius: $radius-md;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 24px;
-      color: white;
+      font-size: 20px;
+      color: $primary-dark;
+      border: 1px solid $border-color;
     }
 
     .stat-info {
       .stat-value {
-        font-size: 28px;
-        font-weight: $font-weight-bold;
+        font-family: $font-display;
+        font-size: 26px;
+        font-weight: 600;
         color: $text-primary;
+        line-height: 1.2;
       }
 
       .stat-label {
@@ -499,10 +500,11 @@ onMounted(() => {
   padding: 0 48px 24px;
 
   .filter-card {
-    background: white;
-    border-radius: $radius-xl;
-    padding: 20px 24px;
-    box-shadow: $shadow-card;
+    background: $bg-card;
+    border: 1px solid $border-color;
+    border-radius: $radius-lg;
+    padding: 16px 20px;
+    box-shadow: $shadow-sm;
   }
 
   .filter-row {
@@ -547,23 +549,24 @@ onMounted(() => {
   gap: 24px;
 
   .asset-card {
-    background: white;
-    border-radius: $radius-2xl;
+    background: $bg-card;
+    border: 1px solid $border-color;
+    border-radius: $radius-md;
     overflow: hidden;
-    box-shadow: $shadow-card;
+    box-shadow: $shadow-sm;
     cursor: pointer;
-    transition: all $transition-base;
+    transition: border-color $transition-fast, box-shadow $transition-fast;
 
     &:hover {
-      transform: translateY(-4px);
-      box-shadow: $shadow-xl;
+      border-color: $border-dark;
+      box-shadow: $shadow-md;
 
       .asset-overlay {
         opacity: 1;
       }
 
       .asset-thumbnail img {
-        transform: scale(1.05);
+        transform: scale(1.03);
       }
     }
 
@@ -598,15 +601,16 @@ onMounted(() => {
         font-size: 12px;
         font-weight: $font-weight-medium;
         color: white;
-        background: rgba(0, 0, 0, 0.5);
+        background: rgba(0, 0, 0, 0.42);
         backdrop-filter: blur(4px);
-        border-radius: $radius-full;
+        border: 1px solid rgba(252, 253, 251, 0.18);
+        border-radius: $radius-xs;
 
         &.image { background: rgba($primary-color, 0.9); }
-        &.model { background: rgba(#8b5cf6, 0.9); }
-        &.vector { background: rgba(#3b82f6, 0.9); }
-        &.document { background: rgba(#f59e0b, 0.9); }
-        &.video { background: rgba(#ef4444, 0.9); }
+        &.model { background: rgba(#6d5b7a, 0.9); }
+        &.vector { background: rgba(#4c6e8a, 0.9); }
+        &.document { background: rgba(#b07a2a, 0.9); }
+        &.video { background: rgba(#a6402f, 0.9); }
       }
     }
 

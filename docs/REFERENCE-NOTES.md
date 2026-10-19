@@ -51,7 +51,21 @@
 | `anthropics/claude-code-action` AI 审查 | 需要 Anthropic API Secret；已配置 CodeRabbit 作为默认 AI 审查，如需可后续加装 |
 | Playwright E2E | 前端暂无测试基线，先以 lint + build + 后端 29 个用例作为门禁 |
 
-## 4. 删除记录
+## 4. UI 设计参考（2026-10-19 补充）
+
+前端从“绿色渐变模板”重构为“青绿山水 · 档案册”方向，吸收以下参考：
+
+- 苏州博物馆官网：墨色/暖灰/朱砂的信号色关系、几何框架与印章式标识
+- 故宫博物院数字文物库：松绿 + 古金 + 暖纸的档案气质、密集藏品网格、70/30 详情布局
+- 故宫名画记：纸面 + 墨褐 + 宋体标题、时间轴与画作查看器层级
+- 数字藏经洞：羊皮纸/朱砂/深褐的证书纸面层
+- Han Design（GitHub）：青绿山水/水墨/青瓷 token 结构与“朱砂 ≤5%、金 <3%”的克制原则
+- cultural-relics-museum（GitHub）：验证过的中式深色界面与金/朱砂/玉色比例
+- vue-pure-admin / Geeker-Admin / Soybean Admin：后台壳几何与 Element Plus token 思路
+
+详细令牌、页面模式与禁用项见 [UI-DESIGN.md](UI-DESIGN.md)。
+
+## 5. 删除记录
 
 - 已删除：`Spatial_Data_Tracking_System_lastvension - 副本/`、`Collegiate_Computing_Competition/`
 - 已从 Git 历史中剔除上述路径（`git filter-repo`），避免账号密码、GeoScene 许可证等文件被推送到 GitHub

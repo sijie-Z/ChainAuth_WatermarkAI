@@ -1,13 +1,12 @@
 <template>
-  <el-tag :type="tagType" :size="size" :effect="effect">
-    <el-icon v-if="showIcon" class="tag-icon"><component :is="statusIcon" /></el-icon>
+  <span class="status-tag" :class="tone">
+    <span class="status-dot" aria-hidden="true"></span>
     {{ statusText }}
-  </el-tag>
+  </span>
 </template>
 
 <script setup>
 import { computed } from 'vue'
-import { CircleCheck, CircleClose, Loading, Clock, Warning } from '@element-plus/icons-vue'
 
 const props = defineProps({
   status: { type: String, default: 'pending' },
@@ -17,29 +16,74 @@ const props = defineProps({
 })
 
 const statusConfig = {
-  pending: { text: '待处理', tag: 'warning', icon: Clock },
-  processing: { text: '处理中', tag: 'info', icon: Loading },
-  embedded: { text: '已嵌入', tag: 'success', icon: CircleCheck },
-  confirmed: { text: '已确认', tag: 'success', icon: CircleCheck },
-  active: { text: '生效中', tag: 'success', icon: CircleCheck },
-  approved: { text: '已通过', tag: 'success', icon: CircleCheck },
-  rejected: { text: '已拒绝', tag: 'danger', icon: CircleClose },
-  expired: { text: '已过期', tag: 'info', icon: Clock },
-  failed: { text: '失败', tag: 'danger', icon: CircleClose },
-  published: { text: '已发布', tag: 'success', icon: CircleCheck },
-  draft: { text: '草稿', tag: 'info', icon: Warning },
-  revoked: { text: '已撤销', tag: 'danger', icon: CircleClose }
+  pending: { text: '待处理', tone: 'warning' },
+  processing: { text: '处理中', tone: 'info' },
+  embedded: { text: '已嵌入', tone: 'success' },
+  confirmed: { text: '已确认', tone: 'success' },
+  active: { text: '生效中', tone: 'success' },
+  approved: { text: '已通过', tone: 'success' },
+  rejected: { text: '已拒绝', tone: 'error' },
+  expired: { text: '已过期', tone: 'neutral' },
+  failed: { text: '失败', tone: 'error' },
+  published: { text: '已发布', tone: 'success' },
+  draft: { text: '草稿', tone: 'neutral' },
+  revoked: { text: '已撤销', tone: 'error' },
+  none: { text: '未处理', tone: 'neutral' }
 }
 
-const tagType = computed(() => statusConfig[props.status]?.tag || 'info')
+const tone = computed(() => statusConfig[props.status]?.tone || 'neutral')
 const statusText = computed(() => statusConfig[props.status]?.text || props.status)
-const statusIcon = computed(() => statusConfig[props.status]?.icon || Clock)
-const showIcon = computed(() => props.type !== 'default')
 </script>
 
-<style scoped>
-.tag-icon {
-  margin-right: 4px;
-  vertical-align: middle;
+<style lang="scss" scoped>
+@use '@/assets/styles/variables.scss' as *;
+
+.status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border: 1px solid transparent;
+  border-radius: $radius-xs;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: nowrap;
+
+  .status-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  &.success {
+    color: $success-color;
+    background: $success-bg;
+    border-color: rgba(63, 125, 91, 0.25);
+  }
+
+  &.warning {
+    color: $warning-color;
+    background: $warning-bg;
+    border-color: rgba(176, 122, 42, 0.28);
+  }
+
+  &.error {
+    color: $error-color;
+    background: $error-bg;
+    border-color: rgba(166, 64, 47, 0.28);
+  }
+
+  &.info {
+    color: $info-color;
+    background: $info-bg;
+    border-color: rgba(76, 110, 138, 0.25);
+  }
+
+  &.neutral {
+    color: $text-secondary;
+    background: $bg-secondary;
+    border-color: $border-color;
+  }
 }
 </style>

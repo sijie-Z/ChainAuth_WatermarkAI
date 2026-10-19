@@ -1,112 +1,92 @@
 <template>
   <div class="admin-layout">
     <!-- 侧边栏 -->
-    <aside class="sidebar" :class="{ collapsed: isCollapsed }">
-      <!-- Logo区域 -->
+    <aside class="sidebar lattice-light" :class="{ collapsed: isCollapsed, 'mobile-open': mobileOpen }">
       <div class="sidebar-header">
-        <div class="logo-container">
-          <div class="logo-icon">
-            <svg viewBox="0 0 32 32" fill="none">
-              <path d="M16 2L4 10v12l12 8 12-8V10L16 2z" fill="url(#logoGradient)"/>
-              <path d="M16 8L8 13v6l8 5 8-5v-6l-8-5z" fill="white" fill-opacity="0.3"/>
-              <defs>
-                <linearGradient id="logoGradient" x1="4" y1="2" x2="28" y2="30">
-                  <stop stop-color="#10b981"/>
-                  <stop offset="1" stop-color="#059669"/>
-                </linearGradient>
-              </defs>
-            </svg>
-          </div>
+        <router-link to="/admin" class="logo-container">
+          <span class="logo-mark">园</span>
           <transition name="fade">
-            <span v-if="!isCollapsed" class="logo-text">园林资产平台</span>
+            <span v-if="!isCollapsed" class="logo-text">
+              <span class="logo-name">园林资产台账</span>
+              <span class="logo-sub">数字档案后台</span>
+            </span>
           </transition>
-        </div>
-        <button class="collapse-btn" @click="toggleCollapse">
+        </router-link>
+        <button class="collapse-btn" type="button" aria-label="折叠侧边栏" @click="toggleCollapse">
           <el-icon :class="{ rotated: isCollapsed }"><Expand /></el-icon>
         </button>
       </div>
 
-      <!-- 导航菜单 -->
-      <nav class="sidebar-nav">
-        <div class="nav-section">
-          <transition name="fade">
-            <span v-if="!isCollapsed" class="nav-section-title">主菜单</span>
-          </transition>
-          <ul class="nav-list">
-            <li v-for="item in menuItems" :key="item.path">
-              <router-link
-                :to="item.path"
-                class="nav-item"
-                :class="{ active: isActive(item.path) }"
-                v-if="!item.children"
+      <nav class="sidebar-nav" aria-label="后台导航">
+        <span v-if="!isCollapsed" class="nav-section-title">档案目录</span>
+        <ul class="nav-list">
+          <li v-for="item in menuItems" :key="item.path">
+            <router-link
+              v-if="!item.children"
+              :to="item.path"
+              class="nav-item"
+              :class="{ active: isActive(item.path) }"
+            >
+              <el-icon class="nav-icon"><component :is="item.icon" /></el-icon>
+              <transition name="fade">
+                <span v-if="!isCollapsed" class="nav-label">{{ item.label }}</span>
+              </transition>
+            </router-link>
+
+            <template v-else>
+              <button
+                type="button"
+                class="nav-item has-children"
+                :class="{ expanded: expandedMenus.includes(item.path) }"
+                @click="toggleSubMenu(item.path)"
               >
-                <div class="nav-icon-wrapper">
-                  <el-icon class="nav-icon"><component :is="item.icon" /></el-icon>
-                </div>
+                <el-icon class="nav-icon"><component :is="item.icon" /></el-icon>
                 <transition name="fade">
                   <span v-if="!isCollapsed" class="nav-label">{{ item.label }}</span>
                 </transition>
                 <transition name="fade">
-                  <span v-if="!isCollapsed && item.badge" class="nav-badge">{{ item.badge }}</span>
+                  <el-icon v-if="!isCollapsed" class="nav-arrow"><ArrowDown /></el-icon>
                 </transition>
-              </router-link>
-
-              <!-- 有子菜单 -->
-              <template v-else>
-                <div class="nav-item has-children" @click="toggleSubMenu(item.path)" :class="{ expanded: expandedMenus.includes(item.path) }">
-                  <div class="nav-icon-wrapper">
-                    <el-icon class="nav-icon"><component :is="item.icon" /></el-icon>
-                  </div>
-                  <transition name="fade">
-                    <span v-if="!isCollapsed" class="nav-label">{{ item.label }}</span>
-                  </transition>
-                  <transition name="fade">
-                    <el-icon v-if="!isCollapsed" class="nav-arrow"><ArrowDown /></el-icon>
-                  </transition>
-                </div>
-                <transition name="slide">
-                  <ul v-if="expandedMenus.includes(item.path) && !isCollapsed" class="sub-nav-list">
-                    <li v-for="child in item.children" :key="child.path">
-                      <router-link
-                        :to="child.path"
-                        class="sub-nav-item"
-                        :class="{ active: isActive(child.path) }"
-                      >
-                        <span class="sub-nav-dot"></span>
-                        <span>{{ child.label }}</span>
-                        <span v-if="child.badge" class="nav-badge">{{ child.badge }}</span>
-                      </router-link>
-                    </li>
-                  </ul>
-                </transition>
-              </template>
-            </li>
-          </ul>
-        </div>
+              </button>
+              <transition name="slide">
+                <ul v-if="expandedMenus.includes(item.path) && !isCollapsed" class="sub-nav-list">
+                  <li v-for="child in item.children" :key="child.path">
+                    <router-link
+                      :to="child.path"
+                      class="sub-nav-item"
+                      :class="{ active: isActive(child.path) }"
+                    >
+                      <span class="sub-nav-dot"></span>
+                      <span>{{ child.label }}</span>
+                    </router-link>
+                  </li>
+                </ul>
+              </transition>
+            </template>
+          </li>
+        </ul>
       </nav>
 
-      <!-- 用户信息 -->
       <div class="sidebar-footer">
         <div class="user-card" :class="{ compact: isCollapsed }">
-          <el-avatar :size="isCollapsed ? 36 : 40" class="user-avatar">
-            {{ username?.charAt(0)?.toUpperCase() }}
-          </el-avatar>
+          <span class="user-avatar">{{ username?.charAt(0)?.toUpperCase() }}</span>
           <transition name="fade">
             <div v-if="!isCollapsed" class="user-info">
-              <div class="user-name">{{ username }}</div>
-              <div class="user-role">{{ roleLabel }}</div>
+              <span class="user-name">{{ username }}</span>
+              <span class="user-role">{{ roleLabel }}</span>
             </div>
           </transition>
         </div>
       </div>
     </aside>
 
+    <div v-if="mobileOpen" class="sidebar-backdrop" @click="mobileOpen = false"></div>
+
     <!-- 主内容区 -->
     <div class="main-area">
-      <!-- 顶栏 -->
       <header class="topbar">
         <div class="topbar-left">
-          <button class="mobile-menu-btn" @click="toggleMobileMenu">
+          <button class="mobile-menu-btn" type="button" aria-label="打开导航" @click="toggleMobileMenu">
             <el-icon><Menu /></el-icon>
           </button>
           <el-breadcrumb separator="/" class="breadcrumb">
@@ -120,34 +100,16 @@
         </div>
 
         <div class="topbar-right">
-          <!-- 搜索 -->
-          <div class="search-box">
-            <el-input
-              v-model="searchQuery"
-              placeholder="搜索..."
-              prefix-icon="Search"
-              size="default"
-              clearable
-            />
-          </div>
+          <router-link to="/home" class="topbar-link">返回前台</router-link>
 
-          <!-- 通知 -->
-          <el-badge :value="notificationCount" :hidden="notificationCount === 0" class="notification-badge">
-            <el-button :icon="Bell" circle class="icon-btn" />
-          </el-badge>
-
-          <!-- 全屏 -->
           <el-button :icon="isFullscreen ? Close : FullScreen" circle class="icon-btn" @click="toggleFullscreen" />
 
-          <!-- 用户下拉 -->
           <el-dropdown trigger="click" @command="handleCommand">
-            <div class="user-dropdown">
-              <el-avatar :size="32" class="user-avatar-small">
-                {{ username?.charAt(0)?.toUpperCase() }}
-              </el-avatar>
+            <button class="user-dropdown" type="button">
+              <span class="user-avatar-small">{{ username?.charAt(0)?.toUpperCase() }}</span>
               <span class="user-name-small">{{ username }}</span>
               <el-icon class="dropdown-arrow"><ArrowDown /></el-icon>
-            </div>
+            </button>
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item command="profile">
@@ -168,7 +130,6 @@
         </div>
       </header>
 
-      <!-- 页面内容 -->
       <main class="page-content">
         <router-view v-slot="{ Component }">
           <transition name="page-fade" mode="out-in">
@@ -181,27 +142,24 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, shallowRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import {
   DataLine, Picture, Stamp, Document, Link, User, Setting,
-  Bell, Menu, HomeFilled, ArrowDown, Expand, SwitchButton,
-  FullScreen, Close, Search
+  Menu, HomeFilled, ArrowDown, Expand, SwitchButton,
+  FullScreen, Close
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 
-// 状态
 const isCollapsed = ref(false)
+const mobileOpen = ref(false)
 const isFullscreen = ref(false)
-const searchQuery = ref('')
-const notificationCount = ref(3)
 const expandedMenus = ref(['license'])
 
-// 用户信息
 const username = computed(() => userStore.username)
 const userRole = computed(() => userStore.userRole)
 const roleLabel = computed(() => {
@@ -215,25 +173,23 @@ const roleLabel = computed(() => {
   return labels[userRole.value] || '用户'
 })
 
-// 菜单配置
-const menuItems = ref([
-  { path: '/admin', label: '仪表盘', icon: 'DataLine' },
-  { path: '/admin/assets', label: '资产管理', icon: 'Picture', badge: '156' },
-  { path: '/admin/watermark', label: '水印管理', icon: 'Stamp' },
+const menuItems = shallowRef([
+  { path: '/admin', label: '仪表盘', icon: DataLine },
+  { path: '/admin/assets', label: '资产管理', icon: Picture },
+  { path: '/admin/watermark', label: '水印管理', icon: Stamp },
+  { path: '/admin/blockchain', label: '存证管理', icon: Link },
   {
     path: 'license',
     label: '授权审批',
-    icon: 'Document',
+    icon: Document,
     children: [
-      { path: '/admin/license/pending', label: '待审批', badge: '5' },
+      { path: '/admin/license/pending', label: '待审批' },
       { path: '/admin/license/approved', label: '已审批' }
     ]
   },
-  { path: '/admin/blockchain', label: '存证管理', icon: 'Link' },
-  { path: '/admin/users', label: '用户管理', icon: 'User' }
+  { path: '/admin/users', label: '用户管理', icon: User }
 ])
 
-// 面包屑
 const breadcrumbs = computed(() => {
   const matched = route.matched.filter(item => item.meta.title)
   return matched.map(item => ({
@@ -242,13 +198,12 @@ const breadcrumbs = computed(() => {
   }))
 })
 
-// 方法
 function toggleCollapse() {
   isCollapsed.value = !isCollapsed.value
 }
 
 function toggleMobileMenu() {
-  // 移动端菜单切换
+  mobileOpen.value = !mobileOpen.value
 }
 
 function toggleSubMenu(path) {
@@ -267,10 +222,8 @@ function isActive(path) {
 function toggleFullscreen() {
   if (!document.fullscreenElement) {
     document.documentElement.requestFullscreen()
-    isFullscreen.value = true
   } else {
     document.exitFullscreen()
-    isFullscreen.value = false
   }
 }
 
@@ -285,7 +238,6 @@ function handleCommand(command) {
   }
 }
 
-// 监听全屏变化
 function handleFullscreenChange() {
   isFullscreen.value = !!document.fullscreenElement
 }
@@ -310,8 +262,8 @@ onUnmounted(() => {
 
 // ========== 侧边栏 ==========
 .sidebar {
-  width: 260px;
-  background: linear-gradient(180deg, #065f46 0%, #047857 50%, #059669 100%);
+  width: $sidebar-width;
+  background: $primary-dark;
   display: flex;
   flex-direction: column;
   transition: width $transition-base;
@@ -319,288 +271,272 @@ onUnmounted(() => {
   left: 0;
   top: 0;
   bottom: 0;
-  z-index: 100;
+  z-index: $z-fixed;
+  border-right: 1px solid rgba(252, 253, 251, 0.08);
 
   &.collapsed {
-    width: 80px;
+    width: $sidebar-collapsed-width;
+
+    .sidebar-header {
+      padding: 18px 12px;
+      justify-content: center;
+    }
+
+    .collapse-btn { display: none; }
 
     .nav-item {
       justify-content: center;
-      padding: 0 16px;
-
-      .nav-icon-wrapper {
-        margin-right: 0;
-      }
+      padding: 12px;
     }
 
-    .sidebar-header {
-      padding: 20px 16px;
-    }
-
-    .sidebar-footer {
-      padding: 16px;
-    }
+    .sidebar-footer { padding: 12px; }
   }
 }
 
 .sidebar-header {
-  padding: 20px 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  gap: 8px;
+  padding: 18px 16px;
+  border-bottom: 1px solid rgba(252, 253, 251, 0.08);
 }
 
 .logo-container {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  min-width: 0;
 
-  .logo-icon {
-    width: 36px;
-    height: 36px;
+  .logo-mark {
+    width: 34px;
+    height: 34px;
     flex-shrink: 0;
-
-    svg {
-      width: 100%;
-      height: 100%;
-    }
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(252, 253, 251, 0.38);
+    border-radius: $radius-xs;
+    color: #fcfdfb;
+    font-family: $font-display;
+    font-size: 18px;
   }
 
   .logo-text {
-    font-size: 16px;
-    font-weight: $font-weight-semibold;
-    color: white;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.3;
     white-space: nowrap;
+  }
+
+  .logo-name {
+    font-family: $font-display;
+    font-size: 15px;
+    color: #fcfdfb;
+    letter-spacing: 0.04em;
+  }
+
+  .logo-sub {
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    color: rgba(252, 253, 251, 0.45);
   }
 }
 
 .collapse-btn {
-  width: 32px;
-  height: 32px;
-  border: none;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: $radius-md;
-  cursor: pointer;
-  display: flex;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: white;
-  transition: all $transition-fast;
+  background: transparent;
+  border: 1px solid rgba(252, 253, 251, 0.16);
+  border-radius: $radius-xs;
+  color: rgba(252, 253, 251, 0.65);
+  cursor: pointer;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.2);
+    color: #fcfdfb;
+    border-color: rgba(252, 253, 251, 0.36);
   }
 
   .el-icon {
     transition: transform $transition-base;
 
-    &.rotated {
-      transform: rotate(180deg);
-    }
+    &.rotated { transform: rotate(180deg); }
   }
 }
 
 // 导航
 .sidebar-nav {
   flex: 1;
-  padding: 16px 12px;
+  padding: 18px 10px;
   overflow-y: auto;
 }
 
 .nav-section-title {
-  font-size: 11px;
-  font-weight: $font-weight-semibold;
-  color: rgba(255, 255, 255, 0.5);
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  display: block;
   padding: 0 12px;
   margin-bottom: 8px;
-  display: block;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: rgba(252, 253, 251, 0.35);
 }
 
 .nav-list {
   list-style: none;
-  padding: 0;
-  margin: 0;
 }
 
 .nav-item {
+  position: relative;
   display: flex;
   align-items: center;
-  padding: 12px 16px;
-  margin-bottom: 4px;
-  border-radius: $radius-lg;
-  color: rgba(255, 255, 255, 0.8);
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 2px;
+  background: transparent;
+  border: none;
+  border-radius: $radius-sm;
+  color: rgba(252, 253, 251, 0.68);
+  font-size: 14px;
+  text-align: left;
   text-decoration: none;
   cursor: pointer;
-  transition: all $transition-fast;
-  position: relative;
-
-  .nav-icon-wrapper {
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: $radius-md;
-    margin-right: 12px;
-    transition: all $transition-fast;
-  }
+  transition: color $transition-fast, background $transition-fast;
 
   .nav-icon {
-    font-size: 18px;
+    font-size: 17px;
+    flex-shrink: 0;
   }
 
   .nav-label {
     flex: 1;
-    font-size: 14px;
-    font-weight: $font-weight-medium;
-  }
-
-  .nav-badge {
-    padding: 2px 8px;
-    font-size: 11px;
-    font-weight: $font-weight-semibold;
-    background: rgba(255, 255, 255, 0.2);
-    color: white;
-    border-radius: $radius-full;
+    white-space: nowrap;
   }
 
   .nav-arrow {
-    font-size: 12px;
+    font-size: 11px;
+    color: rgba(252, 253, 251, 0.4);
     transition: transform $transition-fast;
   }
 
   &:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
-
-    .nav-icon-wrapper {
-      background: rgba(255, 255, 255, 0.2);
-    }
+    color: #fcfdfb;
+    background: rgba(252, 253, 251, 0.06);
   }
 
   &.active {
-    background: rgba(255, 255, 255, 0.2);
-    color: white;
+    color: #fcfdfb;
+    background: rgba(252, 253, 251, 0.08);
 
-    .nav-icon-wrapper {
-      background: white;
-
-      .nav-icon {
-        color: $primary-dark;
-      }
+    &::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 8px;
+      bottom: 8px;
+      width: 2px;
+      background: $accent-light;
+      border-radius: 1px;
     }
   }
 
-  &.has-children.expanded {
-    .nav-arrow {
-      transform: rotate(180deg);
-    }
+  &.has-children.expanded .nav-arrow {
+    transform: rotate(180deg);
   }
 }
 
 .sub-nav-list {
   list-style: none;
-  padding: 4px 0 4px 44px;
-  margin: 0;
+  padding: 2px 0 6px 38px;
 }
 
 .sub-nav-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
-  color: rgba(255, 255, 255, 0.7);
-  text-decoration: none;
-  border-radius: $radius-md;
-  font-size: 14px;
-  transition: all $transition-fast;
+  padding: 8px 10px;
+  border-radius: $radius-xs;
+  color: rgba(252, 253, 251, 0.6);
+  font-size: 13px;
 
   .sub-nav-dot {
-    width: 6px;
-    height: 6px;
+    width: 4px;
+    height: 4px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.3);
-    transition: all $transition-fast;
+    background: rgba(252, 253, 251, 0.3);
   }
 
   &:hover {
-    color: white;
-
-    .sub-nav-dot {
-      background: white;
-    }
+    color: #fcfdfb;
+    background: rgba(252, 253, 251, 0.05);
   }
 
   &.active {
-    color: white;
+    color: #fcfdfb;
 
-    .sub-nav-dot {
-      background: white;
-      box-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
-    }
-  }
-
-  .nav-badge {
-    padding: 2px 8px;
-    font-size: 11px;
-    font-weight: $font-weight-semibold;
-    background: $error-color;
-    color: white;
-    border-radius: $radius-full;
+    .sub-nav-dot { background: $accent-light; }
   }
 }
 
-// 用户卡片
 .sidebar-footer {
-  padding: 16px 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 12px 14px;
+  border-top: 1px solid rgba(252, 253, 251, 0.08);
 }
 
 .user-card {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: $radius-lg;
-  transition: all $transition-fast;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid rgba(252, 253, 251, 0.1);
+  border-radius: $radius-sm;
 
   &.compact {
     justify-content: center;
-    padding: 8px;
+    border-color: transparent;
   }
 
   .user-avatar {
-    background: linear-gradient(135deg, $accent-light, $accent-dark);
-    border: 2px solid rgba(255, 255, 255, 0.3);
+    width: 32px;
+    height: 32px;
     flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: $radius-xs;
+    background: rgba(252, 253, 251, 0.12);
+    color: #fcfdfb;
+    font-family: $font-display;
+    font-size: 14px;
   }
 
   .user-info {
+    display: flex;
+    flex-direction: column;
     min-width: 0;
+    line-height: 1.35;
   }
 
   .user-name {
-    font-size: 14px;
-    font-weight: $font-weight-semibold;
-    color: white;
-    margin-bottom: 2px;
+    font-size: 13px;
+    color: #fcfdfb;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .user-role {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.7);
+    font-size: 11px;
+    color: rgba(252, 253, 251, 0.45);
   }
 }
 
 // ========== 主内容区 ==========
 .main-area {
   flex: 1;
-  margin-left: 260px;
+  margin-left: $sidebar-width;
   display: flex;
   flex-direction: column;
   min-height: 100vh;
@@ -608,13 +544,13 @@ onUnmounted(() => {
 }
 
 .sidebar.collapsed ~ .main-area {
-  margin-left: 80px;
+  margin-left: $sidebar-collapsed-width;
 }
 
-// 顶栏
 .topbar {
-  height: 64px;
-  background: white;
+  height: $header-height;
+  background: rgba(252, 253, 251, 0.94);
+  backdrop-filter: $glass-blur;
   border-bottom: 1px solid $border-light;
   display: flex;
   align-items: center;
@@ -622,171 +558,145 @@ onUnmounted(() => {
   padding: 0 24px;
   position: sticky;
   top: 0;
-  z-index: 50;
+  z-index: $z-sticky;
 }
 
 .topbar-left {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
 }
 
 .mobile-menu-btn {
   display: none;
-  width: 40px;
-  height: 40px;
-  border: none;
-  background: $bg-secondary;
-  border-radius: $radius-md;
-  cursor: pointer;
-  font-size: 20px;
+  width: 38px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  background: $bg-card;
+  border: 1px solid $border-color;
+  border-radius: $radius-sm;
   color: $text-secondary;
+  cursor: pointer;
 }
 
 .breadcrumb {
-  :deep(.el-breadcrumb__item) {
-    .el-breadcrumb__inner {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      color: $text-secondary;
-      font-weight: $font-weight-medium;
+  :deep(.el-breadcrumb__inner) {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: $text-secondary;
+    font-weight: 400;
 
-      &.is-link:hover {
-        color: $primary-color;
-      }
-    }
+    &.is-link:hover { color: $primary-color; }
+  }
 
-    &:last-child .el-breadcrumb__inner {
-      color: $text-primary;
-    }
+  :deep(.el-breadcrumb__item:last-child .el-breadcrumb__inner) {
+    color: $text-primary;
   }
 }
 
 .topbar-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
-.search-box {
-  width: 240px;
+.topbar-link {
+  font-size: 13px;
+  color: $text-secondary;
+  padding: 6px 10px;
+  border-radius: $radius-xs;
 
-  :deep(.el-input__wrapper) {
-    background: $bg-primary;
-    border-radius: $radius-full;
-    box-shadow: none;
-    border: 1px solid transparent;
-    padding: 0 16px;
-
-    &:hover, &:focus-within {
-      border-color: $primary-color;
-    }
+  &:hover {
+    color: $primary-dark;
+    background: $bg-secondary;
   }
 }
 
 .icon-btn {
-  background: $bg-primary !important;
-  border: none !important;
+  background: $bg-card !important;
+  border: 1px solid $border-color !important;
   color: $text-secondary !important;
 
   &:hover {
     color: $primary-color !important;
-  }
-}
-
-.notification-badge {
-  :deep(.el-badge__content) {
-    background: $error-color;
+    border-color: $primary-color !important;
   }
 }
 
 .user-dropdown {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 12px 6px 6px;
+  gap: 8px;
+  padding: 5px 10px 5px 5px;
+  background: transparent;
+  border: 1px solid $border-color;
   border-radius: $radius-full;
   cursor: pointer;
-  transition: all $transition-fast;
 
-  &:hover {
-    background: $bg-primary;
-  }
+  &:hover { border-color: $border-dark; }
 
   .user-avatar-small {
-    background: $primary-gradient;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: $accent-color;
+    color: #fcfdfb;
+    font-family: $font-display;
+    font-size: 13px;
   }
 
   .user-name-small {
-    font-size: 14px;
-    font-weight: $font-weight-medium;
+    font-size: 13px;
     color: $text-primary;
   }
 
   .dropdown-arrow {
-    font-size: 12px;
-    color: $text-secondary;
+    font-size: 11px;
+    color: $text-placeholder;
   }
 }
 
-// 页面内容
 .page-content {
   flex: 1;
   overflow-y: auto;
 }
 
+// ========== 移动端遮罩 ==========
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1029;
+  background: rgba(14, 59, 51, 0.35);
+}
+
 // ========== 动画 ==========
 .fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-
+.fade-leave-active { transition: opacity 0.2s ease; }
 .fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
+.fade-leave-to { opacity: 0; }
 
 .slide-enter-active,
-.slide-leave-active {
-  transition: all 0.3s ease;
-}
-
+.slide-leave-active { transition: all 0.25s ease; }
 .slide-enter-from,
-.slide-leave-to {
-  opacity: 0;
-  transform: translateY(-10px);
-}
+.slide-leave-to { opacity: 0; transform: translateY(-6px); }
 
 .page-fade-enter-active,
-.page-fade-leave-active {
-  transition: all 0.3s ease;
-}
-
-.page-fade-enter-from {
-  opacity: 0;
-  transform: translateX(20px);
-}
-
-.page-fade-leave-to {
-  opacity: 0;
-  transform: translateX(-20px);
-}
+.page-fade-leave-active { transition: opacity 0.2s ease; }
+.page-fade-enter-from,
+.page-fade-leave-to { opacity: 0; }
 
 // ========== 响应式 ==========
-@media (max-width: 1200px) {
-  .search-box {
-    width: 200px;
-  }
-}
-
 @media (max-width: 992px) {
   .sidebar {
     transform: translateX(-100%);
+    transition: transform $transition-base;
 
-    &:not(.collapsed) {
-      transform: translateX(0);
-    }
+    &.mobile-open { transform: translateX(0); }
   }
 
   .main-area {
@@ -794,23 +704,13 @@ onUnmounted(() => {
   }
 
   .mobile-menu-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    display: inline-flex;
   }
 }
 
 @media (max-width: 576px) {
-  .topbar {
-    padding: 0 16px;
-  }
-
-  .search-box {
-    display: none;
-  }
-
-  .user-name-small {
-    display: none;
-  }
+  .topbar { padding: 0 14px; }
+  .topbar-link { display: none; }
+  .user-name-small { display: none; }
 }
 </style>

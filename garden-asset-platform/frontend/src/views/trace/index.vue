@@ -160,16 +160,16 @@ function downloadReport() {
 <title>溯源报告 - ${r.watermark_id || r.asset_code || ''}</title>
 <style>
   body { font-family: "Microsoft YaHei", sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; color: #333; }
-  h1 { text-align: center; border-bottom: 2px solid #409EFF; padding-bottom: 16px; }
+  h1 { text-align: center; border-bottom: 2px solid #2f6b5a; padding-bottom: 16px; }
   .section { margin: 24px 0; }
-  .section h2 { font-size: 16px; border-left: 4px solid #409EFF; padding-left: 10px; }
+  .section h2 { font-size: 16px; border-left: 4px solid #2f6b5a; padding-left: 10px; }
   table { width: 100%; border-collapse: collapse; }
-  td { padding: 10px 14px; border: 1px solid #e0e0e0; }
-  td:first-child { background: #f5f7fa; font-weight: bold; width: 140px; }
-  .verified { color: #67c23a; font-weight: bold; }
-  .failed { color: #f56c6c; font-weight: bold; }
+  td { padding: 10px 14px; border: 1px solid #d8e1da; }
+  td:first-child { background: #f4f6f2; font-weight: bold; width: 140px; }
+  .verified { color: #3f7d5b; font-weight: bold; }
+  .failed { color: #a6402f; font-weight: bold; }
   .hash { font-family: monospace; font-size: 12px; word-break: break-all; }
-  .footer { text-align: center; color: #999; font-size: 12px; margin-top: 40px; border-top: 1px solid #eee; padding-top: 16px; }
+  .footer { text-align: center; color: #5b675f; font-size: 12px; margin-top: 40px; border-top: 1px solid #eee; padding-top: 16px; }
   @media print { body { margin: 0; padding: 20px; } }
 </style>
 </head>

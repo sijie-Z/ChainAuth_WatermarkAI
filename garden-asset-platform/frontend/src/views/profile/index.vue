@@ -55,7 +55,7 @@
         <!-- 统计卡片 -->
         <div class="stats-grid">
           <div class="stat-card">
-            <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1); color: #10b981;">
+            <div class="stat-icon" style="background: rgba(47, 107, 90, 0.1); color: #2f6b5a;">
               <el-icon><Picture /></el-icon>
             </div>
             <div class="stat-info">
@@ -64,7 +64,7 @@
             </div>
           </div>
           <div class="stat-card">
-            <div class="stat-icon" style="background: rgba(59, 130, 246, 0.1); color: #3b82f6;">
+            <div class="stat-icon" style="background: rgba(76, 110, 138, 0.1); color: #4c6e8a;">
               <el-icon><Stamp /></el-icon>
             </div>
             <div class="stat-info">
@@ -73,7 +73,7 @@
             </div>
           </div>
           <div class="stat-card">
-            <div class="stat-icon" style="background: rgba(245, 158, 11, 0.1); color: #f59e0b;">
+            <div class="stat-icon" style="background: rgba(176, 122, 42, 0.12); color: #b07a2a;">
               <el-icon><Document /></el-icon>
             </div>
             <div class="stat-info">
@@ -82,7 +82,7 @@
             </div>
           </div>
           <div class="stat-card">
-            <div class="stat-icon" style="background: rgba(139, 92, 246, 0.1); color: #8b5cf6;">
+            <div class="stat-icon" style="background: rgba(109, 91, 122, 0.12); color: #6d5b7a;">
               <el-icon><Link /></el-icon>
             </div>
             <div class="stat-info">
@@ -176,8 +176,8 @@ async function loadActivities() {
 }
 
 function getActivityColor(type) {
-  const map = { license: '#3b82f6', asset: '#10b981', watermark: '#f59e0b', blockchain: '#8b5cf6' }
-  return map[type] || '#6b7280'
+  const map = { license: '#4c6e8a', asset: '#2f6b5a', watermark: '#b07a2a', blockchain: '#6d5b7a' }
+  return map[type] || '#5b675f'
 }
 
 function getActivityTagType(type) {

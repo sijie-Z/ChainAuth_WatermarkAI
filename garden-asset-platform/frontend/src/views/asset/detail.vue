@@ -253,8 +253,8 @@ function goBack() {
 
 function getAssetUrl(asset) {
   if (asset.thumbnail_path) return asset.thumbnail_path
-  const colors = { image: '#10b981', vector: '#3b82f6', model: '#8b5cf6', document: '#f59e0b', video: '#ef4444' }
-  const color = (colors[asset.asset_type] || '#6b7280').replace('#', '')
+  const colors = { image: '#2f6b5a', vector: '#4c6e8a', model: '#6d5b7a', document: '#b07a2a', video: '#a6402f' }
+  const color = (colors[asset.asset_type] || '#5b675f').replace('#', '')
   const label = (asset.asset_type || 'FILE').substring(0, 3).toUpperCase()
   return `data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="800" height="600"%3E%3Crect fill="%23${color}" width="800" height="600" rx="12"/%3E%3Ctext x="400" y="310" text-anchor="middle" fill="white" font-size="48"%3E${label}%3C/text%3E%3C/svg%3E`
 }

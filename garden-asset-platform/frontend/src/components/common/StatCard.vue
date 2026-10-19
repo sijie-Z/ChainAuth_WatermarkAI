@@ -1,12 +1,12 @@
 <template>
-  <div class="stat-card" :style="{ borderColor: color }">
-    <div class="stat-icon" :style="{ background: color }">
-      <el-icon :size="24"><component :is="icon" /></el-icon>
+  <div class="stat-card">
+    <div class="stat-head">
+      <span class="stat-icon">
+        <el-icon><component :is="icon" /></el-icon>
+      </span>
+      <span class="stat-label">{{ label }}</span>
     </div>
-    <div class="stat-content">
-      <div class="stat-value">{{ value }}</div>
-      <div class="stat-label">{{ label }}</div>
-    </div>
+    <div class="stat-value">{{ value }}</div>
   </div>
 </template>
 
@@ -15,7 +15,7 @@ defineProps({
   icon: { type: Object, required: true },
   value: { type: [Number, String], default: 0 },
   label: { type: String, default: '' },
-  color: { type: String, default: '#409eff' }
+  color: { type: String, default: '' }
 })
 </script>
 
@@ -23,45 +23,49 @@ defineProps({
 @use '@/assets/styles/variables.scss' as *;
 
 .stat-card {
-  display: flex;
-  align-items: center;
   padding: 20px;
-  background: #fff;
+  background: $bg-card;
+  border: 1px solid $border-color;
   border-radius: $radius-lg;
-  border-left: 4px solid;
-  box-shadow: $shadow-card;
-  transition: $transition-base;
+  box-shadow: $shadow-sm;
+  transition: border-color $transition-fast;
 
   &:hover {
-    box-shadow: $shadow-lg;
-    transform: translateY(-2px);
+    border-color: $border-dark;
   }
 }
 
-.stat-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: $radius-lg;
+.stat-head {
   display: flex;
   align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.stat-icon {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  color: #fff;
-  margin-right: $spacing-md;
-}
-
-.stat-content {
-  flex: 1;
-}
-
-.stat-value {
-  font-size: $font-size-3xl;
-  font-weight: $font-weight-bold;
-  color: $text-primary;
+  border: 1px solid $border-color;
+  border-radius: $radius-xs;
+  background: $bg-secondary;
+  color: $primary-dark;
+  font-size: 16px;
 }
 
 .stat-label {
-  font-size: $font-size-sm;
+  font-size: 13px;
   color: $text-secondary;
-  margin-top: $spacing-xs;
+}
+
+.stat-value {
+  font-family: $font-display;
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: $text-primary;
+  font-variant-numeric: tabular-nums;
 }
 </style>

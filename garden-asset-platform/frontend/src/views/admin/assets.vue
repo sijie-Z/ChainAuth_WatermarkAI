@@ -42,7 +42,7 @@
       <!-- 表格 -->
       <el-skeleton :loading="loading" animated :rows="8">
         <template #template>
-          <div v-for="i in 8" :key="i" style="display: flex; gap: 16px; padding: 14px 0; border-bottom: 1px solid #ebeef5">
+          <div v-for="i in 8" :key="i" style="display: flex; gap: 16px; padding: 14px 0; border-bottom: 1px solid #e8ede9">
             <el-skeleton-item variant="text" style="width: 160px" />
             <el-skeleton-item variant="text" style="flex: 1" />
             <el-skeleton-item variant="text" style="width: 60px" />

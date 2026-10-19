@@ -43,8 +43,8 @@
               <path d="M16 8L8 13v6l8 5 8-5v-6l-8-5z" fill="white" fill-opacity="0.3"/>
               <defs>
                 <linearGradient id="certLogoGrad" x1="4" y1="2" x2="28" y2="30">
-                  <stop stop-color="#10b981"/>
-                  <stop offset="1" stop-color="#059669"/>
+                  <stop stop-color="#2f6b5a"/>
+                  <stop offset="1" stop-color="#1c5145"/>
                 </linearGradient>
               </defs>
             </svg>
@@ -292,9 +292,10 @@ onMounted(() => {
 .certificate-body {
   max-width: 860px;
   margin: 0 auto;
-  background: white;
-  border-radius: $radius-xl;
-  box-shadow: $shadow-lg;
+  background: $bg-card;
+  border: 1px solid $border-color;
+  border-radius: $radius-md;
+  box-shadow: $shadow-md;
   padding: 48px 56px;
   position: relative;
   overflow: hidden;
@@ -303,8 +304,8 @@ onMounted(() => {
 .cert-bg-pattern {
   position: absolute;
   inset: 0;
-  background-image: radial-gradient(circle at 20% 20%, rgba(16, 185, 129, 0.03) 0%, transparent 50%),
-                    radial-gradient(circle at 80% 80%, rgba(16, 185, 129, 0.03) 0%, transparent 50%);
+  background-image: radial-gradient(circle at 20% 20%, rgba(47, 107, 90, 0.04) 0%, transparent 50%),
+                    radial-gradient(circle at 80% 80%, rgba(47, 107, 90, 0.04) 0%, transparent 50%);
   pointer-events: none;
 }
 
@@ -324,19 +325,19 @@ onMounted(() => {
 }
 
 .cert-title {
-  font-size: 28px;
-  font-weight: $font-weight-bold;
+  font-family: $font-display;
+  font-size: 30px;
+  font-weight: 600;
   color: $text-primary;
   margin: 0 0 4px;
-  letter-spacing: 2px;
+  letter-spacing: 0.12em;
 }
 
 .cert-subtitle {
   font-size: $font-size-xs;
   color: $text-placeholder;
   margin: 0 0 12px;
-  text-transform: uppercase;
-  letter-spacing: 4px;
+  letter-spacing: 0.2em;
 }
 
 .cert-id {
@@ -363,7 +364,7 @@ onMounted(() => {
   .divider-icon {
     display: inline-flex;
     padding: 0 16px;
-    background: white;
+    background: $bg-card;
     position: relative;
     color: $primary-color;
   }
@@ -374,12 +375,13 @@ onMounted(() => {
 }
 
 .section-title {
+  font-family: $font-display;
   font-size: $font-size-lg;
-  font-weight: $font-weight-semibold;
+  font-weight: 600;
   color: $text-primary;
   margin-bottom: 16px;
   padding-left: 12px;
-  border-left: 3px solid $primary-color;
+  border-left: 2px solid $accent-color;
 }
 
 .info-grid {
