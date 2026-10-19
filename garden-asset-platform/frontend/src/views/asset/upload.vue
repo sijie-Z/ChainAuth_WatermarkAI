@@ -84,7 +84,9 @@
 
         <el-form-item label="水印与存证">
           <div class="option-row">
-            <el-checkbox v-model="form.auto_watermark">上传后自动嵌入水印</el-checkbox>
+            <el-checkbox v-model="form.auto_watermark" :disabled="!canWatermark">
+              上传后自动嵌入水印<template v-if="!canWatermark">（仅影像/矢量）</template>
+            </el-checkbox>
             <el-checkbox v-model="form.auto_chain" :disabled="!form.auto_watermark">
               水印嵌入后自动上链存证
             </el-checkbox>
@@ -111,7 +113,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { UploadFilled, ArrowLeft } from '@element-plus/icons-vue'
@@ -144,6 +146,13 @@ const rules = {
   asset_type: [{ required: true, message: '请选择资产类型', trigger: 'change' }],
   garden_id: [{ required: true, message: '请选择所属园林', trigger: 'change' }]
 }
+
+// 当前水印算法只覆盖影像与矢量数据
+const canWatermark = computed(() => ['image', 'vector'].includes(form.value.asset_type))
+
+watch(canWatermark, supported => {
+  if (!supported) form.value.auto_watermark = false
+})
 
 async function loadGardens() {
   try {

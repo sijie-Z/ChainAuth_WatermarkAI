@@ -53,7 +53,7 @@ class PublicStatsResource(Resource):
 ALLOWED_EXTENSIONS = {
     'image': ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'webp'],
     'model': ['obj', 'fbx', 'gltf', 'glb', 'stl'],
-    'vector': ['shp', 'geojson', 'kml', 'kmz'],
+    'vector': ['shp', 'geojson', 'kml', 'kmz', 'zip'],
     'document': ['pdf', 'doc', 'docx', 'dwg', 'dxf'],
     'video': ['mp4', 'mov', 'avi', 'mkv']
 }
@@ -89,6 +89,7 @@ MAGIC_BYTES = {
     'geojson': [b'{'],
     'kml': [b'<?xml', b'<kml'],
     'kmz': [b'PK\x03\x04'],
+    'zip': [b'PK\x03\x04'],
     # 3D模型
     'obj': [b'# ', b'v ', b'f '],
     'stl': [b'solid'],

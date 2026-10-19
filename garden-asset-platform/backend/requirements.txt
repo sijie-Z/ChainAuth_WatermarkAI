@@ -41,3 +41,6 @@ opencv-python-headless==4.8.1.78
 scipy==1.11.4
 geopandas==0.14.1
 shapely==2.0.6
+# geopandas 0.14 与 fiona>=1.10 / pandas>=3 不兼容，显式锁定
+fiona==1.9.6
+pandas==2.2.3

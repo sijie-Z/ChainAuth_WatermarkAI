@@ -217,6 +217,10 @@ def extract_vector_watermark(watermarked_shpfile_path, vr, output_folder):
 
     logger.info(f"坐标均值: {coor_mean}, 验证值: {vr}")
 
+    # 溯源场景没有 vr，按未缩放处理（ratio=1），仍可恢复水印图像
+    if vr is None:
+        vr = coor_mean
+
     ratio = np.mean(vr / coor_mean)
     logger.info(f"缩放比例: {ratio}")
 

@@ -49,7 +49,8 @@ class WatermarkEmbedResource(Resource):
                 }
             }, 200
         else:
-            return {'code': 500, 'message': result['message']}, 500
+            status = 400 if '不支持' in result['message'] else 500
+            return {'code': status, 'message': result['message']}, status
 
 
 class WatermarkExtractResource(Resource):
@@ -84,7 +85,8 @@ class WatermarkExtractResource(Resource):
                 }
             }, 200
         else:
-            return {'code': 500, 'message': result['message']}, 500
+            status = 400 if '不支持' in result['message'] else 500
+            return {'code': status, 'message': result['message']}, status
 
 
 class WatermarkVerifyResource(Resource):

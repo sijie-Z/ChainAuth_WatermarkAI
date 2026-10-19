@@ -87,6 +87,9 @@ yarn-error.log*
 # 构建输出
 frontend/dist/
 backend/dist/
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
 
 # OS
 .DS_Store

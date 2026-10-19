@@ -66,6 +66,34 @@ class WatermarkService:
         return WatermarkService._ensure_default_watermark(default_path)
 
     @staticmethod
+    def resolve_vector_path(path):
+        """矢量资产上传的是 zip 时，安全解压并返回其中的 .shp 路径"""
+        if not path or not path.lower().endswith('.zip'):
+            return path
+
+        import zipfile
+        import tempfile
+
+        base_dir = current_app.config.get('UPLOAD_FOLDER', './uploads')
+        os.makedirs(base_dir, exist_ok=True)
+        extract_dir = tempfile.mkdtemp(prefix='vector_', dir=base_dir)
+        root_real = os.path.realpath(extract_dir)
+
+        with zipfile.ZipFile(path) as archive:
+            for member in archive.infolist():
+                target = os.path.realpath(os.path.join(extract_dir, member.filename))
+                if not target.startswith(root_real + os.sep) and target != root_real:
+                    raise ValueError('矢量压缩包包含非法路径')
+            archive.extractall(extract_dir)
+
+        for root, _, files in os.walk(extract_dir):
+            for name in files:
+                if name.lower().endswith('.shp'):
+                    return os.path.join(root, name)
+
+        raise ValueError('矢量压缩包中未找到 .shp 文件')
+
+    @staticmethod
     def embed_watermark(asset, user=None, watermark_path=None):
         """
         为资产嵌入水印
@@ -118,7 +146,7 @@ class WatermarkService:
             if asset.asset_type == 'vector':
                 # 矢量数据水印嵌入
                 result = embed_vector_watermark(
-                    shpfile_path=asset.storage_path,
+                    shpfile_path=WatermarkService.resolve_vector_path(asset.storage_path),
                     watermark_path=watermark_path,
                     output_folder=output_folder,
                     garden_code=garden_code,
@@ -236,7 +264,7 @@ class WatermarkService:
                 vr = ast.literal_eval(asset.vr_value) if asset.vr_value else None
 
                 result = extract_vector_watermark(
-                    watermarked_shpfile_path=asset.watermarked_path,
+                    watermarked_shpfile_path=WatermarkService.resolve_vector_path(asset.watermarked_path),
                     vr=vr,
                     output_folder=output_folder
                 )
@@ -348,7 +376,7 @@ class WatermarkService:
             if ext in ['.shp', '.zip']:
                 # 矢量数据水印提取
                 result = extract_vector_watermark(
-                    watermarked_shpfile_path=file_path,
+                    watermarked_shpfile_path=WatermarkService.resolve_vector_path(file_path),
                     vr=None,  # 溯源时未知vr值
                     output_folder=output_folder
                 )

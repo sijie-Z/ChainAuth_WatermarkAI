@@ -60,7 +60,7 @@ def coor_process(coor, argument, dis):
     index = random.randint(0, len(W) - 1)
     w = int(''.join(map(str, W[index])), 2)
 
-    coor = np.array([Decimal(str(x)) for x in np.nditer(coor)])
+    coor = np.array([Decimal(str(x)) for x in np.nditer(coor, flags=['refs_ok'])])
     coor_l = coor // R * R
     embed_coor = watermark_embed(coor, coor_l, w, n, R)
     return embed_coor
@@ -224,7 +224,15 @@ def embed_vector_watermark(shpfile_path, watermark_path, output_folder, garden_c
     # 数据读取
     original_shpfile = gpd.read_file(shpfile_path)
     coor_nested, feature_type = get_coor_nested(original_shpfile)
-    watermark = np.array(Image.open(watermark_path)).astype(int)
+
+    # 矢量算法按 45x45 的二维水印设计（提取端 side_length 也是 45）
+    vector_side = 45
+    watermark_image = Image.open(watermark_path).convert('L').resize(
+        (vector_side, vector_side), Image.LANCZOS
+    )
+    watermark = np.array(watermark_image).astype(int)
+    # 矢量算法按比特分组（每组 4 位），必须先二值化
+    watermark = (watermark > 127).astype(int)
 
     # 水印预处理
     replace_matrix = np.full((8, 8), -1)

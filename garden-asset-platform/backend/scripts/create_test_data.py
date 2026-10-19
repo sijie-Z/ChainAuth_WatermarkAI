@@ -55,9 +55,12 @@ def create_test_assets():
                 description=data['desc'],
                 asset_type=data['type'],
                 garden_id=garden.id,
+                creator_id=admin.id,
                 uploader_id=admin.id,
+                owner_id=admin.id,
                 file_format='jpg' if data['type'] == 'image' else ('shp' if data['type'] == 'vector' else 'pdf'),
                 file_size=1024*1024,
+                status='published',
                 watermark_status='pending',
                 chain_status='pending'
             )

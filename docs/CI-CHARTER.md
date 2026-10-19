@@ -25,6 +25,7 @@
 | `codeql.yml` | CodeQL（python + javascript-typescript） | push / PR / 每周 | ✅ | 30 min |
 | `workflow-lint.yml` | actionlint | 工作流文件变化 | ✅ | 10 min |
 | `docker-build.yml` | 后端/前端镜像构建 | Docker 相关文件变化 | ✅ | 25 min |
+| `e2e.yml` | Playwright 前端点击流 + 真实后端 | `garden-asset-platform/**` 变化 | ✅（暂未加入 Ruleset 必需检查） | 25 min |
 | `labeler.yml` | 路径标签 | PR | ❌（辅助） | 5 min |
 | `welcome.yml` | 首次贡献欢迎 | Issue/PR | ❌（辅助） | 5 min |
 | `dependabot-auto-merge.yml` | 依赖 PR 自动合并 | Dependabot PR | ❌（辅助） | 10 min |
@@ -67,7 +68,7 @@
 
 ## 6. 覆盖率策略
 
-- 当前基线：**45%**（70 个后端用例 + 21 个前端用例，2026-10-20 实测）。
+- 当前基线：**45%**（72 个后端用例 + 21 个前端用例 + 5 个 Playwright 用例，2026-10-20 实测）。
 - CI 使用棘轮下限 `--cov-fail-under=43`（留 2 个点余量防环境波动），只拦“继续下滑”，不追高分；下限写在 CI 命令里，不写进全局 pytest 配置。
 - 覆盖率报告以 artifact 形式保存（7 天），不依赖外部 Codecov 账号。
 - 前端已加入 Vitest 单元测试（工具函数与共享组件）；覆盖率暂不作为门禁，后续按棘轮方式引入。

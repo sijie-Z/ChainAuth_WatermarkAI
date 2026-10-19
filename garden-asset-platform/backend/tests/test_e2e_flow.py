@@ -25,6 +25,83 @@ def make_png(size=64, seed=0):
     return buffer
 
 
+def test_vector_watermark_roundtrip(tmp_path):
+    import geopandas as gpd
+    from shapely.geometry import Polygon
+    from algorithm.vector.embed import embed_vector_watermark
+    from algorithm.vector.extract import extract_vector_watermark
+
+    source_path = tmp_path / 'gardens.shp'
+    polygons = []
+    for i in range(12):
+        x = 120.60 + i * 0.002
+        y = 31.30 + i * 0.001
+        polygons.append(Polygon([
+            (x, y), (x + 0.001, y), (x + 0.001, y + 0.001), (x, y + 0.001)
+        ]))
+    gpd.GeoDataFrame(
+        {'gid': list(range(1, 13))}, geometry=polygons, crs='EPSG:4326'
+    ).to_file(source_path)
+
+    embed_result = embed_vector_watermark(
+        shpfile_path=str(source_path),
+        watermark_path='data/watermark/default.png',
+        output_folder=str(tmp_path / 'embedded'),
+        garden_code='TST',
+        asset_type_code='VEC',
+    )
+    assert embed_result['watermark_id'].startswith('TST-VEC-')
+    assert (tmp_path / 'embedded' / f"{embed_result['watermark_id']}.zip").exists()
+
+    with_vr = extract_vector_watermark(
+        watermarked_shpfile_path=embed_result['watermarked_path'],
+        vr=embed_result['vr'],
+        output_folder=str(tmp_path / 'extract'),
+    )
+    assert (tmp_path / 'extract' / 'watermark').exists()
+    assert with_vr['watermark_path']
+
+    # 溯源场景没有 vr，也不能抛异常
+    without_vr = extract_vector_watermark(
+        watermarked_shpfile_path=embed_result['watermarked_path'],
+        vr=None,
+        output_folder=str(tmp_path / 'extract_no_vr'),
+    )
+    assert without_vr['watermark_path']
+
+
+def test_document_asset_flow(client, auth_header, admin_header):
+    pdf = b'%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n%%EOF\n'
+    response = client.post(
+        '/api/assets/upload',
+        headers=auth_header,
+        data={
+            'file': (io.BytesIO(pdf), 'document.pdf'),
+            'title': '文档资产回归',
+            'asset_type': 'document',
+        },
+        content_type='multipart/form-data',
+    )
+    assert response.status_code == 200
+    asset_id = response.get_json()['data']['asset_id']
+
+    assert client.post(f'/api/assets/{asset_id}/publish', headers=auth_header).status_code == 200
+    assert client.post(
+        f'/api/assets/{asset_id}/approve', headers=admin_header, json={'action': 'approve'}
+    ).status_code == 200
+
+    download = client.get(f'/api/assets/{asset_id}/download', headers=admin_header)
+    assert download.status_code == 200
+    assert len(download.data) > 0
+
+    # 文档暂不支持水印，应返回 400 而不是 500
+    watermark = client.post(
+        '/api/watermark/embed', headers=auth_header, json={'asset_id': asset_id}
+    )
+    assert watermark.status_code == 400
+    assert '不支持' in watermark.get_json()['message']
+
+
 def test_upload_sets_uploader_id(client, auth_header):
     response = client.post(
         '/api/assets/upload',
