@@ -7,7 +7,8 @@
 - **GitHub Actions 体系**：后端 pytest + ruff + 覆盖率棘轮、前端 ESLint + Vitest + 构建、CodeQL、Dependency Review、gitleaks、OpenSSF Scorecard、Docker 构建、actionlint
 - **机器人**：Dependabot（目标 `develop`，patch/minor 自动合并）、CodeRabbit、labeler、stale、welcome、Release Drafter、`main → develop` 自动回合并
 - **视觉体系 v2「青绿山水 · 档案册」**：黛青/宣纸/墨/印章朱砂令牌，宋体标题 + 等宽数据字体；重做首页、登录、注册、后台壳、仪表盘、资产目录、证书、溯源与错误页
-- **前端测试基座**：Vitest + @vue/test-utils + jsdom，覆盖工具函数与共享状态组件，并接入 CI
+- **前端测试基座**：Vitest + @vue/test-utils + jsdom，覆盖工具函数、状态组件与用户 store，并接入 CI
+- **后端安全回归**：新增限流 429、安全响应头、健康检查用例（后端共 67 个用例）
 - **工程文档**：`docs/GIT-FLOW.md`、`docs/CI-CHARTER.md`、`docs/UI-DESIGN.md`、`docs/REFERENCE-NOTES.md`
 
 ### Fixed
