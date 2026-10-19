@@ -1,5 +1,30 @@
 # CHANGELOG
 
+## [1.5.0] - 2026-10-19
+
+### Added
+- **严格 Git Flow**：`main` / `develop` / `feature/*` / `release/*` / `hotfix/*`，配套本地钩子、分支校验工作流与 `scripts/gitflow.sh`
+- **GitHub Actions 体系**：后端 pytest + ruff + 覆盖率棘轮、前端 ESLint + Vitest + 构建、CodeQL、Dependency Review、gitleaks、OpenSSF Scorecard、Docker 构建、actionlint
+- **机器人**：Dependabot（目标 `develop`，patch/minor 自动合并）、CodeRabbit、labeler、stale、welcome、Release Drafter、`main → develop` 自动回合并
+- **视觉体系 v2「青绿山水 · 档案册」**：黛青/宣纸/墨/印章朱砂令牌，宋体标题 + 等宽数据字体；重做首页、登录、注册、后台壳、仪表盘、资产目录、证书、溯源与错误页
+- **前端测试基座**：Vitest + @vue/test-utils + jsdom，覆盖工具函数与共享状态组件，并接入 CI
+- **工程文档**：`docs/GIT-FLOW.md`、`docs/CI-CHARTER.md`、`docs/UI-DESIGN.md`、`docs/REFERENCE-NOTES.md`
+
+### Fixed
+- 限流器在 Flask-RESTful 资源中返回元组导致 500（应为 429）
+- 测试环境缺少 JWT 密钥导致登录用例 500；测试间共享限流状态造成连锁失败
+- `OperationLog` 使用 BIGINT 主键在 SQLite 下不自增
+- 区块链历史接口引用不存在的 `Certificate.confirmed_at`
+- 前端 ESLint 配置语法错误与 `ecmaVersion` 拼写错误
+- 后端缺少 pytest/geopandas/shapely，生产镜像启动会失败；后端 Dockerfile 缺少健康检查所需的 curl
+- 仪表盘图表初始化时机错误（loading 结束后容器才渲染）
+- API 错误提示重复刷屏，5xx/网络错误改为友好提示并去重
+
+### Changed
+- 运行时升级：Node.js 22、Python 3.11、当前 GitHub Actions 主版本（node24 运行时）
+- 移除 THREE.js 粒子背景、emoji 图标、玻璃拟态与渐变按钮；Element Plus 改为通过 CSS 变量主题化
+- 参考项目目录移出仓库并从 Git 历史剔除，仓库体积从约 813 MB 降至约 0.5 MB
+
 ## [1.4.0] - 2026-05-08
 
 ### Security

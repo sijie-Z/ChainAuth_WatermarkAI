@@ -1,15 +1,22 @@
 <template>
-  <div class="upload-container">
-    <el-card>
-      <template #header>
-        <div class="card-header">
-          <span>上传资产</span>
-          <el-button text @click="goBack">返回</el-button>
-        </div>
-      </template>
+  <div class="upload-page">
+    <header class="page-head">
+      <router-link to="/assets" class="back-link">
+        <el-icon><ArrowLeft /></el-icon>
+        返回资产档案
+      </router-link>
+      <h1 class="page-title">上传资产</h1>
+      <p class="page-subtitle">文件入库后可按需自动嵌入水印并上链存证。</p>
+    </header>
 
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
-        <!-- 文件上传 -->
+    <section class="form-card">
+      <el-form
+        ref="formRef"
+        :model="form"
+        :rules="rules"
+        label-position="top"
+        class="upload-form"
+      >
         <el-form-item label="资产文件" prop="file">
           <el-upload
             ref="uploadRef"
@@ -20,45 +27,51 @@
             :on-exceed="handleExceed"
             :before-remove="beforeRemove"
             accept="image/*,.shp,.zip,.pdf,.mp4"
+            class="asset-uploader"
           >
-            <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+            <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
             <div class="el-upload__text">
-              将文件拖到此处，或 <em>点击上传</em>
+              将文件拖到此处，或 <em>点击选择文件</em>
             </div>
             <template #tip>
               <div class="el-upload__tip">
-                支持影像(.jpg/.png)、矢量(.shp/.zip)、文献(.pdf)、视频(.mp4)
+                支持影像（.jpg/.png）、矢量（.shp/.zip）、文献（.pdf）、视频（.mp4）
               </div>
             </template>
           </el-upload>
         </el-form-item>
 
-        <!-- 基本信息 -->
         <el-form-item label="标题" prop="title">
           <el-input v-model="form.title" placeholder="请输入资产标题" maxlength="100" show-word-limit />
         </el-form-item>
 
-        <el-form-item label="资产类型" prop="asset_type">
-          <el-select v-model="form.asset_type" placeholder="请选择类型">
-            <el-option label="影像" value="image" />
-            <el-option label="三维模型" value="model" />
-            <el-option label="矢量数据" value="vector" />
-            <el-option label="文献" value="document" />
-            <el-option label="视频" value="video" />
-          </el-select>
-        </el-form-item>
+        <div class="form-grid">
+          <el-form-item label="资产类型" prop="asset_type">
+            <el-select v-model="form.asset_type" placeholder="请选择类型">
+              <el-option label="影像" value="image" />
+              <el-option label="三维模型" value="model" />
+              <el-option label="矢量数据" value="vector" />
+              <el-option label="文献" value="document" />
+              <el-option label="视频" value="video" />
+            </el-select>
+          </el-form-item>
 
-        <el-form-item label="所属园林" prop="garden_id">
-          <el-select v-model="form.garden_id" placeholder="请选择园林">
-            <el-option v-for="g in gardens" :key="g.id" :label="g.name" :value="g.id" />
-          </el-select>
-        </el-form-item>
+          <el-form-item label="所属园林" prop="garden_id">
+            <el-select v-model="form.garden_id" placeholder="请选择园林">
+              <el-option v-for="g in gardens" :key="g.id" :label="g.name" :value="g.id" />
+            </el-select>
+          </el-form-item>
+        </div>
 
         <el-form-item label="描述">
-          <el-input v-model="form.description" type="textarea" :rows="4" placeholder="请输入资产描述" />
+          <el-input
+            v-model="form.description"
+            type="textarea"
+            :rows="4"
+            placeholder="记录资产的来源、拍摄/制作信息或权属说明"
+          />
         </el-form-item>
 
-        <!-- 标签 -->
         <el-form-item label="标签">
           <el-select v-model="form.tags" multiple filterable allow-create placeholder="输入标签">
             <el-option label="古典建筑" value="古典建筑" />
@@ -69,28 +82,31 @@
           </el-select>
         </el-form-item>
 
-        <!-- 水印选项 -->
-        <el-form-item label="水印设置">
-          <el-checkbox v-model="form.auto_watermark">上传后自动嵌入水印</el-checkbox>
-          <el-checkbox v-model="form.auto_chain" :disabled="!form.auto_watermark">水印嵌入后自动上链存证</el-checkbox>
+        <el-form-item label="水印与存证">
+          <div class="option-row">
+            <el-checkbox v-model="form.auto_watermark">上传后自动嵌入水印</el-checkbox>
+            <el-checkbox v-model="form.auto_chain" :disabled="!form.auto_watermark">
+              水印嵌入后自动上链存证
+            </el-checkbox>
+          </div>
         </el-form-item>
 
-        <!-- 提交按钮 -->
         <el-form-item>
-          <el-button type="primary" :loading="uploading" @click="submitUpload">
-            {{ uploading ? '上传中...' : '开始上传' }}
-          </el-button>
-          <el-button @click="resetForm">重置</el-button>
+          <div class="form-actions">
+            <el-button type="primary" :loading="uploading" @click="submitUpload">
+              {{ uploading ? '上传中…' : '开始上传' }}
+            </el-button>
+            <el-button :disabled="uploading" @click="resetForm">重置</el-button>
+          </div>
         </el-form-item>
       </el-form>
-    </el-card>
+    </section>
 
-    <!-- 上传进度 -->
-    <el-card v-if="uploadProgress > 0" class="progress-card">
-      <template #header>上传进度</template>
+    <section v-if="uploadProgress > 0" class="progress-card">
+      <h2 class="progress-title">上传进度</h2>
       <el-progress :percentage="uploadProgress" :status="uploadStatus" />
-      <div class="progress-message">{{ uploadMessage }}</div>
-    </el-card>
+      <p class="progress-message" aria-live="polite">{{ uploadMessage }}</p>
+    </section>
   </div>
 </template>
 
@@ -98,7 +114,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { UploadFilled } from '@element-plus/icons-vue'
+import { UploadFilled, ArrowLeft } from '@element-plus/icons-vue'
 import { assetApi, gardenApi, watermarkApi, blockchainApi } from '@/api/modules'
 
 const router = useRouter()
@@ -169,7 +185,7 @@ async function submitUpload() {
 
   uploading.value = true
   uploadProgress.value = 10
-  uploadMessage.value = '正在上传文件...'
+  uploadMessage.value = '正在上传文件…'
   uploadStatus.value = ''
 
   try {
@@ -182,7 +198,7 @@ async function submitUpload() {
     formData.append('tags', JSON.stringify(form.value.tags))
 
     uploadProgress.value = 30
-    uploadMessage.value = '正在创建资产记录...'
+    uploadMessage.value = '正在创建资产记录…'
 
     const response = await assetApi.create(formData)
     if (response.data.code !== 200) {
@@ -194,7 +210,7 @@ async function submitUpload() {
     uploadMessage.value = '资产创建成功'
 
     if (form.value.auto_watermark) {
-      uploadMessage.value = '正在嵌入水印...'
+      uploadMessage.value = '正在嵌入水印…'
       uploadProgress.value = 60
       await watermarkApi.embed(assetId)
       uploadProgress.value = 75
@@ -202,7 +218,7 @@ async function submitUpload() {
     }
 
     if (form.value.auto_chain && form.value.auto_watermark) {
-      uploadMessage.value = '正在上链存证...'
+      uploadMessage.value = '正在上链存证…'
       uploadProgress.value = 85
       await blockchainApi.register(assetId)
       uploadProgress.value = 95
@@ -211,17 +227,16 @@ async function submitUpload() {
 
     uploadProgress.value = 100
     uploadStatus.value = 'success'
-    uploadMessage.value = '上传完成！'
+    uploadMessage.value = '上传完成'
 
     ElMessage.success('资产上传成功')
 
     setTimeout(() => {
       router.push(`/assets/${assetId}`)
     }, 1500)
-
   } catch (error) {
     uploadStatus.value = 'exception'
-    uploadMessage.value = '上传失败: ' + (error.message || '未知错误')
+    uploadMessage.value = '上传失败：' + (error.message || '未知错误')
     ElMessage.error('上传失败')
   } finally {
     uploading.value = false
@@ -236,10 +251,6 @@ function resetForm() {
   uploadMessage.value = ''
 }
 
-function goBack() {
-  router.push('/assets')
-}
-
 onMounted(() => {
   loadGardens()
 })
@@ -248,31 +259,141 @@ onMounted(() => {
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
 
-.upload-container {
-  padding: $spacing-lg;
+.upload-page {
   min-height: 100vh;
   background: $bg-primary;
+  padding: 28px 32px 48px;
 }
 
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.page-head {
+  max-width: 880px;
+  margin: 0 auto 20px;
+
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: $text-secondary;
+    margin-bottom: 14px;
+
+    &:hover { color: $primary-dark; }
+  }
+
+  .page-title {
+    font-family: $font-display;
+    font-size: 26px;
+    font-weight: 600;
+    color: $text-primary;
+    margin-bottom: 6px;
+  }
+
+  .page-subtitle {
+    font-size: 14px;
+    color: $text-secondary;
+  }
+}
+
+.form-card,
+.progress-card {
+  max-width: 880px;
+  margin: 0 auto;
+  background: $bg-card;
+  border: 1px solid $border-color;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-sm;
+  padding: 28px;
 }
 
 .progress-card {
-  margin-top: $spacing-lg;
+  margin-top: 16px;
+}
+
+.upload-form {
+  :deep(.el-form-item__label) {
+    font-size: 13px;
+    color: $text-secondary;
+    padding-bottom: 6px;
+  }
+
+  :deep(.el-form-item) {
+    margin-bottom: 20px;
+  }
+
+  :deep(.el-select) {
+    width: 100%;
+  }
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.asset-uploader {
+  width: 100%;
+
+  :deep(.el-upload) {
+    width: 100%;
+  }
+
+  :deep(.el-upload-dragger) {
+    width: 100%;
+    padding: 32px 20px;
+    background: $bg-secondary;
+    border: 1px dashed $border-color;
+    border-radius: $radius-md;
+    transition: border-color $transition-fast, background $transition-fast;
+
+    &:hover {
+      border-color: $primary-color;
+      background: $bg-hover;
+    }
+  }
+
+  :deep(.el-upload__tip) {
+    font-size: 12px;
+    color: $text-placeholder;
+  }
+
+  .el-icon--upload {
+    font-size: 40px;
+    color: $primary-light;
+    margin-bottom: 8px;
+  }
+}
+
+.option-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.progress-title {
+  font-family: $font-display;
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 14px;
 }
 
 .progress-message {
-  margin-top: $spacing-sm;
+  margin-top: 10px;
+  font-size: 13px;
   color: $text-secondary;
-  font-size: $font-size-sm;
 }
 
-@media (max-width: $breakpoint-sm) {
-  .upload-container {
-    padding: $spacing-md;
-  }
+@media (max-width: 768px) {
+  .upload-page { padding: 18px 16px 40px; }
+  .form-card,
+  .progress-card { padding: 20px 16px; }
+  .form-grid { grid-template-columns: 1fr; gap: 0; }
+  .form-actions { width: 100%; }
+  .form-actions .el-button { flex: 1; }
 }
 </style>

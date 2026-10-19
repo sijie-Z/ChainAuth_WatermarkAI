@@ -72,6 +72,7 @@ npm run lint:check && npm run build
 | 机器人 | Dependabot 自动合并（patch/minor）、CodeRabbit AI 审查、labeler、stale、welcome、Release Drafter |
 | 发布 | 发布分支 → `main` → 标签 `vX.Y.Z` → GitHub Release + GHCR 镜像 |
 | 自动回合并 | `main` 更新后自动创建 `main → develop` PR |
+| 视觉体系 | 青绿山水 · 档案册（黛青/宣纸/宋体/朱砂），详见 [docs/UI-DESIGN.md](docs/UI-DESIGN.md) |
 
 - 贡献流程：[CONTRIBUTING.md](CONTRIBUTING.md)
 - Git Flow 详解：[docs/GIT-FLOW.md](docs/GIT-FLOW.md)

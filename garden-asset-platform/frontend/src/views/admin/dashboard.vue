@@ -231,7 +231,6 @@ import { ref, reactive, computed, onMounted, onUnmounted, nextTick, shallowRef }
 import { useUserStore } from '@/stores/user'
 import { useRouter } from 'vue-router'
 import { assetApi, licenseApi, blockchainApi } from '@/api/modules'
-import { ElMessage } from 'element-plus'
 import {
   Picture, Stamp, Link, Document, Upload, Clock,
   ArrowUp, ArrowDown, User, Setting, Files, Grid,
@@ -383,7 +382,7 @@ async function loadDashboardData() {
     // 运行动画和图表
     animateNumbers()
   } catch (e) {
-    ElMessage.warning('部分数据加载失败，使用默认数据')
+    console.error('加载仪表盘数据失败:', e)
   } finally {
     loading.value = false
     // 图表容器在 loading 结束后才渲染，必须等 DOM 更新后再初始化
@@ -480,16 +479,30 @@ function initCharts() {
       { value: 0, name: '暂无数据', itemStyle: { color: '#d8e1da' } }
     ]
     const option = {
-      tooltip: { trigger: 'item', backgroundColor: 'rgba(252,253,251,0.96)', borderColor: '#eee', borderWidth: 1, textStyle: { color: '#17201c' } },
-      legend: { bottom: '5%', left: 'center', textStyle: { color: '#5b675f' } },
+      tooltip: {
+        trigger: 'item',
+        backgroundColor: '#fcfdfb',
+        borderColor: '#d8e1da',
+        borderWidth: 1,
+        textStyle: { color: '#17201c', fontSize: 13 },
+        extraCssText: 'box-shadow:0 4px 12px rgba(18,28,23,.08);border-radius:6px;'
+      },
+      legend: {
+        bottom: 0,
+        left: 'center',
+        icon: 'circle',
+        itemWidth: 8,
+        itemHeight: 8,
+        textStyle: { color: '#5b675f', fontSize: 12 }
+      },
       series: [{
         name: '资产类型',
         type: 'pie',
-        radius: ['45%', '70%'],
+        radius: ['48%', '70%'],
         avoidLabelOverlap: false,
-        itemStyle: { borderRadius: 10, borderColor: '#fcfdfb', borderWidth: 2 },
+        itemStyle: { borderRadius: 2, borderColor: '#fcfdfb', borderWidth: 2 },
         label: { show: false },
-        emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' } },
+        emphasis: { label: { show: true, fontSize: 13, fontWeight: 600, color: '#17201c' } },
         labelLine: { show: false },
         data: pieData.length > 0 ? pieData : defaultPieData
       }]
@@ -516,34 +529,44 @@ function initCharts() {
     }
 
     const option = {
-      tooltip: { trigger: 'axis', backgroundColor: 'rgba(252,253,251,0.96)', borderColor: '#eee', borderWidth: 1, textStyle: { color: '#17201c' } },
-      grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
+      tooltip: {
+        trigger: 'axis',
+        backgroundColor: '#fcfdfb',
+        borderColor: '#d8e1da',
+        borderWidth: 1,
+        padding: [8, 10],
+        textStyle: { color: '#17201c', fontSize: 13 },
+        axisPointer: { type: 'line', lineStyle: { color: '#d8e1da' } },
+        extraCssText: 'box-shadow:0 4px 12px rgba(18,28,23,.08);border-radius:6px;'
+      },
+      grid: { left: 0, right: 8, bottom: 0, top: 18, containLabel: true },
       xAxis: {
         type: 'category',
         boundaryGap: false,
         data: dates,
-        axisLine: { lineStyle: { color: '#d8e1da' } },
-        axisLabel: { color: '#5b675f' }
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { color: '#5b675f', fontSize: 12, margin: 12 }
       },
       yAxis: {
         type: 'value',
         axisLine: { show: false },
         axisTick: { show: false },
-        splitLine: { lineStyle: { color: '#e8ede9', type: 'dashed' } },
-        axisLabel: { color: '#5b675f' }
+        splitLine: { lineStyle: { color: '#e8ede9', type: 'solid', width: 1 } },
+        axisLabel: { color: '#5b675f', fontSize: 12 }
       },
       series: [{
         name: '水印嵌入',
         type: 'line',
-        smooth: true,
+        smooth: 0.3,
         symbol: 'circle',
-        symbolSize: 8,
-        lineStyle: { width: 3, color: '#2f6b5a' },
-        itemStyle: { color: '#2f6b5a', borderWidth: 2 },
+        symbolSize: 6,
+        lineStyle: { width: 2, color: '#2f6b5a' },
+        itemStyle: { color: '#2f6b5a', borderWidth: 2, borderColor: '#fcfdfb' },
         areaStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(47, 107, 90, 0.25)' },
-            { offset: 1, color: 'rgba(47, 107, 90, 0.03)' }
+            { offset: 0, color: 'rgba(47, 107, 90, 0.2)' },
+            { offset: 1, color: 'rgba(47, 107, 90, 0.02)' }
           ])
         },
         data: counts
@@ -823,7 +846,7 @@ onUnmounted(() => {
 }
 
 .chart-container {
-  height: 280px;
+  height: 320px;
 }
 
 // 快捷入口

@@ -2,7 +2,8 @@ import api from './index'
 
 // 公开API
 export const publicApi = {
-  getStats: () => api.get('/stats')
+  // 首页/目录页会自行降级展示，静默失败避免刷屏
+  getStats: () => api.get('/stats', { silent: true })
 }
 
 // 认证相关API
@@ -27,7 +28,7 @@ export const assetApi = {
 
 // 园林相关API
 export const gardenApi = {
-  getList: () => api.get('/gardens'),
+  getList: () => api.get('/gardens', { silent: true }),
   getDetail: (id) => api.get(`/gardens/${id}`)
 }
 

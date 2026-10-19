@@ -81,6 +81,9 @@ jobs:
       - name: Lint (non-mutating)
         run: npm run lint:check
 
+      - name: Unit tests (Vitest)
+        run: npm run test:ci
+
       - name: Build
         run: npm run build
 

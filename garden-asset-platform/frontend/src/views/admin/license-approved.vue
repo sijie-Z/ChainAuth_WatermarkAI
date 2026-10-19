@@ -1,19 +1,29 @@
 <template>
   <div class="license-approved">
-    <el-card>
-      <template #header>
-        <div class="card-header">
-          <span>已审批申请</span>
-          <el-radio-group v-model="filterStatus" @change="loadLicenses">
-            <el-radio-button label="">全部</el-radio-button>
-            <el-radio-button label="approved">已通过</el-radio-button>
-            <el-radio-button label="rejected">已拒绝</el-radio-button>
-          </el-radio-group>
-        </div>
-      </template>
+    <header class="page-head">
+      <div class="page-heading">
+        <h1 class="page-title">已审批申请</h1>
+        <p class="page-subtitle">已审批授权的归档查询与合同下载</p>
+      </div>
+      <div class="page-actions">
+        <el-button type="primary" @click="loadLicenses">
+          <el-icon><Refresh /></el-icon>
+          刷新
+        </el-button>
+      </div>
+    </header>
+
+    <div class="content-card">
+      <div class="filter-bar">
+        <el-radio-group v-model="filterStatus" @change="loadLicenses">
+          <el-radio-button label="">全部</el-radio-button>
+          <el-radio-button label="approved">已通过</el-radio-button>
+          <el-radio-button label="rejected">已拒绝</el-radio-button>
+        </el-radio-group>
+      </div>
 
       <el-table :data="licenses" v-loading="loading" stripe>
-        <el-table-column prop="license_code" label="授权编码" width="180" />
+        <el-table-column prop="license_code" label="授权编码" width="180" class-name="cell-code" />
         <el-table-column prop="asset_title" label="资产标题" min-width="200" show-overflow-tooltip />
         <el-table-column prop="license_type" label="授权类型" width="100">
           <template #default="{ row }">
@@ -58,9 +68,8 @@
         layout="total, sizes, prev, pager, next"
         @size-change="loadLicenses"
         @current-change="loadLicenses"
-        style="margin-top: 20px; justify-content: center"
       />
-    </el-card>
+    </div>
 
     <!-- 详情对话框 -->
     <el-dialog v-model="detailDialog.visible" title="授权详情" width="600px">
@@ -80,7 +89,7 @@
         <el-descriptions-item label="申请用途" :span="2">{{ detailDialog.purpose }}</el-descriptions-item>
         <el-descriptions-item label="审批意见" :span="2">{{ detailDialog.approve_comment }}</el-descriptions-item>
         <el-descriptions-item label="区块链存证">
-          {{ detailDialog.tx_hash || '未上链' }}
+          <span class="hash-text">{{ detailDialog.tx_hash || '未上链' }}</span>
         </el-descriptions-item>
       </el-descriptions>
     </el-dialog>
@@ -90,6 +99,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Refresh } from '@element-plus/icons-vue'
 import { licenseApi } from '@/api/modules'
 
 const loading = ref(false)
@@ -117,7 +127,7 @@ async function loadLicenses() {
       total.value = response.data.data.total
     }
   } catch (error) {
-    ElMessage.error('加载失败')
+    console.error('加载授权记录失败:', error)
   } finally {
     loading.value = false
   }
@@ -171,14 +181,116 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@use '@/assets/styles/variables.scss' as *;
+
 .license-approved {
-  padding: 0;
+  min-height: 100%;
+  padding: 24px 28px 32px;
 }
 
-.card-header {
+// ========== 页面头部 ==========
+.page-head {
   display: flex;
+  align-items: flex-end;
   justify-content: space-between;
+  gap: $spacing-lg;
+  margin-bottom: $spacing-xl;
+
+  .page-title {
+    font-family: $font-display;
+    font-size: 22px;
+    font-weight: $font-weight-semibold;
+    line-height: $line-height-tight;
+    color: $text-primary;
+    letter-spacing: 0.01em;
+  }
+
+  .page-subtitle {
+    margin-top: 6px;
+    font-size: 13px;
+    color: $text-secondary;
+  }
+}
+
+.page-actions {
+  display: flex;
   align-items: center;
+  gap: $spacing-md;
+  flex-shrink: 0;
+}
+
+// ========== 内容卡片 ==========
+.content-card {
+  background: $bg-card;
+  border: 1px solid $border-color;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-sm;
+  padding: $spacing-xl;
+}
+
+// ========== 状态筛选 ==========
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: $spacing-md;
+  margin-bottom: $spacing-lg;
+}
+
+// 按钮内图标与文字间距
+:deep(.el-button > span) {
+  gap: 6px;
+  align-items: center;
+}
+
+// 台账编码使用等宽字体
+:deep(.cell-code) {
+  font-family: $font-mono;
+  font-size: 12px;
+  color: $text-secondary;
+  font-variant-numeric: tabular-nums;
+}
+
+.hash-text {
+  font-family: $font-mono;
+  font-size: 12px;
+  color: $text-secondary;
+  word-break: break-all;
+}
+
+:deep(.el-pagination) {
+  margin-top: $spacing-xl;
+  justify-content: center;
+}
+
+// ========== 响应式 ==========
+@media (max-width: 768px) {
+  .license-approved {
+    padding: 16px;
+  }
+
+  .page-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: $spacing-md;
+  }
+
+  .content-card {
+    padding: 16px;
+  }
+
+  .filter-bar {
+    overflow-x: auto;
+
+    :deep(.el-radio-group) {
+      flex-shrink: 0;
+    }
+  }
+
+  :deep(.el-pagination) {
+    flex-wrap: wrap;
+    row-gap: $spacing-sm;
+  }
 }
 </style>

@@ -155,7 +155,7 @@ git push -u origin hotfix/1.5.1
 | 依赖更新 | `dependabot.yml` | 每周自动 PR（目标 `develop`） |
 | 代码审查 | CodeRabbit | 自动 AI 审查（`.coderabbit.yaml`） |
 
-> 本地先跑测试再推送：`cd garden-asset-platform/backend && python -m pytest`；前端 `cd garden-asset-platform/frontend && npm run lint:check && npm run build`。
+> 本地先跑测试再推送：`cd garden-asset-platform/backend && python -m pytest`；前端 `cd garden-asset-platform/frontend && npm run lint:check && npm run test:ci && npm run build`。
 
 ## 8. 代码组织约定
 

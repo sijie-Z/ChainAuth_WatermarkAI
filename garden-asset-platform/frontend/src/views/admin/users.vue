@@ -1,15 +1,21 @@
 <template>
   <div class="admin-users">
-    <el-card>
-      <template #header>
-        <div class="card-header">
-          <span>用户管理</span>
-          <el-button type="primary" size="small" @click="openCreateDialog">添加用户</el-button>
-        </div>
-      </template>
+    <header class="page-head">
+      <div class="page-heading">
+        <h1 class="page-title">用户管理</h1>
+        <p class="page-subtitle">管理后台账号、角色与访问状态</p>
+      </div>
+      <div class="page-actions">
+        <el-button type="primary" @click="openCreateDialog">
+          <el-icon><Plus /></el-icon>
+          添加用户
+        </el-button>
+      </div>
+    </header>
 
+    <div class="content-card">
       <el-table :data="users" v-loading="loading" stripe>
-        <el-table-column prop="id" label="ID" width="80" />
+        <el-table-column prop="id" label="ID" width="80" class-name="cell-code" />
         <el-table-column prop="username" label="用户名" width="150" />
         <el-table-column prop="email" label="邮箱" min-width="200" />
         <el-table-column prop="role" label="角色" width="120">
@@ -40,7 +46,7 @@
           </template>
         </el-table-column>
       </el-table>
-    </el-card>
+    </div>
 
     <!-- 创建/编辑对话框 -->
     <el-dialog v-model="dialog.visible" :title="dialog.title" width="400px">
@@ -83,6 +89,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus } from '@element-plus/icons-vue'
 import { authApi } from '@/api/modules'
 
 const loading = ref(false)
@@ -234,14 +241,82 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@use '@/assets/styles/variables.scss' as *;
+
 .admin-users {
-  padding: 0;
+  min-height: 100%;
+  padding: 24px 28px 32px;
 }
 
-.card-header {
+// ========== 页面头部 ==========
+.page-head {
   display: flex;
+  align-items: flex-end;
   justify-content: space-between;
+  gap: $spacing-lg;
+  margin-bottom: $spacing-xl;
+
+  .page-title {
+    font-family: $font-display;
+    font-size: 22px;
+    font-weight: $font-weight-semibold;
+    line-height: $line-height-tight;
+    color: $text-primary;
+    letter-spacing: 0.01em;
+  }
+
+  .page-subtitle {
+    margin-top: 6px;
+    font-size: 13px;
+    color: $text-secondary;
+  }
+}
+
+.page-actions {
+  display: flex;
   align-items: center;
+  gap: $spacing-md;
+  flex-shrink: 0;
+}
+
+// ========== 内容卡片 ==========
+.content-card {
+  background: $bg-card;
+  border: 1px solid $border-color;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-sm;
+  padding: $spacing-xl;
+}
+
+// 按钮内图标与文字间距
+:deep(.el-button > span) {
+  gap: 6px;
+  align-items: center;
+}
+
+// 台账编码使用等宽字体
+:deep(.cell-code) {
+  font-family: $font-mono;
+  font-size: 12px;
+  color: $text-secondary;
+  font-variant-numeric: tabular-nums;
+}
+
+// ========== 响应式 ==========
+@media (max-width: 768px) {
+  .admin-users {
+    padding: 16px;
+  }
+
+  .page-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: $spacing-md;
+  }
+
+  .content-card {
+    padding: 16px;
+  }
 }
 </style>

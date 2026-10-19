@@ -1,32 +1,43 @@
 <template>
   <div class="license-apply">
-    <el-card>
+    <header class="page-bar">
+      <router-link to="/assets" class="page-back">
+        <el-icon><ArrowLeft /></el-icon>
+        返回资产档案
+      </router-link>
+      <h1 class="page-title">申请授权</h1>
+    </header>
+
+    <!-- 资产信息 -->
+    <el-card class="asset-info-card">
       <template #header>
         <div class="card-header">
-          <span>申请授权</span>
-          <el-button text @click="goBack">返回</el-button>
+          <span>资产信息</span>
+          <span v-if="asset.asset_code" class="asset-code">{{ asset.asset_code }}</span>
         </div>
       </template>
+      <el-descriptions :column="3" border>
+        <el-descriptions-item label="资产编码">{{ asset.asset_code }}</el-descriptions-item>
+        <el-descriptions-item label="标题">{{ asset.title }}</el-descriptions-item>
+        <el-descriptions-item label="类型">{{ getTypeName(asset.asset_type) }}</el-descriptions-item>
+        <el-descriptions-item label="所属园林">{{ asset.garden_name }}</el-descriptions-item>
+        <el-descriptions-item label="水印状态">
+          <StatusTag :status="asset.watermark_status || 'pending'" />
+        </el-descriptions-item>
+        <el-descriptions-item label="存证状态">
+          <StatusTag :status="asset.chain_status || 'pending'" />
+        </el-descriptions-item>
+      </el-descriptions>
+    </el-card>
 
-      <!-- 资产信息 -->
-      <el-card shadow="hover" class="asset-info-card">
-        <template #header>资产信息</template>
-        <el-descriptions :column="3" border>
-          <el-descriptions-item label="资产编码">{{ asset.asset_code }}</el-descriptions-item>
-          <el-descriptions-item label="标题">{{ asset.title }}</el-descriptions-item>
-          <el-descriptions-item label="类型">{{ getTypeName(asset.asset_type) }}</el-descriptions-item>
-          <el-descriptions-item label="所属园林">{{ asset.garden_name }}</el-descriptions-item>
-          <el-descriptions-item label="水印状态">
-            <StatusTag :status="asset.watermark_status || 'pending'" />
-          </el-descriptions-item>
-          <el-descriptions-item label="存证状态">
-            <StatusTag :status="asset.chain_status || 'pending'" />
-          </el-descriptions-item>
-        </el-descriptions>
-      </el-card>
-
-      <!-- 申请表单 -->
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
+    <!-- 申请表单 -->
+    <el-card class="form-card">
+      <template #header>
+        <div class="card-header">
+          <span>授权信息</span>
+        </div>
+      </template>
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px" class="apply-form">
         <el-form-item label="授权类型" prop="license_type">
           <el-radio-group v-model="form.license_type">
             <el-radio-button label="personal">个人使用</el-radio-button>
@@ -86,7 +97,7 @@
     </el-card>
 
     <!-- 授权协议对话框 -->
-    <el-dialog v-model="agreementVisible" title="数字资产使用授权协议" width="600px">
+    <el-dialog v-model="agreementVisible" title="数字资产使用授权协议" width="min(600px, 92vw)">
       <div class="agreement-content">
         <h4>一、总则</h4>
         <p>本协议是苏州园林数字资产平台（以下简称"本平台"）与用户之间关于数字资产使用授权的法律协议。</p>
@@ -115,6 +126,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { ArrowLeft } from '@element-plus/icons-vue'
 import { assetApi, licenseApi } from '@/api/modules'
 
 const route = useRoute()
@@ -203,45 +215,138 @@ onMounted(() => {
 @use '@/assets/styles/variables.scss' as *;
 
 .license-apply {
-  padding: $spacing-lg;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: $spacing-2xl $spacing-3xl;
   min-height: 100vh;
   background: $bg-primary;
+
+  :deep(.el-card__header) {
+    padding: $spacing-lg $spacing-xl;
+    border-bottom: 1px solid $border-light;
+  }
+
+  :deep(.el-card__body) {
+    padding: $spacing-xl;
+  }
+}
+
+// ========== 页眉 ==========
+.page-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: $spacing-md;
+  padding-bottom: $spacing-md;
+  margin-bottom: $spacing-xl;
+  border-bottom: 1px solid $border-light;
+}
+
+.page-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: $font-size-sm;
+  color: $text-secondary;
+  transition: color $transition-fast;
+
+  &:hover {
+    color: $primary-dark;
+  }
+}
+
+.page-title {
+  font-family: $font-display;
+  font-size: 23px;
+  font-weight: $font-weight-semibold;
+  line-height: $line-height-tight;
+  letter-spacing: 0.02em;
+  color: $text-primary;
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: $spacing-md;
+  font-family: $font-display;
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: $text-primary;
+
+  .asset-code {
+    font-family: $font-mono;
+    font-size: $font-size-xs;
+    font-weight: $font-weight-normal;
+    letter-spacing: 0.08em;
+    color: $text-placeholder;
+  }
 }
 
 .asset-info-card {
-  margin-bottom: $spacing-lg;
+  margin-bottom: $spacing-xl;
+}
+
+.apply-form {
+  :deep(.el-radio-group) {
+    flex-wrap: wrap;
+    row-gap: $spacing-sm;
+  }
+
+  :deep(.el-checkbox-group) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $spacing-xs $spacing-lg;
+  }
 }
 
 .agreement-content {
   max-height: 400px;
   overflow-y: auto;
-  line-height: 1.8;
+  line-height: $line-height-relaxed;
+  font-size: $font-size-sm;
+  color: $text-secondary;
 
   h4 {
-    margin: 15px 0 10px;
+    margin: $spacing-lg 0 $spacing-sm;
+    font-family: $font-display;
+    font-size: $font-size-md;
     color: $text-primary;
   }
 
   p {
-    margin: 5px 0;
-    color: $text-secondary;
-    font-size: $font-size-sm;
+    margin: $spacing-xs 0;
   }
 }
 
-@media (max-width: $breakpoint-sm) {
+@media (max-width: $breakpoint-md) {
   .license-apply {
-    padding: $spacing-md;
+    padding: $spacing-lg;
+
+    :deep(.el-descriptions) {
+      overflow-x: auto;
+    }
   }
 
   .asset-info-card {
-    margin-bottom: $spacing-md;
+    margin-bottom: $spacing-lg;
+  }
+
+  .apply-form {
+    :deep(.el-form-item) {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    :deep(.el-form-item__label) {
+      width: auto !important;
+      margin-bottom: 6px;
+      text-align: left;
+    }
+
+    :deep(.el-form-item__content) {
+      width: 100%;
+    }
   }
 }
 </style>

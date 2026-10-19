@@ -1,15 +1,21 @@
 <template>
   <div class="admin-assets">
-    <el-card>
-      <template #header>
-        <div class="card-header">
-          <span>资产管理</span>
-          <el-button type="primary" size="small" @click="goToUpload">上传资产</el-button>
-        </div>
-      </template>
+    <header class="page-head">
+      <div class="page-heading">
+        <h1 class="page-title">资产管理</h1>
+        <p class="page-subtitle">登记、检索与维护园林数字资产档案</p>
+      </div>
+      <div class="page-actions">
+        <el-button type="primary" @click="goToUpload">
+          <el-icon><Upload /></el-icon>
+          上传资产
+        </el-button>
+      </div>
+    </header>
 
+    <div class="content-card">
       <!-- 搜索 -->
-      <el-form inline>
+      <el-form inline class="filter-form">
         <el-form-item>
           <el-input v-model="search.keyword" placeholder="搜索标题/编码" clearable />
         </el-form-item>
@@ -35,14 +41,17 @@
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="handleSearch">搜索</el-button>
+          <el-button type="primary" @click="handleSearch">
+            <el-icon><Search /></el-icon>
+            搜索
+          </el-button>
         </el-form-item>
       </el-form>
 
       <!-- 表格 -->
       <el-skeleton :loading="loading" animated :rows="8">
         <template #template>
-          <div v-for="i in 8" :key="i" style="display: flex; gap: 16px; padding: 14px 0; border-bottom: 1px solid #e8ede9">
+          <div v-for="i in 8" :key="i" class="skeleton-row">
             <el-skeleton-item variant="text" style="width: 160px" />
             <el-skeleton-item variant="text" style="flex: 1" />
             <el-skeleton-item variant="text" style="width: 60px" />
@@ -53,52 +62,52 @@
           </div>
         </template>
         <template #default>
-      <el-table :data="assets" stripe>
-        <el-table-column prop="asset_code" label="编码" width="180" />
-        <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="asset_type" label="类型" width="80">
-          <template #default="{ row }">
-            <el-tag size="small">{{ getTypeName(row.asset_type) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="watermark_status" label="水印" width="80">
-          <template #default="{ row }">
-            <el-tag size="small" :type="row.watermark_status === 'embedded' ? 'success' : 'info'">
-              {{ row.watermark_status === 'embedded' ? '已嵌入' : '未嵌入' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="chain_status" label="存证" width="80">
-          <template #default="{ row }">
-            <el-tag size="small" :type="row.chain_status === 'confirmed' ? 'success' : 'info'">
-              {{ row.chain_status === 'confirmed' ? '已存证' : '未存证' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="uploader" label="上传者" width="100">
-          <template #default="{ row }">
-            {{ row.uploader_name || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="created_at" label="创建时间" width="140">
-          <template #default="{ row }">
-            {{ formatDate(row.created_at) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="240" fixed="right">
-          <template #default="{ row }">
-            <el-button-group>
-              <el-button size="small" @click="viewDetail(row.id)">查看</el-button>
-              <el-button size="small" type="primary" @click="batchWatermark(row)" :disabled="row.watermark_status === 'embedded'">
-                嵌水印
-              </el-button>
-              <el-button size="small" type="success" @click="batchChain(row)" :disabled="row.chain_status === 'confirmed' || row.watermark_status !== 'embedded'">
-                上链
-              </el-button>
-            </el-button-group>
-          </template>
-        </el-table-column>
-      </el-table>
+          <el-table :data="assets" stripe>
+            <el-table-column prop="asset_code" label="编码" width="180" class-name="cell-code" />
+            <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="asset_type" label="类型" width="80">
+              <template #default="{ row }">
+                <el-tag size="small">{{ getTypeName(row.asset_type) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="watermark_status" label="水印" width="80">
+              <template #default="{ row }">
+                <el-tag size="small" :type="row.watermark_status === 'embedded' ? 'success' : 'info'">
+                  {{ row.watermark_status === 'embedded' ? '已嵌入' : '未嵌入' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="chain_status" label="存证" width="80">
+              <template #default="{ row }">
+                <el-tag size="small" :type="row.chain_status === 'confirmed' ? 'success' : 'info'">
+                  {{ row.chain_status === 'confirmed' ? '已存证' : '未存证' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="uploader" label="上传者" width="100">
+              <template #default="{ row }">
+                {{ row.uploader_name || '-' }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="created_at" label="创建时间" width="140">
+              <template #default="{ row }">
+                {{ formatDate(row.created_at) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="240" fixed="right">
+              <template #default="{ row }">
+                <el-button-group>
+                  <el-button size="small" @click="viewDetail(row.id)">查看</el-button>
+                  <el-button size="small" type="primary" @click="batchWatermark(row)" :disabled="row.watermark_status === 'embedded'">
+                    嵌水印
+                  </el-button>
+                  <el-button size="small" type="success" @click="batchChain(row)" :disabled="row.chain_status === 'confirmed' || row.watermark_status !== 'embedded'">
+                    上链
+                  </el-button>
+                </el-button-group>
+              </template>
+            </el-table-column>
+          </el-table>
         </template>
       </el-skeleton>
 
@@ -111,9 +120,8 @@
         layout="total, sizes, prev, pager, next"
         @size-change="loadAssets"
         @current-change="loadAssets"
-        style="margin-top: 20px; justify-content: center"
       />
-    </el-card>
+    </div>
   </div>
 </template>
 
@@ -121,6 +129,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Upload, Search } from '@element-plus/icons-vue'
 import { assetApi, watermarkApi, blockchainApi } from '@/api/modules'
 
 const router = useRouter()
@@ -152,7 +161,7 @@ async function loadAssets() {
       total.value = response.data.data.total
     }
   } catch (error) {
-    ElMessage.error('加载失败')
+    console.error('加载资产失败:', error)
   } finally {
     loading.value = false
   }
@@ -210,8 +219,134 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@use '@/assets/styles/variables.scss' as *;
+
 .admin-assets {
-  padding: 0;
+  min-height: 100%;
+  padding: 24px 28px 32px;
+}
+
+// ========== 页面头部 ==========
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: $spacing-lg;
+  margin-bottom: $spacing-xl;
+
+  .page-title {
+    font-family: $font-display;
+    font-size: 22px;
+    font-weight: $font-weight-semibold;
+    line-height: $line-height-tight;
+    color: $text-primary;
+    letter-spacing: 0.01em;
+  }
+
+  .page-subtitle {
+    margin-top: 6px;
+    font-size: 13px;
+    color: $text-secondary;
+  }
+}
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: $spacing-md;
+  flex-shrink: 0;
+}
+
+// ========== 内容卡片 ==========
+.content-card {
+  background: $bg-card;
+  border: 1px solid $border-color;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-sm;
+  padding: $spacing-xl;
+}
+
+// ========== 筛选行 ==========
+.filter-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-md;
+  margin-bottom: $spacing-lg;
+
+  :deep(.el-form-item) {
+    margin: 0;
+  }
+
+  :deep(.el-input) {
+    width: 220px;
+  }
+
+  :deep(.el-select) {
+    width: 150px;
+  }
+}
+
+// 按钮内图标与文字间距
+:deep(.el-button > span) {
+  gap: 6px;
+  align-items: center;
+}
+
+.skeleton-row {
+  display: flex;
+  gap: $spacing-lg;
+  padding: 14px 0;
+  border-bottom: 1px solid $border-light;
+}
+
+// 台账编码使用等宽字体
+:deep(.cell-code) {
+  font-family: $font-mono;
+  font-size: 12px;
+  color: $text-secondary;
+  font-variant-numeric: tabular-nums;
+}
+
+:deep(.el-pagination) {
+  margin-top: $spacing-xl;
+  justify-content: center;
+}
+
+// ========== 响应式 ==========
+@media (max-width: 768px) {
+  .admin-assets {
+    padding: 16px;
+  }
+
+  .page-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: $spacing-md;
+  }
+
+  .content-card {
+    padding: 16px;
+  }
+
+  .filter-form {
+    :deep(.el-form-item) {
+      width: 100%;
+    }
+
+    :deep(.el-input),
+    :deep(.el-select) {
+      width: 100%;
+    }
+
+    :deep(.el-button) {
+      width: 100%;
+    }
+  }
+
+  :deep(.el-pagination) {
+    flex-wrap: wrap;
+    row-gap: $spacing-sm;
+  }
 }
 </style>

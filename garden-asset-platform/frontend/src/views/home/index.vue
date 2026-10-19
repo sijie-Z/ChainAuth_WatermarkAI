@@ -306,7 +306,7 @@
           <router-link to="/login">登录</router-link>
         </nav>
         <p class="footer-copyright">
-          © 2026 挑战杯项目团队 · 苏州大学计算机科学与技术学院
+          © 2026 苏州园林数字资产平台团队 · 苏州大学计算机科学与技术学院
         </p>
       </div>
     </footer>

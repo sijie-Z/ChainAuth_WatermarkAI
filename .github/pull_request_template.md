@@ -28,7 +28,7 @@ Closes #
 <!-- 列出你实际执行过的命令或步骤，CI 之外的人工验证也写在这里 -->
 
 - [ ] 后端：`cd garden-asset-platform/backend && python -m pytest`
-- [ ] 前端：`cd garden-asset-platform/frontend && npm run lint:check && npm run build`
+- [ ] 前端：`cd garden-asset-platform/frontend && npm run lint:check && npm run test:ci && npm run build`
 - [ ] Docker：`docker compose build`（如涉及）
 - [ ] 手工验证步骤：
 

@@ -14,7 +14,7 @@
 | 工作流 | 检查 | 触发 | 阻断 | 超时 |
 |--------|------|------|------|------|
 | `ci.yml` | 后端 ruff（致命规则）+ pytest + 覆盖率 | PR / push → main/develop | ✅ | 20 min |
-| `ci.yml` | 前端 ESLint（只读）+ Vite 构建 | PR / push → main/develop | ✅ | 15 min |
+| `ci.yml` | 前端 ESLint（只读）+ Vitest 单元测试 + Vite 构建 | PR / push → main/develop | ✅ | 15 min |
 | `ci.yml` | `ci-pass` 聚合门禁 | 同上 | ✅ | 5 min |
 | `gitflow.yml` | 分支来源/目标校验 | PR → main/develop | ✅ | 5 min |
 | `gitflow.yml` | PR 标题 Conventional Commits | PR → main/develop | ✅ | 5 min |
@@ -70,7 +70,7 @@
 - 当前基线：**45%**（64 个后端用例，2026-10-19 实测）。
 - CI 使用棘轮下限 `--cov-fail-under=43`（留 2 个点余量防环境波动），只拦“继续下滑”，不追高分；下限写在 CI 命令里，不写进全局 pytest 配置。
 - 覆盖率报告以 artifact 形式保存（7 天），不依赖外部 Codecov 账号。
-- 前端暂无单元测试；在出现第一个 Vitest 用例后，把 `vitest run --passWithNoTests` 加入 `ci.yml` 的 frontend job。
+- 前端已加入 Vitest 单元测试（工具函数与共享组件）；覆盖率暂不作为门禁，后续按棘轮方式引入。
 
 ## 7. Security 工具职责边界
 

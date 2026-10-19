@@ -1,8 +1,14 @@
 <template>
   <div class="settings-page">
-    <div class="settings-container">
+    <header class="page-bar">
+      <router-link to="/home" class="page-back">
+        <el-icon><ArrowLeft /></el-icon>
+        返回首页
+      </router-link>
       <h1 class="page-title">账号设置</h1>
+    </header>
 
+    <div class="settings-container">
       <div class="settings-grid">
         <!-- 个人信息 -->
         <el-card class="settings-card">
@@ -122,7 +128,7 @@ import { ref, computed, reactive } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { userApi } from '@/api/modules'
 import { ElMessage } from 'element-plus'
-import { User, Lock, Bell } from '@element-plus/icons-vue'
+import { User, Lock, Bell, ArrowLeft } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
 
@@ -231,49 +237,75 @@ function changePassword() {
 @use '@/assets/styles/variables.scss' as *;
 
 .settings-page {
-  min-height: 100vh;
-  background: $bg-primary;
-  padding: 32px;
-}
-
-.settings-container {
   max-width: 800px;
   margin: 0 auto;
+  min-height: 100vh;
+  background: $bg-primary;
+  padding: $spacing-2xl $spacing-3xl;
+}
+
+// ========== 页眉 ==========
+.page-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: $spacing-md;
+  padding-bottom: $spacing-md;
+  margin-bottom: $spacing-xl;
+  border-bottom: 1px solid $border-light;
+}
+
+.page-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: $font-size-sm;
+  color: $text-secondary;
+  transition: color $transition-fast;
+
+  &:hover {
+    color: $primary-dark;
+  }
 }
 
 .page-title {
-  font-size: $font-size-3xl;
-  font-weight: $font-weight-bold;
+  font-family: $font-display;
+  font-size: 23px;
+  font-weight: $font-weight-semibold;
+  line-height: $line-height-tight;
+  letter-spacing: 0.02em;
   color: $text-primary;
-  margin: 0 0 24px;
+}
+
+.settings-container {
+  margin: 0 auto;
 }
 
 .settings-grid {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: $spacing-xl;
 }
 
 .settings-card {
-  border-radius: $radius-xl;
-  box-shadow: $shadow-card;
-
   :deep(.el-card__header) {
-    padding: 20px 24px;
+    padding: $spacing-lg $spacing-xl;
     border-bottom: 1px solid $border-light;
   }
 
   :deep(.el-card__body) {
-    padding: 24px;
+    padding: $spacing-xl;
   }
 }
 
 .card-header {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: $spacing-sm;
+  font-family: $font-display;
   font-size: $font-size-lg;
   font-weight: $font-weight-semibold;
+  color: $text-primary;
 
   .card-icon {
     font-size: 20px;
@@ -313,13 +345,26 @@ function changePassword() {
   }
 }
 
-@media (max-width: $breakpoint-sm) {
+@media (max-width: $breakpoint-md) {
   .settings-page {
-    padding: 16px;
+    padding: $spacing-lg;
   }
 
-  .page-title {
-    font-size: $font-size-2xl;
+  .settings-card {
+    :deep(.el-form-item) {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    :deep(.el-form-item__label) {
+      width: auto !important;
+      margin-bottom: 6px;
+      text-align: left;
+    }
+
+    :deep(.el-form-item__content) {
+      width: 100%;
+    }
   }
 }
 </style>

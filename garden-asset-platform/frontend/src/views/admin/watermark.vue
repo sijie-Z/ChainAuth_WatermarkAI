@@ -1,100 +1,108 @@
 <template>
   <div class="admin-watermark">
-    <el-card>
-      <template #header>
-        <span>水印处理管理</span>
-      </template>
+    <header class="page-head">
+      <div class="page-heading">
+        <h1 class="page-title">水印处理管理</h1>
+        <p class="page-subtitle">为园林数字资产嵌入与提取隐形水印，留存操作记录</p>
+      </div>
+      <div class="page-actions">
+        <el-button type="primary" @click="refreshAll">
+          <el-icon><Refresh /></el-icon>
+          刷新
+        </el-button>
+      </div>
+    </header>
 
-      <!-- 批量处理 -->
-      <el-row :gutter="20">
-        <el-col :span="12">
-          <el-card shadow="hover">
-            <template #header>批量嵌入水印</template>
-            <el-form label-width="80px">
-              <el-form-item label="选择资产">
-                <el-select v-model="batchEmbed.assets" multiple placeholder="选择待嵌入资产" filterable>
-                  <el-option
-                    v-for="a in pendingAssets"
-                    :key="a.id"
-                    :label="a.title"
-                    :value="a.id"
-                  />
-                </el-select>
-              </el-form-item>
-              <el-form-item label="水印算法">
-                <el-select v-model="batchEmbed.algorithm">
-                  <el-option label="DCT域水印" value="dct" />
-                  <el-option label="LSB水印" value="lsb" />
-                  <el-option label="矢量水印" value="vector" />
-                </el-select>
-              </el-form-item>
-              <el-form-item>
-                <el-button type="primary" :loading="batchEmbed.loading" @click="doBatchEmbed">
-                  开始嵌入
-                </el-button>
-              </el-form-item>
-            </el-form>
-          </el-card>
-        </el-col>
+    <!-- 批量处理 -->
+    <div class="content-card">
+      <div class="batch-grid">
+        <section class="batch-panel">
+          <h2 class="card-title">批量嵌入水印</h2>
+          <el-form label-width="80px" class="panel-form">
+            <el-form-item label="选择资产">
+              <el-select v-model="batchEmbed.assets" multiple placeholder="选择待嵌入资产" filterable>
+                <el-option
+                  v-for="a in pendingAssets"
+                  :key="a.id"
+                  :label="a.title"
+                  :value="a.id"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="水印算法">
+              <el-select v-model="batchEmbed.algorithm">
+                <el-option label="DCT域水印" value="dct" />
+                <el-option label="LSB水印" value="lsb" />
+                <el-option label="矢量水印" value="vector" />
+              </el-select>
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" :loading="batchEmbed.loading" @click="doBatchEmbed">
+                开始嵌入
+              </el-button>
+            </el-form-item>
+          </el-form>
+        </section>
 
-        <el-col :span="12">
-          <el-card shadow="hover">
-            <template #header>批量提取水印</template>
-            <el-form label-width="80px">
-              <el-form-item label="选择资产">
-                <el-select v-model="batchExtract.assets" multiple placeholder="选择已嵌入资产" filterable>
-                  <el-option
-                    v-for="a in embeddedAssets"
-                    :key="a.id"
-                    :label="a.title"
-                    :value="a.id"
-                  />
-                </el-select>
-              </el-form-item>
-              <el-form-item>
-                <el-button type="success" :loading="batchExtract.loading" @click="doBatchExtract">
-                  开始提取
-                </el-button>
-              </el-form-item>
-            </el-form>
-          </el-card>
-        </el-col>
-      </el-row>
+        <section class="batch-panel">
+          <h2 class="card-title">批量提取水印</h2>
+          <el-form label-width="80px" class="panel-form">
+            <el-form-item label="选择资产">
+              <el-select v-model="batchExtract.assets" multiple placeholder="选择已嵌入资产" filterable>
+                <el-option
+                  v-for="a in embeddedAssets"
+                  :key="a.id"
+                  :label="a.title"
+                  :value="a.id"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item>
+              <el-button type="success" :loading="batchExtract.loading" @click="doBatchExtract">
+                开始提取
+              </el-button>
+            </el-form-item>
+          </el-form>
+        </section>
+      </div>
+    </div>
 
-      <!-- 水印记录 -->
-      <el-card style="margin-top: 20px">
-        <template #header>水印操作记录</template>
-        <el-table :data="watermarkLogs" v-loading="logsLoading" stripe>
-          <el-table-column prop="asset_code" label="资产编码" width="180" />
-          <el-table-column prop="asset_title" label="资产标题" min-width="200" show-overflow-tooltip />
-          <el-table-column prop="operation" label="操作类型" width="100">
-            <template #default="{ row }">
-              <el-tag :type="row.operation === 'embed' ? 'success' : 'warning'" size="small">
-                {{ row.operation === 'embed' ? '嵌入' : '提取' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="watermark_id" label="水印ID" width="180" />
-          <el-table-column prop="nc_value" label="NC值" width="100">
-            <template #default="{ row }">
-              {{ row.nc_value ? row.nc_value.toFixed(4) : '-' }}
-            </template>
-          </el-table-column>
-          <el-table-column prop="operator" label="操作人" width="100" />
-          <el-table-column prop="created_at" label="操作时间" width="140">
-            <template #default="{ row }">
-              {{ formatDate(row.created_at) }}
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-card>
-    </el-card>
+    <!-- 水印记录 -->
+    <div class="content-card">
+      <div class="card-head">
+        <h2 class="card-title">水印操作记录</h2>
+      </div>
+      <el-table :data="watermarkLogs" v-loading="logsLoading" stripe>
+        <el-table-column prop="asset_code" label="资产编码" width="180" class-name="cell-code" />
+        <el-table-column prop="asset_title" label="资产标题" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="operation" label="操作类型" width="100">
+          <template #default="{ row }">
+            <el-tag :type="row.operation === 'embed' ? 'success' : 'warning'" size="small">
+              {{ row.operation === 'embed' ? '嵌入' : '提取' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="watermark_id" label="水印ID" width="180" class-name="cell-code" />
+        <el-table-column prop="nc_value" label="NC值" width="100">
+          <template #default="{ row }">
+            {{ row.nc_value ? row.nc_value.toFixed(4) : '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="operator" label="操作人" width="100" />
+        <el-table-column prop="created_at" label="操作时间" width="140">
+          <template #default="{ row }">
+            {{ formatDate(row.created_at) }}
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Refresh } from '@element-plus/icons-vue'
 import { assetApi, watermarkApi } from '@/api/modules'
 
 const pendingAssets = ref([])
@@ -143,6 +151,11 @@ async function loadLogs() {
   } finally {
     logsLoading.value = false
   }
+}
+
+function refreshAll() {
+  loadAssets()
+  loadLogs()
 }
 
 async function doBatchEmbed() {
@@ -206,8 +219,139 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@use '@/assets/styles/variables.scss' as *;
+
 .admin-watermark {
-  padding: 0;
+  min-height: 100%;
+  padding: 24px 28px 32px;
+}
+
+// ========== 页面头部 ==========
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: $spacing-lg;
+  margin-bottom: $spacing-xl;
+
+  .page-title {
+    font-family: $font-display;
+    font-size: 22px;
+    font-weight: $font-weight-semibold;
+    line-height: $line-height-tight;
+    color: $text-primary;
+    letter-spacing: 0.01em;
+  }
+
+  .page-subtitle {
+    margin-top: 6px;
+    font-size: 13px;
+    color: $text-secondary;
+  }
+}
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: $spacing-md;
+  flex-shrink: 0;
+}
+
+// ========== 内容卡片 ==========
+.content-card {
+  background: $bg-card;
+  border: 1px solid $border-color;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-sm;
+  padding: $spacing-xl;
+
+  & + & {
+    margin-top: $spacing-xl;
+  }
+}
+
+.card-title {
+  font-family: $font-display;
+  font-size: 16px;
+  font-weight: $font-weight-semibold;
+  color: $text-primary;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-md;
+  margin-bottom: $spacing-lg;
+}
+
+// ========== 批量处理双栏 ==========
+.batch-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: $spacing-2xl;
+}
+
+.batch-panel {
+  min-width: 0;
+
+  .card-title {
+    margin-bottom: $spacing-lg;
+  }
+
+  & + & {
+    border-left: 1px solid $border-light;
+    padding-left: $spacing-2xl;
+  }
+}
+
+.panel-form {
+  :deep(.el-select) {
+    width: 100%;
+  }
+}
+
+// 按钮内图标与文字间距
+:deep(.el-button > span) {
+  gap: 6px;
+  align-items: center;
+}
+
+// 台账编码使用等宽字体
+:deep(.cell-code) {
+  font-family: $font-mono;
+  font-size: 12px;
+  color: $text-secondary;
+  font-variant-numeric: tabular-nums;
+}
+
+// ========== 响应式 ==========
+@media (max-width: 768px) {
+  .admin-watermark {
+    padding: 16px;
+  }
+
+  .page-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: $spacing-md;
+  }
+
+  .content-card {
+    padding: 16px;
+  }
+
+  .batch-grid {
+    grid-template-columns: 1fr;
+    gap: $spacing-xl;
+  }
+
+  .batch-panel + .batch-panel {
+    border-left: none;
+    padding-left: 0;
+    border-top: 1px solid $border-light;
+    padding-top: $spacing-xl;
+  }
 }
 </style>

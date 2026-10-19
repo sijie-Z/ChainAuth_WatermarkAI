@@ -24,6 +24,26 @@ api.interceptors.request.use(
 let isRefreshing = false
 let failedQueue = []
 
+// 相同错误 3 秒内只提示一次，避免并发请求刷屏
+let lastToast = { message: '', time: 0 }
+function notifyError(message) {
+  const now = Date.now()
+  if (message === lastToast.message && now - lastToast.time < 3000) return
+  lastToast = { message, time: now }
+  ElMessage.error(message)
+}
+
+function resolveErrorMessage(error) {
+  const status = error.response?.status
+  if (status >= 500) return '服务暂时不可用，请稍后重试'
+  if (!error.response) {
+    return error.code === 'ECONNABORTED'
+      ? '请求超时，请稍后重试'
+      : '无法连接服务器，请检查网络'
+  }
+  return error.response?.data?.message || error.message || '请求失败'
+}
+
 function processQueue(error, token = null) {
   failedQueue.forEach(({ resolve, reject }) => {
     error ? reject(error) : resolve(token)
@@ -79,10 +99,11 @@ api.interceptors.response.use(
       }
     }
 
-    // 其他错误（不重复显示刷新失败的错误）
+    // 其他错误（不重复显示刷新失败的错误；静默请求不弹提示）
     if (!error.config?._retry || error.response?.status !== 401) {
-      const message = error.response?.data?.message || error.message || '请求失败'
-      ElMessage.error(message)
+      if (!originalRequest?.silent) {
+        notifyError(resolveErrorMessage(error))
+      }
     }
 
     return Promise.reject(error)

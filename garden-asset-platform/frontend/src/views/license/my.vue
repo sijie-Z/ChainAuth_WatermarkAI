@@ -1,9 +1,17 @@
 <template>
   <div class="license-my">
-    <el-card>
+    <header class="page-bar">
+      <router-link to="/assets" class="page-back">
+        <el-icon><ArrowLeft /></el-icon>
+        返回资产档案
+      </router-link>
+      <h1 class="page-title">我的授权</h1>
+    </header>
+
+    <el-card class="license-card">
       <template #header>
         <div class="card-header">
-          <span>我的授权</span>
+          <span class="card-title">授权记录</span>
           <el-radio-group v-model="filterStatus" @change="loadLicenses">
             <el-radio-button label="">全部</el-radio-button>
             <el-radio-button label="pending">审批中</el-radio-button>
@@ -79,12 +87,12 @@
         layout="total, sizes, prev, pager, next"
         @size-change="loadLicenses"
         @current-change="loadLicenses"
-        style="margin-top: 20px; justify-content: center"
+        class="license-pagination"
       />
     </el-card>
 
     <!-- 详情对话框 -->
-    <el-dialog v-model="detailVisible" title="授权详情" width="600px">
+    <el-dialog v-model="detailVisible" title="授权详情" width="min(600px, 92vw)">
       <el-descriptions :column="2" border>
         <el-descriptions-item label="授权编码">{{ detail.license_code }}</el-descriptions-item>
         <el-descriptions-item label="状态">
@@ -108,6 +116,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { ArrowLeft } from '@element-plus/icons-vue'
 import { licenseApi, assetApi } from '@/api/modules'
 
 const loading = ref(false)
@@ -134,7 +143,7 @@ async function loadLicenses() {
       total.value = response.data.data.total
     }
   } catch (error) {
-    ElMessage.error('加载失败')
+    console.error('加载授权记录失败:', error)
   } finally {
     loading.value = false
   }
@@ -191,9 +200,55 @@ onMounted(() => {
 @use '@/assets/styles/variables.scss' as *;
 
 .license-my {
-  padding: $spacing-lg;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: $spacing-2xl $spacing-3xl;
   min-height: 100vh;
   background: $bg-primary;
+}
+
+// ========== 页眉 ==========
+.page-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: $spacing-md;
+  padding-bottom: $spacing-md;
+  margin-bottom: $spacing-xl;
+  border-bottom: 1px solid $border-light;
+}
+
+.page-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: $font-size-sm;
+  color: $text-secondary;
+  transition: color $transition-fast;
+
+  &:hover {
+    color: $primary-dark;
+  }
+}
+
+.page-title {
+  font-family: $font-display;
+  font-size: 23px;
+  font-weight: $font-weight-semibold;
+  line-height: $line-height-tight;
+  letter-spacing: 0.02em;
+  color: $text-primary;
+}
+
+.license-card {
+  :deep(.el-card__header) {
+    padding: $spacing-lg $spacing-xl;
+    border-bottom: 1px solid $border-light;
+  }
+
+  :deep(.el-card__body) {
+    padding: $spacing-xl;
+  }
 }
 
 .card-header {
@@ -201,23 +256,41 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: $spacing-sm;
+  gap: $spacing-sm $spacing-md;
+}
+
+.card-title {
+  font-family: $font-display;
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: $text-primary;
+}
+
+.license-pagination {
+  margin-top: $spacing-xl;
+  justify-content: center;
 }
 
 .mono {
-  font-family: 'Courier New', monospace;
+  font-family: $font-mono;
   font-size: $font-size-xs;
+  letter-spacing: 0.02em;
   word-break: break-all;
 }
 
-@media (max-width: $breakpoint-sm) {
+@media (max-width: $breakpoint-md) {
   .license-my {
-    padding: $spacing-md;
+    padding: $spacing-lg;
   }
 
   .card-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .license-card :deep(.el-radio-group) {
+    flex-wrap: wrap;
+    row-gap: $spacing-xs;
   }
 }
 </style>

@@ -536,6 +536,7 @@ onUnmounted(() => {
 // ========== 主内容区 ==========
 .main-area {
   flex: 1;
+  min-width: 0;
   margin-left: $sidebar-width;
   display: flex;
   flex-direction: column;
@@ -663,7 +664,15 @@ onUnmounted(() => {
 
 .page-content {
   flex: 1;
+  min-width: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+}
+
+@media (max-width: 768px) {
+  .page-content {
+    padding: 16px;
+  }
 }
 
 // ========== 移动端遮罩 ==========

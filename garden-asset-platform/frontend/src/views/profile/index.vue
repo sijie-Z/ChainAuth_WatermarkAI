@@ -1,5 +1,13 @@
 <template>
   <div class="profile-page">
+    <header class="page-bar">
+      <router-link to="/home" class="page-back">
+        <el-icon><ArrowLeft /></el-icon>
+        返回首页
+      </router-link>
+      <h1 class="page-title">个人中心</h1>
+    </header>
+
     <div class="profile-container">
       <!-- 左侧：用户信息卡片 -->
       <div class="profile-sidebar">
@@ -55,7 +63,7 @@
         <!-- 统计卡片 -->
         <div class="stats-grid">
           <div class="stat-card">
-            <div class="stat-icon" style="background: rgba(47, 107, 90, 0.1); color: #2f6b5a;">
+            <div class="stat-icon">
               <el-icon><Picture /></el-icon>
             </div>
             <div class="stat-info">
@@ -64,7 +72,7 @@
             </div>
           </div>
           <div class="stat-card">
-            <div class="stat-icon" style="background: rgba(76, 110, 138, 0.1); color: #4c6e8a;">
+            <div class="stat-icon">
               <el-icon><Stamp /></el-icon>
             </div>
             <div class="stat-info">
@@ -73,7 +81,7 @@
             </div>
           </div>
           <div class="stat-card">
-            <div class="stat-icon" style="background: rgba(176, 122, 42, 0.12); color: #b07a2a;">
+            <div class="stat-icon accent">
               <el-icon><Document /></el-icon>
             </div>
             <div class="stat-info">
@@ -82,7 +90,7 @@
             </div>
           </div>
           <div class="stat-card">
-            <div class="stat-icon" style="background: rgba(109, 91, 122, 0.12); color: #6d5b7a;">
+            <div class="stat-icon">
               <el-icon><Link /></el-icon>
             </div>
             <div class="stat-info">
@@ -129,7 +137,7 @@ import { useUserStore } from '@/stores/user'
 import { licenseApi } from '@/api/modules'
 import { ElMessage } from 'element-plus'
 import {
-  User, Stamp, Calendar, Clock, Picture, Document, Link, Check
+  User, Stamp, Calendar, Clock, Picture, Document, Link, Check, ArrowLeft
 } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
@@ -204,17 +212,50 @@ onMounted(() => {
 @use '@/assets/styles/variables.scss' as *;
 
 .profile-page {
+  max-width: 1200px;
+  margin: 0 auto;
   min-height: 100vh;
   background: $bg-primary;
-  padding: 32px;
+  padding: $spacing-2xl $spacing-3xl;
+}
+
+// ========== 页眉 ==========
+.page-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: $spacing-md;
+  padding-bottom: $spacing-md;
+  margin-bottom: $spacing-xl;
+  border-bottom: 1px solid $border-light;
+}
+
+.page-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: $font-size-sm;
+  color: $text-secondary;
+  transition: color $transition-fast;
+
+  &:hover {
+    color: $primary-dark;
+  }
+}
+
+.page-title {
+  font-family: $font-display;
+  font-size: 23px;
+  font-weight: $font-weight-semibold;
+  line-height: $line-height-tight;
+  letter-spacing: 0.02em;
+  color: $text-primary;
 }
 
 .profile-container {
-  max-width: 1200px;
-  margin: 0 auto;
   display: grid;
   grid-template-columns: 340px 1fr;
-  gap: 24px;
+  gap: $spacing-2xl;
 }
 
 .profile-sidebar {
@@ -224,17 +265,18 @@ onMounted(() => {
 }
 
 .user-card {
-  background: white;
-  border-radius: $radius-xl;
-  box-shadow: $shadow-card;
+  background: $bg-card;
+  border: 1px solid $border-color;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-sm;
   overflow: hidden;
 }
 
 .user-card-header {
-  background: $primary-gradient;
-  padding: 32px 24px;
+  background: $bg-card;
+  padding: $spacing-3xl $spacing-xl $spacing-xl;
   text-align: center;
-  color: white;
+  border-bottom: 1px solid $border-light;
 }
 
 .avatar-section {
@@ -243,10 +285,12 @@ onMounted(() => {
   margin-bottom: 12px;
 
   .profile-avatar {
-    background: rgba(255, 255, 255, 0.2);
-    border: 3px solid rgba(255, 255, 255, 0.4);
-    font-size: 32px;
-    font-weight: $font-weight-bold;
+    background: $primary-color;
+    border: 1px solid $primary-dark;
+    color: $bg-card;
+    font-family: $font-display;
+    font-size: $font-size-3xl;
+    font-weight: $font-weight-semibold;
   }
 
   .avatar-badge {
@@ -256,32 +300,37 @@ onMounted(() => {
     width: 24px;
     height: 24px;
     border-radius: 50%;
-    background: $success-color;
-    border: 2px solid white;
+    background: $primary-dark;
+    border: 2px solid $bg-card;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
+    color: $bg-card;
     font-size: 12px;
   }
 }
 
 .user-display-name {
-  margin: 0 0 8px;
+  margin: 0 0 $spacing-sm;
+  font-family: $font-display;
   font-size: $font-size-xl;
   font-weight: $font-weight-semibold;
+  color: $text-primary;
 }
 
 .user-role-badge {
   display: inline-block;
-  padding: 4px 14px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: $radius-full;
+  padding: 2px 10px;
+  background: $bg-secondary;
+  border: 1px solid $border-color;
+  border-radius: $radius-xs;
+  color: $text-secondary;
   font-size: $font-size-xs;
+  letter-spacing: 0.08em;
 }
 
 .user-card-body {
-  padding: 20px 24px;
+  padding: $spacing-lg $spacing-xl;
 }
 
 .info-item {
@@ -329,34 +378,42 @@ onMounted(() => {
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 24px;
+  gap: $spacing-lg;
+  margin-bottom: $spacing-2xl;
 }
 
 .stat-card {
-  background: white;
+  background: $bg-card;
+  border: 1px solid $border-color;
   border-radius: $radius-lg;
-  padding: 20px;
+  padding: $spacing-xl;
   display: flex;
   align-items: center;
-  gap: 16px;
-  box-shadow: $shadow-card;
-  transition: all $transition-base;
+  gap: $spacing-lg;
+  box-shadow: $shadow-sm;
+  transition: border-color $transition-fast, box-shadow $transition-fast;
 
   &:hover {
-    box-shadow: $shadow-card-hover;
-    transform: translateY(-2px);
+    border-color: $border-color;
+    box-shadow: $shadow-sm;
   }
 
   .stat-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: $radius-lg;
+    width: 44px;
+    height: 44px;
+    border-radius: $radius-md;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 24px;
+    font-size: 20px;
     flex-shrink: 0;
+    margin-bottom: 0;
+    background: $bg-secondary;
+    color: $primary-color;
+
+    &.accent {
+      color: $accent-color;
+    }
   }
 
   .stat-info {
@@ -364,26 +421,32 @@ onMounted(() => {
     flex-direction: column;
 
     .stat-value {
+      font-family: $font-display;
       font-size: $font-size-3xl;
-      font-weight: $font-weight-bold;
+      font-weight: $font-weight-semibold;
       color: $text-primary;
-      line-height: 1;
+      line-height: 1.1;
+      margin-bottom: 0;
+      font-variant-numeric: tabular-nums;
     }
 
     .stat-label {
       font-size: $font-size-xs;
       color: $text-secondary;
-      margin-top: 4px;
+      margin-top: $spacing-xs;
+      letter-spacing: 0.06em;
     }
   }
 }
 
 .activity-card {
-  border-radius: $radius-xl;
-  box-shadow: $shadow-card;
-
   :deep(.el-card__header) {
-    padding: 20px 24px;
+    padding: $spacing-lg $spacing-xl;
+    border-bottom: 1px solid $border-light;
+  }
+
+  :deep(.el-card__body) {
+    padding: $spacing-xl;
   }
 }
 
@@ -391,8 +454,10 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  font-family: $font-display;
   font-size: $font-size-lg;
   font-weight: $font-weight-semibold;
+  color: $text-primary;
 }
 
 .empty-state {
@@ -451,13 +516,17 @@ onMounted(() => {
   }
 }
 
-@media (max-width: $breakpoint-sm) {
+@media (max-width: $breakpoint-md) {
   .profile-page {
-    padding: 16px;
+    padding: $spacing-lg;
   }
 
   .stats-grid {
     grid-template-columns: 1fr;
+  }
+
+  .activity-item {
+    flex-wrap: wrap;
   }
 }
 </style>

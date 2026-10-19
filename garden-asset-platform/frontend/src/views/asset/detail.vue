@@ -1,5 +1,14 @@
 <template>
   <div class="asset-detail-container">
+    <header class="page-bar">
+      <router-link to="/assets" class="page-back">
+        <el-icon><ArrowLeft /></el-icon>
+        返回资产档案
+      </router-link>
+      <h1 class="page-title">资产详情</h1>
+      <span v-if="asset.asset_code" class="page-meta">{{ asset.asset_code }}</span>
+    </header>
+
     <!-- 加载骨架屏 -->
     <el-skeleton :loading="loading" animated>
       <template #template>
@@ -165,7 +174,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Document } from '@element-plus/icons-vue'
+import { ArrowLeft, Document } from '@element-plus/icons-vue'
 import { assetApi, watermarkApi, blockchainApi } from '@/api/modules'
 
 const route = useRoute()
@@ -280,15 +289,78 @@ onMounted(() => {
 @use '@/assets/styles/variables.scss' as *;
 
 .asset-detail-container {
-  padding: $spacing-lg;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: $spacing-2xl $spacing-3xl;
   min-height: 100vh;
   background: $bg-primary;
+
+  :deep(.el-card__header) {
+    padding: $spacing-lg $spacing-xl;
+    border-bottom: 1px solid $border-light;
+    font-family: $font-display;
+    font-weight: $font-weight-semibold;
+  }
+
+  :deep(.el-card__body) {
+    padding: $spacing-xl;
+  }
+
+  :deep(.el-card__header .status-tag) {
+    font-family: $font-family;
+    font-weight: $font-weight-medium;
+  }
+}
+
+// ========== 页眉 ==========
+.page-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: $spacing-md;
+  padding-bottom: $spacing-md;
+  margin-bottom: $spacing-xl;
+  border-bottom: 1px solid $border-light;
+}
+
+.page-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: $font-size-sm;
+  color: $text-secondary;
+  transition: color $transition-fast;
+
+  &:hover {
+    color: $primary-dark;
+  }
+}
+
+.page-title {
+  font-family: $font-display;
+  font-size: 23px;
+  font-weight: $font-weight-semibold;
+  line-height: $line-height-tight;
+  letter-spacing: 0.02em;
+  color: $text-primary;
+}
+
+.page-meta {
+  margin-left: auto;
+  font-family: $font-mono;
+  font-size: $font-size-xs;
+  letter-spacing: 0.08em;
+  color: $text-placeholder;
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: $spacing-md;
+  font-family: $font-display;
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
 }
 
 .preview-area {
@@ -298,6 +370,7 @@ onMounted(() => {
   justify-content: center;
   align-items: center;
   background: $bg-secondary;
+  border: 1px solid $border-light;
   margin-bottom: $spacing-lg;
   border-radius: $radius-md;
   gap: $spacing-md;
@@ -319,7 +392,7 @@ onMounted(() => {
 }
 
 .status-card {
-  margin-bottom: $spacing-lg;
+  margin-bottom: $spacing-xl;
 }
 
 .status-item {
@@ -343,8 +416,9 @@ onMounted(() => {
   }
 
   .mono {
-    font-family: 'Courier New', monospace;
+    font-family: $font-mono;
     font-size: $font-size-xs;
+    letter-spacing: 0.02em;
   }
 }
 
@@ -355,9 +429,17 @@ onMounted(() => {
   justify-content: center;
 }
 
-@media (max-width: $breakpoint-sm) {
+@media (max-width: $breakpoint-md) {
   .asset-detail-container {
-    padding: $spacing-md;
+    padding: $spacing-lg;
+
+    :deep(.el-descriptions) {
+      overflow-x: auto;
+    }
+  }
+
+  .page-meta {
+    margin-left: 0;
   }
 
   .preview-area {
@@ -365,7 +447,7 @@ onMounted(() => {
   }
 
   .status-item .value {
-    max-width: 120px;
+    max-width: 140px;
   }
 }
 </style>

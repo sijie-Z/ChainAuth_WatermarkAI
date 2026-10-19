@@ -36,7 +36,7 @@
         <circle cx="180" cy="180" r="158" stroke="rgba(252,253,251,.1)" stroke-dasharray="2 8" />
       </svg>
 
-      <p class="aside-foot">苏州大学 · 挑战杯项目</p>
+      <p class="aside-foot">苏州大学 · 数字资产档案</p>
     </aside>
 
     <!-- 右侧：注册表单 -->

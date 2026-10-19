@@ -66,5 +66,5 @@ export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 export const APP_INFO = {
   title: '苏州园林数字资产平台',
   description: '基于数字水印和AI推理的苏州园林数字资产安全分发与溯源系统',
-  copyright: '© 2026 挑战杯项目团队'
+  copyright: '© 2026 苏州园林数字资产平台团队'
 }
