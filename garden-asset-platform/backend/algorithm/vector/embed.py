@@ -247,6 +247,10 @@ def embed_vector_watermark(shpfile_path, watermark_path, output_folder, garden_c
     watermarked_shpfile = original_shpfile.copy()
     watermarked_shpfile = traversal_coor_group(coor_nested, feature_type, watermarked_shpfile, argument)
 
+    # 把水印 ID 写入属性列，供溯源时直接读取（几何水印仍是鲁棒性来源）
+    # DBF 字段名最多 10 个字符，使用短名避免被截断
+    watermarked_shpfile['wm_id'] = watermark_id
+
     # 计算验证值
     coor_nested, feature_type = get_coor_nested(watermarked_shpfile)
     coor_array = get_coor_array(coor_nested, feature_type)

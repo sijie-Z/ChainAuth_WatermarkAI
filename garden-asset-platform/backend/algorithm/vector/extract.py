@@ -210,6 +210,11 @@ def extract_vector_watermark(watermarked_shpfile_path, vr, output_folder):
     # 数据读取
     watermarked_shpfile = gpd.read_file(watermarked_shpfile_path)
 
+    # 嵌入时写入的属性列可直接用于溯源（DBF 字段名上限 10 字符）
+    watermark_id = None
+    if 'wm_id' in watermarked_shpfile.columns and len(watermarked_shpfile) > 0:
+        watermark_id = str(watermarked_shpfile['wm_id'].iloc[0])
+
     # 数据预处理
     watermarked_coor_nested, feature_type = get_coor_nested(watermarked_shpfile)
     coor_array = get_coor_array(watermarked_coor_nested, feature_type)
@@ -250,6 +255,7 @@ def extract_vector_watermark(watermarked_shpfile_path, vr, output_folder):
     logger.info(f"水印保存: {output_watermark_path}")
 
     return {
+        'watermark_id': watermark_id,
         'original_shp_path': output_shapefile_path,
         'watermark_path': output_watermark_path,
         'watermark_array': watermark

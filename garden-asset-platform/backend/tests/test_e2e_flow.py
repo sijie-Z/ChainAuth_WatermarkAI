@@ -60,6 +60,8 @@ def test_vector_watermark_roundtrip(tmp_path):
     )
     assert (tmp_path / 'extract' / 'watermark').exists()
     assert with_vr['watermark_path']
+    # 属性列 wm_id 供溯源读取（DBF 字段名上限 10 字符）
+    assert with_vr['watermark_id'] == embed_result['watermark_id']
 
     # 溯源场景没有 vr，也不能抛异常
     without_vr = extract_vector_watermark(
@@ -100,6 +102,23 @@ def test_document_asset_flow(client, auth_header, admin_header):
     )
     assert watermark.status_code == 400
     assert '不支持' in watermark.get_json()['message']
+
+
+def test_ai_endpoints_return_503_when_disabled(client, auth_header, sample_asset):
+    """未安装模型时 AI 能力应返回 503，而不是 500"""
+    response = client.post(
+        '/api/ai/analyze', headers=auth_header, json={'asset_id': sample_asset}
+    )
+    assert response.status_code == 503
+    assert '未启用' in response.get_json()['message']
+
+    response = client.post(
+        '/api/ai/chat', headers=auth_header, json={'question': '平台怎么用'}
+    )
+    assert response.status_code == 503
+
+    assert client.post('/api/ai/search', headers=auth_header).status_code == 503
+    assert client.post('/api/ai/infringement', headers=auth_header).status_code == 503
 
 
 def test_upload_sets_uploader_id(client, auth_header):

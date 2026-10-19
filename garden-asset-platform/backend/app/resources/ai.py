@@ -9,12 +9,23 @@ from app.models.asset import Asset
 from app.services.ai_service import ai_service
 
 
+def ai_unavailable():
+    """AI 未配置时统一返回 503，避免把能力缺失误报成服务器错误"""
+    if not getattr(ai_service, 'enabled', False):
+        return {'code': 503, 'message': 'AI 服务未启用，请配置模型与 API Key'}, 503
+    return None
+
+
 class AIAnalyzeResource(Resource):
     """AI分析"""
 
     @jwt_required()
     def post(self):
         """分析资产"""
+        unavailable = ai_unavailable()
+        if unavailable:
+            return unavailable
+
         user_id = get_jwt_identity()
         data = request.get_json()
         asset_id = data.get('asset_id')
@@ -44,6 +55,10 @@ class AISearchResource(Resource):
     @jwt_required()
     def post(self):
         """搜索相似图像"""
+        unavailable = ai_unavailable()
+        if unavailable:
+            return unavailable
+
         if 'file' not in request.files:
             return {'code': 400, 'message': '未上传文件'}, 400
 
@@ -78,6 +93,10 @@ class AIInfringementResource(Resource):
     @jwt_required()
     def post(self):
         """检测侵权"""
+        unavailable = ai_unavailable()
+        if unavailable:
+            return unavailable
+
         if 'file' not in request.files:
             return {'code': 400, 'message': '未上传文件'}, 400
 
@@ -109,6 +128,10 @@ class AIChatResource(Resource):
     @jwt_required()
     def post(self):
         """智能问答"""
+        unavailable = ai_unavailable()
+        if unavailable:
+            return unavailable
+
         data = request.get_json()
         question = data.get('question')
         context = data.get('context', {})
