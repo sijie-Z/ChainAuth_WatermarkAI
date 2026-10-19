@@ -1,0 +1,33 @@
+name: Welcome
+
+on:
+  issues:
+    types: [opened]
+  pull_request_target:
+    types: [opened]
+
+# 只发表欢迎评论，不检出代码，pull_request_target 在此是安全的
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  greeting:
+    name: greeting
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Greet first-time contributors
+        uses: actions/first-interaction@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          issue-message: |
+            欢迎，感谢你的反馈！🎉
+            请确认已阅读 [CONTRIBUTING.md](../blob/develop/CONTRIBUTING.md)；
+            安全漏洞请勿公开提交，见 SECURITY.md。
+          pr-message: |
+            感谢贡献！🎉
+            请确认：
+            - PR 标题符合 Conventional Commits（例如 `feat(watermark): ...`）
+            - 目标分支正确：功能 → `develop`；发布/热修 → `main`
+            - 已跑过本地测试，且 CI 全绿

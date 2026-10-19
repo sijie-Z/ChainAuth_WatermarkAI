@@ -1,0 +1,52 @@
+name: Docker Build
+
+on:
+  pull_request:
+    paths:
+      - "garden-asset-platform/**/Dockerfile"
+      - "garden-asset-platform/**/.dockerignore"
+      - "garden-asset-platform/docker-compose.yml"
+      - ".github/workflows/docker-build.yml"
+  push:
+    branches: [develop]
+    paths:
+      - "garden-asset-platform/**/Dockerfile"
+      - "garden-asset-platform/**/.dockerignore"
+      - "garden-asset-platform/docker-compose.yml"
+      - ".github/workflows/docker-build.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build (${{ matrix.image }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: backend
+            context: garden-asset-platform/backend
+          - image: frontend
+            context: garden-asset-platform/frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.context }}
+          push: false
+          tags: garden-asset-platform-${{ matrix.image }}:ci
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}

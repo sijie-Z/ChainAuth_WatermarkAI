@@ -1,0 +1,8 @@
+name: "CodeQL 配置"
+paths-ignore:
+  - "garden-asset-platform/frontend/node_modules"
+  - "garden-asset-platform/frontend/dist"
+  - "**/*.min.js"
+  - "**/*.min.css"
+queries:
+  - uses: security-and-quality

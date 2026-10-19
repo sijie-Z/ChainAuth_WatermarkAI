@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     gdal-bin \
     libgdal-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制依赖文件

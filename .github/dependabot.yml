@@ -1,0 +1,102 @@
+# Dependabot：每周自动检查依赖更新
+# 文档: https://docs.github.com/code-security/dependabot/dependabot-options-reference
+version: 2
+
+updates:
+  # ---------- Python (Flask 后端) ----------
+  - package-ecosystem: "pip"
+    directory: "/garden-asset-platform/backend"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "backend"]
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      backend-patch:
+        patterns: ["*"]
+        update-types: ["patch"]
+      backend-minor:
+        patterns: ["*"]
+        update-types: ["minor"]
+
+  # ---------- npm (Vue 前端) ----------
+  - package-ecosystem: "npm"
+    directory: "/garden-asset-platform/frontend"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "frontend"]
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      frontend-patch:
+        patterns: ["*"]
+        update-types: ["patch"]
+      frontend-minor:
+        patterns: ["*"]
+        update-types: ["minor"]
+
+  # ---------- GitHub Actions ----------
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 3
+    labels: ["dependencies", "ci"]
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      actions-all:
+        patterns: ["*"]
+
+  # ---------- Docker ----------
+  - package-ecosystem: "docker"
+    directory: "/garden-asset-platform"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    labels: ["dependencies", "docker"]
+    commit-message:
+      prefix: "chore(docker)"
+
+  - package-ecosystem: "docker"
+    directory: "/garden-asset-platform/backend"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    labels: ["dependencies", "docker", "backend"]
+    commit-message:
+      prefix: "chore(docker)"
+
+  - package-ecosystem: "docker"
+    directory: "/garden-asset-platform/frontend"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    labels: ["dependencies", "docker", "frontend"]
+    commit-message:
+      prefix: "chore(docker)"

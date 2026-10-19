@@ -1,0 +1,30 @@
+#!/bin/sh
+# Conventional Commits 校验（本地钩子）
+# 规范: https://www.conventionalcommits.org/zh-hans/
+msg_file="$1"
+first_line=$(sed -n '1p' "$msg_file")
+
+# 允许的例外：合并、回滚、rebase 自动生成的消息
+case "$first_line" in
+  "Merge "*|"Revert "*|"fixup! "*|"squash! "*|"Initial commit"*)
+    exit 0
+    ;;
+esac
+
+if ! printf '%s\n' "$first_line" | grep -Eq '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-zA-Z0-9._/-]+\))?(!)?: .+'; then
+  echo "" >&2
+  echo "❌ commit-msg: 提交标题不符合 Conventional Commits 规范" >&2
+  echo "" >&2
+  echo "   正确示例:" >&2
+  echo "     feat(watermark): 支持抗裁剪的 DCT 嵌入" >&2
+  echo "     fix(auth): 修复刷新令牌过期判断" >&2
+  echo "     ci: 增加后端测试覆盖率上报" >&2
+  echo "" >&2
+  echo "   允许类型: feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert" >&2
+  echo "   允许的例外: Merge / Revert / fixup! / squash! 开头的消息" >&2
+  echo "" >&2
+  echo "   当前标题: $first_line" >&2
+  exit 1
+fi
+
+exit 0

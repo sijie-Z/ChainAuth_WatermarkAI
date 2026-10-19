@@ -48,6 +48,7 @@ declare module 'vue' {
     ElTag: typeof import('element-plus/es')['ElTag']
     ElUpload: typeof import('element-plus/es')['ElUpload']
     EmptyState: typeof import('./components/common/EmptyState.vue')['default']
+    ErrorBoundary: typeof import('./components/common/ErrorBoundary.vue')['default']
     LoadingWrapper: typeof import('./components/common/LoadingWrapper.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']

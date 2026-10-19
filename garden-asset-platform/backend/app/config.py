@@ -77,6 +77,7 @@ class Config:
     CORS_ORIGINS = os.environ.get('CORS_ORIGINS', '*')
 
     # 限流配置
+    RATELIMIT_ENABLED = os.environ.get('RATELIMIT_ENABLED', 'true').lower() == 'true'
     RATELIMIT_LOGIN = int(os.environ.get('RATELIMIT_LOGIN', '5'))
     RATELIMIT_LOGIN_WINDOW = int(os.environ.get('RATELIMIT_LOGIN_WINDOW', '60'))
     RATELIMIT_REGISTER = int(os.environ.get('RATELIMIT_REGISTER', '3'))
@@ -102,6 +103,11 @@ class TestingConfig(Config):
     """测试环境配置"""
     TESTING = True
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
+    # 测试使用固定密钥，保证 JWT 可签发；生产环境仍要求显式配置
+    SECRET_KEY = 'testing-secret-key-not-for-production'
+    JWT_SECRET_KEY = 'testing-jwt-secret-key-not-for-production'
+    # 测试之间共享进程内存，限流会串扰；限流本身不在这里验证
+    RATELIMIT_ENABLED = False
 
 
 config = {

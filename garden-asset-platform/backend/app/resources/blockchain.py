@@ -151,7 +151,7 @@ class BlockchainHistoryResource(Resource):
         else:
             # 获取所有存证记录
             from app.models.blockchain import Certificate
-            certificates = Certificate.query.order_by(Certificate.confirmed_at.desc()).limit(50).all()
+            certificates = Certificate.query.order_by(Certificate.created_at.desc()).limit(50).all()
 
             result = []
             for cert in certificates:
@@ -163,7 +163,8 @@ class BlockchainHistoryResource(Resource):
                     'asset_title': asset.title if asset else None,
                     'tx_hash': cert.tx_hash,
                     'block_number': cert.block_number,
-                    'confirmed_at': cert.confirmed_at.isoformat() if cert.confirmed_at else None
+                    # 兼容旧字段名：证书创建即确认时间
+                    'confirmed_at': cert.created_at.isoformat() if cert.created_at else None
                 })
 
             return {'code': 200, 'data': result}, 200

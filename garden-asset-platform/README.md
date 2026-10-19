@@ -45,7 +45,7 @@
 
 ### 环境要求
 
-- Python 3.10+ / Node.js 18+
+- Python 3.11+ / Node.js 22+
 - Docker & Docker Compose（推荐）
 
 ### Docker 一键部署

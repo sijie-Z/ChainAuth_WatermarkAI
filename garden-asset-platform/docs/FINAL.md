@@ -220,7 +220,7 @@ CELERY_ENABLED = False        # 异步任务
 ### 生产环境要求
 - Ubuntu 20.04+ / CentOS 7+
 - Python 3.11+
-- Node.js 18+
+- Node.js 22+
 - PostgreSQL 14+
 - Redis 6+
 - Nginx 1.20+

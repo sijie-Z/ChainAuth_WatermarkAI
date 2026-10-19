@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+# 最小权限：只读仓库内容
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: garden-asset-platform/backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            garden-asset-platform/backend/requirements.txt
+            garden-asset-platform/backend/requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Static checks (syntax + undefined names)
+        run: |
+          python -m compileall -q app algorithm
+          ruff check app algorithm --select E9,F63,F7,F82 --output-format=github
+
+      - name: Run backend tests
+        run: python -m pytest --cov=app --cov-report=xml --cov-report=term-missing --cov-fail-under=43
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-coverage
+          path: garden-asset-platform/backend/coverage.xml
+          if-no-files-found: ignore
+          retention-days: 7
+
+  frontend:
+    name: frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: garden-asset-platform/frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: garden-asset-platform/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (non-mutating)
+        run: npm run lint:check
+
+      - name: Build
+        run: npm run build
+
+  ci-pass:
+    name: ci-pass
+    needs: [backend, frontend]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Aggregate results
+        env:
+          BACKEND: ${{ needs.backend.result }}
+          FRONTEND: ${{ needs.frontend.result }}
+        run: |
+          echo "backend=$BACKEND frontend=$FRONTEND"
+          if [ "$BACKEND" != "success" ] || [ "$FRONTEND" != "success" ]; then
+            echo "::error::CI 未全部通过（backend=$BACKEND, frontend=$FRONTEND）"
+            exit 1
+          fi
+          echo "✅ CI 全部通过"
