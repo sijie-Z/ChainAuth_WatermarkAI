@@ -363,6 +363,7 @@ class AssetUploadResource(Resource):
             storage_path=file_path,
             garden_id=garden_id,
             creator_id=user_id,
+            uploader_id=user_id,
             owner_id=user_id,
             status='draft'
         )
@@ -444,7 +445,8 @@ class AssetDownloadResource(Resource):
         from flask import send_file as flask_send_file
 
         # 优先返回嵌入水印后的文件，否则返回原始文件
-        file_path = asset.watermarked_path or asset.storage_path
+        # send_file 以 app.root_path 为基准解析相对路径，这里统一转成绝对路径
+        file_path = os.path.abspath(asset.watermarked_path or asset.storage_path or '')
         if not file_path or not os.path.exists(file_path):
             return {'code': 404, 'message': '文件不存在'}, 404
 

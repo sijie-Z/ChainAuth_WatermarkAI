@@ -156,6 +156,7 @@ git push -u origin hotfix/1.5.1
 | 代码审查 | CodeRabbit | 自动 AI 审查（`.coderabbit.yaml`） |
 
 > 本地先跑测试再推送：`cd garden-asset-platform/backend && python -m pytest`；前端 `cd garden-asset-platform/frontend && npm run lint:check && npm run test:ci && npm run build`。
+> 端到端业务流程：先启动后端并初始化数据库，然后在 `garden-asset-platform/` 下执行 `make e2e`（脚本：`backend/scripts/e2e_flow.py`）。
 
 ## 8. 代码组织约定
 

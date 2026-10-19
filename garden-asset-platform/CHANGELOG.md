@@ -8,7 +8,14 @@
 - **机器人**：Dependabot（目标 `develop`，patch/minor 自动合并）、CodeRabbit、labeler、stale、welcome、Release Drafter、`main → develop` 自动回合并
 - **视觉体系 v2「青绿山水 · 档案册」**：黛青/宣纸/墨/印章朱砂令牌，宋体标题 + 等宽数据字体；重做首页、登录、注册、后台壳、仪表盘、资产目录、证书、溯源与错误页
 - **前端测试基座**：Vitest + @vue/test-utils + jsdom，覆盖工具函数、状态组件与用户 store，并接入 CI
-- **后端安全回归**：新增限流 429、安全响应头、健康检查用例（后端共 67 个用例）
+- **后端安全回归**：新增限流 429、安全响应头、健康检查用例（后端共 70 个用例）
+- **端到端验证**：新增 `scripts/e2e_flow.py`，覆盖注册 → 上传 → 发布审核 → 水印 → 上链 → 证书 → 双审批 → 下载 → 溯源，全部跑通
+
+### Fixed
+- **栅格水印算法**：水印 ID 从未真正嵌入；DCT 嵌入未强制系数符号导致 NC 仅 0.57；彩色图被转灰度。现改为 ID + 水印图联合嵌入、按容量动态缩放、强制符号位，彩色图保留颜色（实测 NC 0.99、PSNR 约 35 dB）
+- **授权审批**：上传资产未写 `uploader_id` 导致创建授权时 500；adm1 看不到未分配申请、adm2 看不到一级已通过的申请
+- **资产下载**：`send_file` 以 app.root_path 解析相对路径导致 500；现统一使用绝对路径
+- **溯源接口**：引用不存在的 `Certificate.confirmed_at` 导致 500
 - **工程文档**：`docs/GIT-FLOW.md`、`docs/CI-CHARTER.md`、`docs/UI-DESIGN.md`、`docs/REFERENCE-NOTES.md`
 
 ### Fixed

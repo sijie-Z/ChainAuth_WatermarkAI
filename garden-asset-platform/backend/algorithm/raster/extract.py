@@ -8,11 +8,18 @@ import numpy as np
 from PIL import Image
 import cv2
 
+from algorithm.raster.embed import (
+    DEFAULT_ALPHA,
+    ID_BITS,
+    bits_to_id,
+    payload_geometry,
+)
+
 
 logger = logging.getLogger(__name__)
 
 
-def dct_extract(image_array, watermark_length, alpha=0.1):
+def dct_extract(image_array, watermark_length, alpha=DEFAULT_ALPHA):
     """
     DCT域水印提取
 
@@ -25,10 +32,16 @@ def dct_extract(image_array, watermark_length, alpha=0.1):
         提取的水印比特序列
     """
     block_size = 8
-    height, width = image_array.shape[:2]
-    height = height // block_size * block_size
-    width = width // block_size * block_size
-    image_array = image_array[:height, :width]
+    original_height, original_width = image_array.shape[:2]
+    height = ((original_height + block_size - 1) // block_size) * block_size
+    width = ((original_width + block_size - 1) // block_size) * block_size
+    if height != original_height or width != original_width:
+        image_array = cv2.copyMakeBorder(
+            image_array,
+            0, height - original_height,
+            0, width - original_width,
+            cv2.BORDER_REFLECT_101
+        )
 
     # 嵌入位置
     embed_positions = [(3, 3), (4, 4), (5, 5)]
@@ -129,36 +142,46 @@ def extract_raster_watermark(watermarked_path, original_watermark_path, output_f
     """
     logger.info(f"开始栅格水印提取, 方法: {method}")
 
-    # 读取含水印图像
+    # 读取原始水印用于计算 NC（按实际嵌入尺寸缩放）
     watermarked_image = Image.open(watermarked_path)
     if watermarked_image.mode != 'L':
         image_array = np.array(watermarked_image.convert('L'))
     else:
         image_array = np.array(watermarked_image)
 
-    # 读取原始水印获取尺寸
-    original_watermark = np.array(Image.open(original_watermark_path).convert('L'))
-    watermark_shape = original_watermark.shape
-    watermark_length = watermark_shape[0] * watermark_shape[1]
+    height, width = image_array.shape[:2]
+    watermark_side, capacity = payload_geometry(height, width)
+    total_bits = ID_BITS + watermark_side * watermark_side
 
-    logger.info(f"水印尺寸: {watermark_shape}, 长度: {watermark_length}")
+    logger.info(
+        f"图像 {width}x{height}, 容量 {capacity} bit, "
+        f"水印 {watermark_side}x{watermark_side}, 读取 {total_bits} bit"
+    )
 
-    # 提取水印
+    # 提取比特：前 ID_BITS 位是水印 ID，其余是水印图像
     if method == 'dct':
-        watermark_bits = dct_extract(image_array, watermark_length)
+        bits = dct_extract(image_array, total_bits)
     else:
-        watermark_bits = lsb_extract(image_array, watermark_length)
+        bits = lsb_extract(image_array, total_bits)
 
-    # 转换为图像
-    extracted_watermark = bits_to_watermark(watermark_bits, watermark_shape)
+    watermark_id = bits_to_id(bits[:ID_BITS])
+    extracted_watermark = bits_to_watermark(
+        bits[ID_BITS:ID_BITS + watermark_side * watermark_side],
+        (watermark_side, watermark_side)
+    )
 
-    # 计算NC值
+    # 计算 NC 值
     from algorithm.utils.nc import NC
+    original_watermark = np.array(
+        Image.open(original_watermark_path).convert('L').resize(
+            (watermark_side, watermark_side), Image.LANCZOS
+        )
+    )
     original_binary = (original_watermark > 127).astype(np.uint8)
     extracted_binary = (extracted_watermark > 127).astype(np.uint8)
     nc_value = NC(original_binary, extracted_binary)
 
-    logger.info(f"NC值: {nc_value:.4f}")
+    logger.info(f"NC值: {nc_value:.4f}, 水印ID: {watermark_id}")
 
     # 保存结果
     os.makedirs(output_folder, exist_ok=True)
@@ -171,8 +194,9 @@ def extract_raster_watermark(watermarked_path, original_watermark_path, output_f
     logger.info(f"水印提取完成, 输出: {output_path}")
 
     return {
+        'watermark_id': watermark_id,
         'extracted_watermark_path': output_path,
         'nc_value': nc_value,
-        'watermark_shape': watermark_shape,
+        'watermark_shape': (watermark_side, watermark_side),
         'method': method
     }

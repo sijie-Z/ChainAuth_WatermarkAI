@@ -173,7 +173,7 @@ class WatermarkTraceResource(Resource):
                             'nc_value': result.get('nc_value', 0),
                             'certificate_id': certificate.certificate_id if certificate else None,
                             'tx_hash': certificate.tx_hash if certificate else None,
-                            'confirmed_at': certificate.confirmed_at.isoformat() if certificate and certificate.confirmed_at else None
+                            'confirmed_at': certificate.created_at.isoformat() if certificate and certificate.created_at else None
                         }
                     }, 200
                 else:

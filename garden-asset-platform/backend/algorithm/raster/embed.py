@@ -13,6 +13,68 @@ import cv2
 
 logger = logging.getLogger(__name__)
 
+# 水印 ID 固定占 48 字节（384 bit），不足补零，便于提取端按固定长度读取
+ID_FIELD_BYTES = 48
+ID_BITS = ID_FIELD_BYTES * 8
+DEFAULT_ALPHA = 12.0
+
+
+def id_to_bits(watermark_id):
+    """把水印 ID 编码为固定长度的比特序列"""
+    payload = watermark_id.encode('utf-8')[:ID_FIELD_BYTES].ljust(ID_FIELD_BYTES, b'\x00')
+    bits = []
+    for byte in payload:
+        for shift in range(7, -1, -1):
+            bits.append((byte >> shift) & 1)
+    return bits
+
+
+def bits_to_id(bits):
+    """从固定长度的比特序列还原水印 ID"""
+    if len(bits) < ID_BITS:
+        return None
+
+    payload = bytearray()
+    for i in range(0, ID_BITS, 8):
+        byte = 0
+        for bit in bits[i:i + 8]:
+            byte = (byte << 1) | int(bit)
+        payload.append(byte)
+
+    try:
+        return payload.rstrip(b'\x00').decode('utf-8')
+    except UnicodeDecodeError:
+        return None
+
+
+def payload_geometry(height, width):
+    """
+    根据图像尺寸计算可嵌入的水印边长。
+
+    DCT 每 8x8 块使用 3 个中频系数，容量为块数 * 3；
+    其中前 ID_BITS 位固定留给水印 ID，剩余容量给水印图像。
+    """
+    usable_height = ((height + 7) // 8) * 8
+    usable_width = ((width + 7) // 8) * 8
+    capacity = (usable_height // 8) * (usable_width // 8) * 3
+    available = capacity - ID_BITS
+
+    if available < 64:
+        raise ValueError('图像尺寸过小，无法嵌入水印')
+
+    side = max(8, min(int(np.sqrt(available)), 128))
+    return side, capacity
+
+
+def build_payload(watermark_path, height, width, watermark_id):
+    """构建待嵌入比特：水印 ID + 缩放后的水印图像"""
+    side, _ = payload_geometry(height, width)
+    watermark_image = Image.open(watermark_path).convert('L').resize(
+        (side, side), Image.LANCZOS
+    )
+    watermark_bits = watermark_to_bits(np.array(watermark_image))
+    return id_to_bits(watermark_id) + watermark_bits, side
+
 
 def generate_watermark_id(garden_code, asset_type_code='IMG'):
     """生成水印ID"""
@@ -21,7 +83,7 @@ def generate_watermark_id(garden_code, asset_type_code='IMG'):
     return f"{garden_code}-{asset_type_code}-{timestamp}-{checksum}"
 
 
-def dct_embed(image_array, watermark_bits, alpha=0.1):
+def dct_embed(image_array, watermark_bits, alpha=DEFAULT_ALPHA):
     """
     DCT域水印嵌入
 
@@ -36,13 +98,17 @@ def dct_embed(image_array, watermark_bits, alpha=0.1):
     # 分块大小
     block_size = 8
 
-    # 获取图像尺寸
-    height, width = image_array.shape[:2]
-
-    # 确保图像尺寸是block_size的整数倍
-    height = height // block_size * block_size
-    width = width // block_size * block_size
-    image_array = image_array[:height, :width]
+    # 获取图像尺寸；不足 8 的倍数时反射填充，嵌入后再裁回原尺寸
+    original_height, original_width = image_array.shape[:2]
+    height = ((original_height + block_size - 1) // block_size) * block_size
+    width = ((original_width + block_size - 1) // block_size) * block_size
+    if height != original_height or width != original_width:
+        image_array = cv2.copyMakeBorder(
+            image_array,
+            0, height - original_height,
+            0, width - original_width,
+            cv2.BORDER_REFLECT_101
+        )
 
     # 嵌入位置 (中频系数)
     embed_positions = [(3, 3), (4, 4), (5, 5)]
@@ -63,21 +129,22 @@ def dct_embed(image_array, watermark_bits, alpha=0.1):
             # DCT变换
             dct_block = cv2.dct(block.astype(np.float32))
 
-            # 嵌入水印
+            # 嵌入水印：强制系数的符号，提取端才能稳定地按符号还原比特
             for pos in embed_positions:
                 if watermark_idx >= len(watermark_bits):
                     break
                 x, y = pos
+                value = dct_block[x, y]
                 if watermark_bits[watermark_idx] == 1:
-                    dct_block[x, y] += alpha
+                    dct_block[x, y] = abs(value) + alpha
                 else:
-                    dct_block[x, y] -= alpha
+                    dct_block[x, y] = -abs(value) - alpha
                 watermark_idx += 1
 
             # IDCT变换
             result[i:i+block_size, j:j+block_size] = cv2.idct(dct_block)
 
-    return result
+    return result[:original_height, :original_width]
 
 
 def lsb_embed(image_array, watermark_bits):
@@ -133,7 +200,7 @@ def watermark_to_bits(watermark_image):
     return binary.flatten().tolist()
 
 
-def embed_raster_watermark(image_path, watermark_path, output_folder, method='dct', garden_code='GEN', alpha=0.1):
+def embed_raster_watermark(image_path, watermark_path, output_folder, method='dct', garden_code='GEN', alpha=DEFAULT_ALPHA):
     """
     栅格图像水印嵌入主函数
 
@@ -162,11 +229,12 @@ def embed_raster_watermark(image_path, watermark_path, output_folder, method='dc
     else:
         image_array = np.array(original_image)
 
-    # 读取水印
-    watermark_image = np.array(Image.open(watermark_path).convert('L'))
-    watermark_bits = watermark_to_bits(watermark_image)
+    height, width = image_array.shape[:2]
+    watermark_bits, watermark_side = build_payload(
+        watermark_path, height, width, watermark_id
+    )
 
-    logger.info(f"水印比特数: {len(watermark_bits)}")
+    logger.info(f"水印边长: {watermark_side}, 总比特数: {len(watermark_bits)}")
 
     # 嵌入水印
     if method == 'dct':
@@ -200,7 +268,7 @@ def embed_raster_watermark(image_path, watermark_path, output_folder, method='dc
     }
 
 
-def embed_raster_watermark_color(image_path, watermark_path, output_folder, method='dct', garden_code='GEN', alpha=0.1):
+def embed_raster_watermark_color(image_path, watermark_path, output_folder, method='dct', garden_code='GEN', alpha=DEFAULT_ALPHA):
     """
     彩色图像水印嵌入
 
@@ -219,15 +287,18 @@ def embed_raster_watermark_color(image_path, watermark_path, output_folder, meth
 
     logger.info(f"开始彩色图像水印嵌入, 水印ID: {watermark_id}")
 
-    # 读取图像
-    original_image = Image.open(image_path)
+    # 读取图像，统一为 RGB 三通道，保留原始颜色
+    original_image = Image.open(image_path).convert('RGB')
     image_array = np.array(original_image)
+    height, width = image_array.shape[:2]
 
-    # 读取水印
-    watermark_image = np.array(Image.open(watermark_path).convert('L'))
-    watermark_bits = watermark_to_bits(watermark_image)
+    watermark_bits, watermark_side = build_payload(
+        watermark_path, height, width, watermark_id
+    )
 
-    # 对每个通道嵌入水印
+    logger.info(f"水印边长: {watermark_side}, 总比特数: {len(watermark_bits)}")
+
+    # 对每个通道嵌入相同的水印
     result = image_array.copy()
     psnr_values = []
 

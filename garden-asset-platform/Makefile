@@ -11,6 +11,7 @@ help:
 	@echo "  make test-frontend 运行前端 Vitest"
 	@echo "  make lint          前端 ESLint + 后端 ruff"
 	@echo "  make ci            本地复现 CI（lint + test + build）"
+	@echo "  make e2e           对运行中的后端跑端到端业务流程"
 	@echo "  make clean         清理临时文件"
 	@echo "  make docker-up     启动Docker容器"
 	@echo "  make docker-down   停止Docker容器"
@@ -44,6 +45,10 @@ lint:
 
 ci: lint test
 	cd frontend && npm run build
+
+# 端到端业务流程（需要先启动后端并初始化数据库）
+e2e:
+	cd backend && python scripts/e2e_flow.py
 
 # 清理临时文件
 clean:

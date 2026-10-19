@@ -24,15 +24,46 @@ class WatermarkService:
     """水印服务类"""
 
     @staticmethod
+    def _ensure_default_watermark(path):
+        """默认水印缺失时自动生成，保证全新环境开箱可用。"""
+        if os.path.exists(path):
+            return path
+
+        try:
+            from PIL import Image, ImageDraw, ImageFont
+
+            os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
+            img = Image.new('RGBA', (128, 128), (255, 255, 255, 0))
+            draw = ImageDraw.Draw(img)
+            try:
+                font = ImageFont.truetype('arial.ttf', 22)
+            except Exception:
+                font = ImageFont.load_default()
+
+            text = 'SZGARDEN'
+            bbox = draw.textbbox((0, 0), text, font=font)
+            x = (128 - (bbox[2] - bbox[0])) // 2
+            y = (128 - (bbox[3] - bbox[1])) // 2
+            draw.text((x, y), text, fill=(128, 128, 128, 128), font=font)
+            img.save(path, 'PNG')
+            logger.info('已生成默认水印: %s', path)
+        except Exception as exc:
+            logger.warning('生成默认水印失败: %s', exc)
+
+        return path
+
+    @staticmethod
     def get_watermark_path():
-        """获取默认水印路径"""
+        """获取默认水印路径（缺失时自动生成）"""
         try:
             path = current_app.config.get('WATERMARK_DEFAULT_PATH')
             if path:
-                return path
+                return WatermarkService._ensure_default_watermark(path)
         except RuntimeError:
             pass
-        return os.path.join(os.getcwd(), 'data', 'watermark', 'default.png')
+
+        default_path = os.path.join(os.getcwd(), 'data', 'watermark', 'default.png')
+        return WatermarkService._ensure_default_watermark(default_path)
 
     @staticmethod
     def embed_watermark(asset, user=None, watermark_path=None):
@@ -94,20 +125,34 @@ class WatermarkService:
                     asset_type_code=asset_type_code
                 )
 
-                asset.watermarked_path = result['zip_file_path']
+                asset.watermarked_path = os.path.abspath(result['zip_file_path'])
                 asset.vr_value = str(result['vr'])  # 存储验证值
 
             elif asset.asset_type == 'image':
-                # 栅格图像水印嵌入
-                result = embed_raster_watermark(
-                    image_path=asset.storage_path,
-                    watermark_path=watermark_path,
-                    output_folder=output_folder,
-                    method='dct',
-                    garden_code=garden_code
-                )
+                # 栅格图像水印嵌入：彩色图保留颜色，灰度图走单通道
+                from PIL import Image as PILImage
 
-                asset.watermarked_path = result['watermarked_path']
+                with PILImage.open(asset.storage_path) as source:
+                    is_color = source.mode in ('RGB', 'RGBA')
+
+                if is_color:
+                    result = embed_raster_watermark_color(
+                        image_path=asset.storage_path,
+                        watermark_path=watermark_path,
+                        output_folder=output_folder,
+                        method='dct',
+                        garden_code=garden_code
+                    )
+                else:
+                    result = embed_raster_watermark(
+                        image_path=asset.storage_path,
+                        watermark_path=watermark_path,
+                        output_folder=output_folder,
+                        method='dct',
+                        garden_code=garden_code
+                    )
+
+                asset.watermarked_path = os.path.abspath(result['watermarked_path'])
 
             else:
                 return {

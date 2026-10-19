@@ -52,6 +52,20 @@ uploads/*
 !uploads/.gitkeep
 test_uploads/
 
+# 后端运行时生成物（相对 backend/ 目录）
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/test_uploads/
+backend/watermarks/
+backend/extracted/
+backend/logs/
+backend/data/watermark/*.png
+!backend/data/watermark/default.png
+!backend/data/watermark/.gitkeep
+backend/data/models/*
+!backend/data/models/.gitkeep
+backend/*.db
+
 # 临时文件
 tmp/
 temp/

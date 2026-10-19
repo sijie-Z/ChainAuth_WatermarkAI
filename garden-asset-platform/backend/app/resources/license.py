@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from flask import request
 from flask_restful import Resource
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from sqlalchemy import or_
 from app.extensions import db
 from app.models.license import License, LicenseApplication, LicenseContract
 from app.models.asset import Asset
@@ -82,11 +83,30 @@ class LicensePendingResource(Resource):
         if user.role not in ['admin', 'asset_admin', 'license_admin', 'adm1', 'adm2']:
             return {'code': 403, 'message': '无权限'}, 403
 
-        query = LicenseApplication.query.filter_by(status='pending')
+        # adm1 看尚未分配或分配给自己的一级审批；
+        # adm2 看一级已通过、尚未分配或分配给自己的二级审批。
+        query = LicenseApplication.query
 
-        # 如果是adm1角色，只能看分配给自己的
         if user.role == 'adm1':
-            query = query.filter_by(adm1_reviewer_id=current_user_id)
+            query = query.filter(
+                LicenseApplication.status == 'pending',
+                or_(
+                    LicenseApplication.adm1_reviewer_id == current_user_id,
+                    LicenseApplication.adm1_reviewer_id.is_(None),
+                ),
+            )
+        elif user.role == 'adm2':
+            query = query.filter(
+                LicenseApplication.status == 'adm1_approved',
+                or_(
+                    LicenseApplication.adm2_reviewer_id == current_user_id,
+                    LicenseApplication.adm2_reviewer_id.is_(None),
+                ),
+            )
+        else:
+            query = query.filter(
+                LicenseApplication.status.in_(['pending', 'adm1_approved'])
+            )
 
         applications = query.order_by(LicenseApplication.created_at.desc()).all()
 
@@ -154,7 +174,8 @@ class LicenseApproveResource(Resource):
         license = License(
             license_code=f"LIC-{datetime.now().strftime('%Y%m%d%H%M%S')}-{asset.asset_code[:4]}",
             asset_id=asset.id,
-            licensor_id=asset.uploader_id,
+            # 兼容历史数据：旧资产的 uploader_id 可能为空
+            licensor_id=asset.owner_id or asset.creator_id or asset.uploader_id,
             licensee_id=application.applicant_id,
             license_type=application.license_type,
             usage_scope=application.usage_scope,
