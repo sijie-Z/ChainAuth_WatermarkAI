@@ -13,31 +13,40 @@ import cv2
 
 logger = logging.getLogger(__name__)
 
-# 水印 ID 固定占 48 字节（384 bit），不足补零，便于提取端按固定长度读取
+# 水印 ID 固定占 48 字节（384 bit），不足补零；重复 3 份做多数表决
 ID_FIELD_BYTES = 48
 ID_BITS = ID_FIELD_BYTES * 8
-DEFAULT_ALPHA = 12.0
+ID_REPEAT = 5
+ID_TOTAL_BITS = ID_BITS * ID_REPEAT
+DEFAULT_ALPHA = 32.0
+# 低频系数在 JPEG 量化表中步长更小，鲁棒性更好
+EMBED_POSITIONS = [(1, 1), (1, 2), (2, 1)]
 
 
 def id_to_bits(watermark_id):
-    """把水印 ID 编码为固定长度的比特序列"""
+    """把水印 ID 编码为固定长度的比特序列（重复 3 份）"""
     payload = watermark_id.encode('utf-8')[:ID_FIELD_BYTES].ljust(ID_FIELD_BYTES, b'\x00')
     bits = []
     for byte in payload:
         for shift in range(7, -1, -1):
             bits.append((byte >> shift) & 1)
-    return bits
+    return bits * ID_REPEAT
 
 
 def bits_to_id(bits):
-    """从固定长度的比特序列还原水印 ID"""
-    if len(bits) < ID_BITS:
+    """从重复编码的比特序列还原水印 ID（多数表决）"""
+    if len(bits) < ID_TOTAL_BITS:
         return None
+
+    voted = []
+    for i in range(ID_BITS):
+        ones = sum(bits[i + k * ID_BITS] for k in range(ID_REPEAT))
+        voted.append(1 if ones > ID_REPEAT // 2 else 0)
 
     payload = bytearray()
     for i in range(0, ID_BITS, 8):
         byte = 0
-        for bit in bits[i:i + 8]:
+        for bit in voted[i:i + 8]:
             byte = (byte << 1) | int(bit)
         payload.append(byte)
 
@@ -57,7 +66,7 @@ def payload_geometry(height, width):
     usable_height = ((height + 7) // 8) * 8
     usable_width = ((width + 7) // 8) * 8
     capacity = (usable_height // 8) * (usable_width // 8) * 3
-    available = capacity - ID_BITS
+    available = capacity - ID_TOTAL_BITS
 
     if available < 64:
         raise ValueError('图像尺寸过小，无法嵌入水印')
@@ -110,8 +119,8 @@ def dct_embed(image_array, watermark_bits, alpha=DEFAULT_ALPHA):
             cv2.BORDER_REFLECT_101
         )
 
-    # 嵌入位置 (中频系数)
-    embed_positions = [(3, 3), (4, 4), (5, 5)]
+    # 嵌入位置（低频中频系数）
+    embed_positions = EMBED_POSITIONS
 
     # 水印索引
     watermark_idx = 0
@@ -129,16 +138,17 @@ def dct_embed(image_array, watermark_bits, alpha=DEFAULT_ALPHA):
             # DCT变换
             dct_block = cv2.dct(block.astype(np.float32))
 
-            # 嵌入水印：强制系数的符号，提取端才能稳定地按符号还原比特
+            # QIM 量化索引调制：把系数量化到奇/偶格点，JPEG 压缩后仍可按奇偶判定
             for pos in embed_positions:
                 if watermark_idx >= len(watermark_bits):
                     break
                 x, y = pos
                 value = dct_block[x, y]
-                if watermark_bits[watermark_idx] == 1:
-                    dct_block[x, y] = abs(value) + alpha
-                else:
-                    dct_block[x, y] = -abs(value) - alpha
+                q = int(np.floor(value / alpha + 0.5))
+                bit = int(watermark_bits[watermark_idx])
+                if (q % 2) != bit:
+                    q += 1
+                dct_block[x, y] = q * alpha
                 watermark_idx += 1
 
             # IDCT变换

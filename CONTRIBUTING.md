@@ -51,7 +51,7 @@ feature/*  ●───●       ●───●                  ← 新功能
 
 | type | 含义 | 示例 |
 |------|------|------|
-| `feat` | 新功能 | `feat(watermark): 支持抗裁剪 DCT 嵌入` |
+| `feat` | 新功能 | `feat(watermark): 支持抗压缩 DCT 嵌入` |
 | `fix` | 缺陷修复 | `fix(auth): 修复刷新令牌过期判断` |
 | `docs` | 文档 | `docs(readme): 补充部署说明` |
 | `style` | 格式（不影响逻辑） | `style(frontend): 统一缩进` |
@@ -80,7 +80,7 @@ bash scripts/gitflow.sh feature start watermark-robustness
 
 # 3) 开发并提交
 git add -A
-git commit -m "feat(watermark): 增加抗裁剪嵌入参数"
+git commit -m "feat(watermark): 增加抗压缩嵌入参数"
 
 # 4) 推送并发起 PR → develop
 git push -u origin feature/watermark-robustness

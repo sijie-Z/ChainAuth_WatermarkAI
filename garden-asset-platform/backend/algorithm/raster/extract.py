@@ -3,6 +3,7 @@
 基于DCT域的栅格图像水印提取算法
 """
 import os
+import re
 import logging
 import numpy as np
 from PIL import Image
@@ -10,10 +11,38 @@ import cv2
 
 from algorithm.raster.embed import (
     DEFAULT_ALPHA,
-    ID_BITS,
+    EMBED_POSITIONS,
+    ID_TOTAL_BITS,
     bits_to_id,
     payload_geometry,
 )
+
+ID_PATTERN = re.compile(r'^[A-Z]{2,4}-(?:IMG|VEC|MDL|DOC|VID)-\d{14}-[0-9A-F]{4}$')
+
+# 缩放攻击恢复：按常见比例把图像放大/缩小后重新尝试解码 ID
+SCALE_CANDIDATES = [2.0, 1.5, 4 / 3, 1.25, 1.2, 1.1, 0.9, 0.8, 0.75, 2 / 3, 0.5]
+
+
+def _decode_valid_id(image_array, alpha=DEFAULT_ALPHA):
+    """只解码 ID 位并用格式校验，避免把随机比特误判为水印 ID"""
+    bits = dct_extract(image_array, ID_TOTAL_BITS, alpha=alpha)
+    watermark_id = bits_to_id(bits)
+    if watermark_id and ID_PATTERN.match(watermark_id):
+        return watermark_id
+    return None
+
+
+def _resolve_scaled_image(image, alpha=DEFAULT_ALPHA):
+    """ID 解码失败时，尝试常见缩放比例，返回能解出有效 ID 的图像与 ID"""
+    base_width, base_height = image.size
+    for factor in SCALE_CANDIDATES:
+        size = (max(8, int(base_width * factor)), max(8, int(base_height * factor)))
+        candidate = image.resize(size, Image.LANCZOS)
+        watermark_id = _decode_valid_id(np.array(candidate.convert('L')), alpha)
+        if watermark_id:
+            logger.info(f'检测到缩放攻击，按 {factor:.2f} 倍恢复后解码成功')
+            return candidate, watermark_id
+    return None, None
 
 
 logger = logging.getLogger(__name__)
@@ -43,8 +72,8 @@ def dct_extract(image_array, watermark_length, alpha=DEFAULT_ALPHA):
             cv2.BORDER_REFLECT_101
         )
 
-    # 嵌入位置
-    embed_positions = [(3, 3), (4, 4), (5, 5)]
+    # 与嵌入端一致的低频系数位置
+    embed_positions = EMBED_POSITIONS
 
     watermark_bits = []
     watermark_idx = 0
@@ -62,11 +91,9 @@ def dct_extract(image_array, watermark_length, alpha=DEFAULT_ALPHA):
                     break
                 x, y = pos
 
-                # 判断水印值
-                if dct_block[x, y] > 0:
-                    watermark_bits.append(1)
-                else:
-                    watermark_bits.append(0)
+                # QIM 解码：最近格点的奇偶性就是水印比特
+                q = int(np.floor(dct_block[x, y] / alpha + 0.5))
+                watermark_bits.append(q % 2)
                 watermark_idx += 1
 
     return watermark_bits
@@ -127,7 +154,7 @@ def bits_to_watermark(watermark_bits, watermark_shape):
     return watermark_array
 
 
-def extract_raster_watermark(watermarked_path, original_watermark_path, output_folder, method='dct'):
+def extract_raster_watermark(watermarked_path, original_watermark_path, output_folder, method='dct', alpha=DEFAULT_ALPHA):
     """
     栅格图像水印提取主函数
 
@@ -144,14 +171,21 @@ def extract_raster_watermark(watermarked_path, original_watermark_path, output_f
 
     # 读取原始水印用于计算 NC（按实际嵌入尺寸缩放）
     watermarked_image = Image.open(watermarked_path)
-    if watermarked_image.mode != 'L':
-        image_array = np.array(watermarked_image.convert('L'))
-    else:
-        image_array = np.array(watermarked_image)
-
+    image_array = np.array(watermarked_image.convert('L'))
     height, width = image_array.shape[:2]
+
+    # 先尝试直接解码 ID；失败则尝试常见缩放比例（缩放攻击恢复）
+    watermark_id = _decode_valid_id(image_array, alpha) if method == 'dct' else None
+    if method == 'dct' and not watermark_id:
+        restored_image, restored_id = _resolve_scaled_image(watermarked_image, alpha)
+        if restored_image is not None:
+            watermarked_image = restored_image
+            image_array = np.array(restored_image.convert('L'))
+            height, width = image_array.shape[:2]
+            watermark_id = restored_id
+
     watermark_side, capacity = payload_geometry(height, width)
-    total_bits = ID_BITS + watermark_side * watermark_side
+    total_bits = ID_TOTAL_BITS + watermark_side * watermark_side
 
     logger.info(
         f"图像 {width}x{height}, 容量 {capacity} bit, "
@@ -160,13 +194,13 @@ def extract_raster_watermark(watermarked_path, original_watermark_path, output_f
 
     # 提取比特：前 ID_BITS 位是水印 ID，其余是水印图像
     if method == 'dct':
-        bits = dct_extract(image_array, total_bits)
+        bits = dct_extract(image_array, total_bits, alpha=alpha)
     else:
         bits = lsb_extract(image_array, total_bits)
 
-    watermark_id = bits_to_id(bits[:ID_BITS])
+    watermark_id = watermark_id or bits_to_id(bits[:ID_TOTAL_BITS])
     extracted_watermark = bits_to_watermark(
-        bits[ID_BITS:ID_BITS + watermark_side * watermark_side],
+        bits[ID_TOTAL_BITS:ID_TOTAL_BITS + watermark_side * watermark_side],
         (watermark_side, watermark_side)
     )
 

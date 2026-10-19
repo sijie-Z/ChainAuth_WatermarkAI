@@ -177,6 +177,48 @@ def test_watermark_roundtrip_returns_id_and_keeps_color(tmp_path):
     assert extract_result['nc_value'] >= 0.9
 
 
+def test_watermark_survives_jpeg_and_scaling(tmp_path):
+    """JPEG 压缩与缩放后，水印 ID 仍应可还原"""
+    source_path = tmp_path / 'photo.png'
+    image = Image.new('RGB', (512, 384))
+    for x in range(512):
+        for y in range(384):
+            image.putpixel((x, y), (30 + x // 4 % 200, 70 + y // 3 % 150, 50 + (x + y) // 6 % 150))
+    image.save(source_path)
+
+    embed_result = embed_raster_watermark_color(
+        image_path=str(source_path),
+        watermark_path='data/watermark/default.png',
+        output_folder=str(tmp_path / 'embedded'),
+        method='dct',
+        garden_code='TST',
+    )
+    with Image.open(embed_result['watermarked_path']) as watermarked:
+        watermarked = watermarked.convert('RGB')
+
+        jpeg_path = tmp_path / 'attacked.jpg'
+        watermarked.save(jpeg_path, 'JPEG', quality=70)
+        jpeg_result = extract_raster_watermark(
+            watermarked_path=str(jpeg_path),
+            original_watermark_path='data/watermark/default.png',
+            output_folder=str(tmp_path / 'jpeg_extract'),
+        )
+        assert jpeg_result['watermark_id'] == embed_result['watermark_id']
+        assert jpeg_result['nc_value'] >= 0.9
+
+        scale_path = tmp_path / 'scaled.png'
+        watermarked.resize(
+            (watermarked.width // 2, watermarked.height // 2), Image.LANCZOS
+        ).save(scale_path)
+        scale_result = extract_raster_watermark(
+            watermarked_path=str(scale_path),
+            original_watermark_path='data/watermark/default.png',
+            output_folder=str(tmp_path / 'scale_extract'),
+        )
+        assert scale_result['watermark_id'] == embed_result['watermark_id']
+        assert scale_result['nc_value'] >= 0.9
+
+
 def test_dual_approval_flow_and_license_creation(client, auth_header, adm1_header, adm2_header, app):
     with app.app_context():
         applicant = User.query.filter_by(username='testuser').first()
