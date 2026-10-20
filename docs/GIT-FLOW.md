@@ -96,7 +96,7 @@ GitHub 侧使用仓库 Ruleset（脚本 `scripts/setup-github.sh` 可自动创�
 bash scripts/bootstrap-push.sh
 ```
 
-脚本会临时把 `protect-main` / `protect-develop` 降为 `evaluate`，推送 `main`、`develop` 与两个 feature 分支后自动恢复 `active`。仅在空仓库首次推送时使用。
+脚本会临时把 `protect-main` / `protect-develop` 设为 `disabled`，推送 `main`、`develop` 与两个 feature 分支后自动恢复 `active`。仅在空仓库首次推送时使用。
 
 工作流 `gitflow.yml` 会在每次 PR 时检查来源/目标分支组合，配置错误会直接红灯。
 
