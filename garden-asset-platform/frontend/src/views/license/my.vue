@@ -189,7 +189,10 @@ async function loadLicenses() {
       per_page: perPage.value
     }
     if (filterStatus.value) {
-      params.status = filterStatus.value
+      // “审批中”同时包含待一级审批与一级已通过、待二级审批
+      params.status = (isApplicationView.value && filterStatus.value === 'pending')
+        ? 'in_progress'
+        : filterStatus.value
     }
 
     const response = isApplicationView.value
