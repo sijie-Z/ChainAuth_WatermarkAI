@@ -271,7 +271,7 @@ def test_dual_approval_flow_and_license_creation(client, auth_header, adm1_heade
     response = client.post(
         f'/api/license/approve/{application_id}',
         headers=adm2_header,
-        json={'action': 'approve', 'comment': 'adm2 ok'},
+        json={'action': 'approve', 'comment': 'adm2 ok', 'valid_until': '2030-01-01T00:00:00Z'},
     )
     assert response.status_code == 200
 
@@ -284,6 +284,9 @@ def test_dual_approval_flow_and_license_creation(client, auth_header, adm1_heade
         ).first()
         assert license_record is not None
         assert license_record.status == 'active'
+        # 审批人指定的到期日应写入授权
+        assert license_record.end_time is not None
+        assert license_record.end_time.year == 2030
         # 历史数据 uploader_id 为空时，回退到 owner/creator
         assert license_record.licensor_id == application.asset.owner_id
 

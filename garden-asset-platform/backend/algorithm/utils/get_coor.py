@@ -63,12 +63,15 @@ def get_coor_nested(shpfile):
     feature_type = []
 
     for geom in shpfile.geometry:
-        if geom is None:
-            continue
-
-        coords = _geometry_coords(geom)
+        coords = _geometry_coords(geom) if geom is not None else None
         if not coords:
-            logger.warning(f"存在未解析类型: {geom.geom_type}")
+            if geom is not None:
+                logger.warning(f"存在未解析类型: {geom.geom_type}，该要素保持原样")
+            # 占位，保证 coor_nested 下标与原始要素下标一一对应；
+            # 否则跳过任何一个要素都会让后续要素写回错位。
+            x_coords.append(np.array([], dtype=float))
+            y_coords.append(np.array([], dtype=float))
+            feature_type.append(geom.geom_type if geom is not None else None)
             continue
 
         xs, ys = coords
@@ -80,7 +83,14 @@ def get_coor_nested(shpfile):
             y_coords.append(ys)
         feature_type.append(geom.geom_type)
 
-    coor_nested = np.array([x_coords, y_coords], dtype=object)
+    # 显式逐格填充 object 数组：np.array([x_coords, y_coords]) 在各要素顶点数
+    # 相同时会把它们广播成多维数组，导致多部件要素被压平、下标错位。
+    coor_nested = np.empty((2, len(x_coords)), dtype=object)
+    for feature_index, value in enumerate(x_coords):
+        coor_nested[0, feature_index] = value
+    for feature_index, value in enumerate(y_coords):
+        coor_nested[1, feature_index] = value
+
     return coor_nested, feature_type
 
 

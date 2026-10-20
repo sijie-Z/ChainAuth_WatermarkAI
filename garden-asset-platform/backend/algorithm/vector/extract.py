@@ -94,28 +94,6 @@ def coor_group_process(coor_group, W, argument):
     return original_coor_group, W
 
 
-def traversal_nested_coor_group(coor_nested, feature_type, W, argument):
-    """
-    对于多线、多面等情况，执行此函数
-    """
-    processed_x_nested = []
-    processed_y_nested = []
-
-    for feature_index in range(coor_nested.shape[1]):
-        coor_group = np.vstack(coor_nested[:, feature_index])
-        processed_coor_group, W = coor_group_process(coor_group, W, argument)
-
-        if (feature_type == 'MultiPolygon'
-                and np.size(processed_coor_group) not in [0, 2]
-                and not np.array_equal(processed_coor_group[:, 0], processed_coor_group[:, -1])):
-            processed_coor_group[:, -1] = processed_coor_group[:, 0]
-
-        processed_x_nested.append(processed_coor_group[0, :])
-        processed_y_nested.append(processed_coor_group[1, :])
-
-    return np.array([processed_x_nested, processed_y_nested], dtype=object), W
-
-
 def traversal_coor_group(coor_nested, shp_type, processed_shpfile, l, argument):
     """
     对所有要素进行遍历
@@ -123,20 +101,23 @@ def traversal_coor_group(coor_nested, shp_type, processed_shpfile, l, argument):
     W = [[] for _ in range(l)]
 
     for feature_index in range(coor_nested.shape[1]):
-        coor_group = np.vstack(coor_nested[:, feature_index])
-        if isinstance(coor_nested[:, feature_index][0], list):
+        x_entry = coor_nested[0, feature_index]
+        y_entry = coor_nested[1, feature_index]
+
+        # 多部件几何不参与 NC 统计（保持原逻辑）
+        if isinstance(x_entry, list):
+            continue
+
+        coor_group = np.vstack((x_entry, y_entry))
+        if coor_group.size == 0:
             continue
 
         feature_type = shp_type[feature_index]
-
-        if isinstance(coor_group[0, 0], np.ndarray):
-            processed_coor_group, W = traversal_nested_coor_group(coor_group, feature_type, W, argument)
-        else:
-            processed_coor_group, W = coor_group_process(coor_group, W, argument)
-            if (feature_type == 'Polygon'
-                    and np.size(processed_coor_group) not in [0, 2]
-                    and not np.array_equal(processed_coor_group[:, 0], processed_coor_group[:, -1])):
-                processed_coor_group[:, -1] = processed_coor_group[:, 0]
+        processed_coor_group, W = coor_group_process(coor_group, W, argument)
+        if (feature_type == 'Polygon'
+                and np.size(processed_coor_group) not in [0, 2]
+                and not np.array_equal(processed_coor_group[:, 0], processed_coor_group[:, -1])):
+            processed_coor_group[:, -1] = processed_coor_group[:, 0]
 
         processed_shpfile = to_geodataframe(processed_shpfile, feature_index, processed_coor_group,
                                              shp_type[feature_index])

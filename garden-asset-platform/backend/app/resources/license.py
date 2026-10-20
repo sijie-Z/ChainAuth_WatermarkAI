@@ -2,7 +2,7 @@
 授权管理API资源
 """
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from flask import request
 from flask_restful import Resource
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -154,6 +154,19 @@ class LicenseApproveResource(Resource):
             return {'code': 400, 'message': 'action 必须是 approve 或 reject'}, 400
         comment = data.get('comment', '')
 
+        # 审批人可在弹窗中指定到期日；未指定时按申请时长计算
+        end_time = None
+        valid_until = data.get('valid_until')
+        if valid_until:
+            try:
+                end_time = datetime.fromisoformat(str(valid_until).replace('Z', '+00:00'))
+            except ValueError:
+                return {'code': 400, 'message': '有效期格式无效'}, 400
+            if end_time.tzinfo is not None:
+                end_time = end_time.astimezone(timezone.utc).replace(tzinfo=None)
+            if end_time <= datetime.utcnow():
+                return {'code': 400, 'message': '有效期必须晚于当前时间'}, 400
+
         acted = False
 
         # 一级审批：adm1 / asset_admin / admin
@@ -183,7 +196,7 @@ class LicenseApproveResource(Resource):
             if action == 'approve':
                 application.status = 'approved'
                 # 创建授权记录
-                self._create_license(application)
+                self._create_license(application, end_time=end_time)
             else:
                 application.status = 'rejected'
             acted = True
@@ -195,11 +208,10 @@ class LicenseApproveResource(Resource):
 
         return {'code': 200, 'message': '审批成功'}
 
-    def _create_license(self, application):
+    def _create_license(self, application, end_time=None):
         """创建授权记录"""
         asset = application.asset
-        end_time = None
-        if application.duration_months:
+        if end_time is None and application.duration_months:
             end_time = datetime.utcnow() + timedelta(days=application.duration_months * 30)
 
         license = License(
@@ -312,9 +324,14 @@ class MyApplicationsResource(Resource):
 
         query = LicenseApplication.query.filter_by(applicant_id=current_user_id)
         if status:
-            if status not in ('pending', 'adm1_approved', 'approved', 'rejected', 'cancelled'):
+            if status not in ('pending', 'adm1_approved', 'approved', 'rejected', 'cancelled', 'in_progress'):
                 return {'code': 400, 'message': '无效的状态筛选'}, 400
-            query = query.filter_by(status=status)
+            if status == 'in_progress':
+                query = query.filter(
+                    LicenseApplication.status.in_(['pending', 'adm1_approved'])
+                )
+            else:
+                query = query.filter_by(status=status)
 
         pagination = query.order_by(LicenseApplication.created_at.desc()).paginate(
             page=page, per_page=per_page, error_out=False

@@ -139,6 +139,56 @@ def test_license_approve_requires_role_and_valid_action(client, auth_header, adm
     assert response.status_code == 200
 
 
+def test_my_applications_in_progress_includes_adm1_approved(client, auth_header, adm1_header, sample_asset):
+    """“审批中”应同时覆盖待一级审批与一级已通过"""
+    response = client.post('/api/license/apply', headers=auth_header, json={
+        'asset_id': sample_asset,
+        'license_type': 'academic',
+        'purpose': '审批中筛选',
+    })
+    assert response.status_code == 200
+    application_id = response.get_json()['data']['id']
+
+    response = client.post(
+        f'/api/license/approve/{application_id}',
+        headers=adm1_header,
+        json={'action': 'approve', 'comment': 'adm1 ok'},
+    )
+    assert response.status_code == 200
+
+    response = client.get('/api/license/my-applications?status=in_progress', headers=auth_header)
+    assert response.status_code == 200
+    items = response.get_json()['data']['items']
+    assert any(item['id'] == application_id and item['status'] == 'adm1_approved' for item in items)
+
+
+def test_admin_can_create_user_but_user_cannot(client, admin_header, auth_header):
+    """管理员可通过 /api/users 指定角色创建用户；普通用户与非法角色被拒绝"""
+    response = client.post('/api/users', headers=admin_header, json={
+        'username': 'createdbyadmin',
+        'password': 'pass1234',
+        'email': 'createdbyadmin@test.com',
+        'role': 'asset_admin',
+        'status': 'active',
+    })
+    assert response.status_code == 200, response.get_json()
+    assert response.get_json()['data']['role'] == 'asset_admin'
+
+    response = client.post('/api/users', headers=auth_header, json={
+        'username': 'notallowed',
+        'password': 'pass1234',
+        'role': 'admin',
+    })
+    assert response.status_code == 403
+
+    response = client.post('/api/users', headers=admin_header, json={
+        'username': 'badrole',
+        'password': 'pass1234',
+        'role': 'super_admin',
+    })
+    assert response.status_code == 400
+
+
 def test_logout_revokes_access_token(client, auth_header):
     assert client.get('/api/user/current', headers=auth_header).status_code == 200
     assert client.post('/api/logout', headers=auth_header).status_code == 200
@@ -195,6 +245,83 @@ def test_expired_license_cannot_download(client, auth_header, app):
 
     response = client.get(f'/api/assets/{asset_id}/download', headers=other_header)
     assert response.status_code == 403
+
+
+def test_vector_multipoint_with_null_geometry(tmp_path):
+    """MultiPoint 与空几何不能让要素下标错位或把几何写成 None"""
+    import geopandas as gpd
+    from shapely.geometry import MultiPoint
+    from algorithm.vector.embed import embed_vector_watermark
+    from algorithm.vector.extract import extract_vector_watermark
+
+    geometries = [
+        MultiPoint([(120.6 + i * 0.001, 31.3), (120.601 + i * 0.001, 31.301)])
+        for i in range(12)
+    ]
+    geometries[5] = None
+    source_path = tmp_path / 'multipoint.shp'
+    gpd.GeoDataFrame(
+        {'gid': list(range(12))}, geometry=geometries, crs='EPSG:4326'
+    ).to_file(source_path)
+
+    result = embed_vector_watermark(
+        shpfile_path=str(source_path),
+        watermark_path='data/watermark/default.png',
+        output_folder=str(tmp_path / 'embedded'),
+        garden_code='TST',
+        asset_type_code='VEC',
+    )
+
+    watermarked = gpd.read_file(result['watermarked_path'])
+    assert len(watermarked) == 12
+    assert watermarked.geometry.isna().sum() == 1
+    assert set(watermarked.geom_type.dropna()) == {'MultiPoint'}
+    assert watermarked['wm_id'].iloc[0] == result['watermark_id']
+
+    extraction = extract_vector_watermark(
+        watermarked_shpfile_path=result['watermarked_path'],
+        vr=result['vr'],
+        output_folder=str(tmp_path / 'extracted'),
+    )
+    assert extraction['watermark_id'] == result['watermark_id']
+
+
+def test_vector_multipolygon_roundtrip(tmp_path):
+    """多部件面要素逐部件嵌入后仍保持 MultiPolygon 结构"""
+    import geopandas as gpd
+    from shapely.geometry import Polygon, MultiPolygon
+    from algorithm.vector.embed import embed_vector_watermark
+
+    geometries = []
+    for i in range(12):
+        x = 120.6 + i * 0.002
+        y = 31.3 + i * 0.001
+        first = Polygon([(x, y), (x + 0.001, y), (x + 0.001, y + 0.001), (x, y + 0.001)])
+        second = Polygon([
+            (x + 0.0012, y), (x + 0.002, y),
+            (x + 0.002, y + 0.001), (x + 0.0012, y + 0.001),
+        ])
+        geometries.append(MultiPolygon([first, second]))
+
+    source_path = tmp_path / 'multipolygon.shp'
+    gpd.GeoDataFrame(
+        {'gid': list(range(12))}, geometry=geometries, crs='EPSG:4326'
+    ).to_file(source_path)
+
+    result = embed_vector_watermark(
+        shpfile_path=str(source_path),
+        watermark_path='data/watermark/default.png',
+        output_folder=str(tmp_path / 'embedded'),
+        garden_code='TST',
+        asset_type_code='VEC',
+    )
+
+    watermarked = gpd.read_file(result['watermarked_path'])
+    assert len(watermarked) == 12
+    assert set(watermarked.geom_type) == {'MultiPolygon'}
+    assert watermarked['wm_id'].iloc[0] == result['watermark_id']
+    for geometry in watermarked.geometry:
+        assert len(geometry.geoms) == 2
 
 
 def test_16bit_image_watermark_roundtrip(tmp_path):

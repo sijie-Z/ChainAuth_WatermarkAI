@@ -75,6 +75,24 @@ def to_geodataframe(dataframe, index, coor_nested, shpfile_type):
         else:
             dataframe.loc[index, 'geometry'] = None
 
+    elif shpfile_type == 'MultiPoint':
+        points = []
+        if isinstance(x_coords[0], list) or isinstance(x_coords[0], np.ndarray):
+            for i in range(len(x_coords)):
+                if hasattr(x_coords[i], 'size') and x_coords[i].size > 0:
+                    points.append(Point(
+                        Decimal(str(x_coords[i][0])),
+                        Decimal(str(y_coords[i][0]))
+                    ))
+        else:
+            if hasattr(x_coords, 'size') and x_coords.size > 0:
+                points.append(Point(
+                    Decimal(str(x_coords[0])),
+                    Decimal(str(y_coords[0]))
+                ))
+
+        dataframe.loc[index, 'geometry'] = MultiPoint(points) if points else None
+
     elif shpfile_type == 'Polygon':
         if hasattr(x_coords, 'size') and x_coords.size > 2:
             exterior_coords = _convert_coords_to_decimal(zip(x_coords, y_coords))
