@@ -1,0 +1,58 @@
+name: Remind main into develop sync
+
+# 为什么不是自动建 PR：
+# 由 GITHUB_TOKEN 创建的 PR 不会触发任何下游 workflow，develop 的必需检查
+# 永远停留在 Expected，PR 无法合并。这里改为创建提醒 issue，由维护者在本地
+# 用 scripts/gitflow.sh sync 走正常 PR 流程（检查会正常执行）。
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: sync-reminder
+  cancel-in-progress: true
+
+jobs:
+  remind:
+    name: sync-reminder
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check whether develop is behind main
+        id: check
+        run: |
+          set -euo pipefail
+          git fetch origin main develop --no-tags
+          if git merge-base --is-ancestor origin/main origin/develop; then
+            echo "behind=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "behind=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open reminder issue
+        if: steps.check.outputs.behind == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          title='chore: main 已更新，请回合并到 develop'
+          existing=$(gh issue list --state open --search "$title in:title" --json title --jq '.[].title' || true)
+          if [ "$existing" = "$title" ]; then
+            echo "已有未关闭的同步提醒，跳过"
+            exit 0
+          fi
+          gh issue create \
+            --title "$title" \
+            --label chore \
+            --body $'`main` 有新提交，而 `develop` 尚未包含。\n\n请在本地执行：\n\n```bash\nbash scripts/gitflow.sh sync\n```\n\n脚本会创建 `chore/sync-main-into-develop` 分支并给出推送/PR 指引。\n\n> 本提醒由 `.github/workflows/sync-main-into-develop.yml` 自动创建；同步完成后请关闭本 issue。'

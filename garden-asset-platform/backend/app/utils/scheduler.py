@@ -1,17 +1,17 @@
 """
 任务调度
 """
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
-
-
-scheduler = BackgroundScheduler()
+scheduler = None
 
 
 def init_scheduler(app):
-    """初始化任务调度器"""
+    """初始化任务调度器（APScheduler 为可选依赖，导入放在函数内）"""
+    global scheduler
+    from apscheduler.schedulers.background import BackgroundScheduler
+    from apscheduler.triggers.cron import CronTrigger
+
+    scheduler = BackgroundScheduler()
     from app.utils.backup import backup_database
-    from app.services.watermark_service import WatermarkService
 
     @scheduler.scheduled_job(CronTrigger(hour=2, minute=0))
     def daily_backup():
@@ -70,10 +70,25 @@ def init_scheduler(app):
             db.session.commit()
             app.logger.info(f'已更新{len(expired)}个过期授权')
 
+    @scheduler.scheduled_job(CronTrigger(hour=5, minute=0))
+    def purge_expired_tokens():
+        """每日凌晨5点清理过期的撤销 Token 记录"""
+        with app.app_context():
+            from datetime import datetime
+            from app.extensions import db
+            from app.models.user import UserToken
+
+            deleted = UserToken.query.filter(
+                UserToken.expires_at < datetime.utcnow()
+            ).delete(synchronize_session=False)
+            db.session.commit()
+            app.logger.info(f'已清理{deleted}条过期 Token 记录')
+
     scheduler.start()
     app.logger.info('任务调度器已启动')
 
 
 def shutdown_scheduler():
     """关闭调度器"""
-    scheduler.shutdown()
+    if scheduler is not None:
+        scheduler.shutdown()

@@ -1,5 +1,71 @@
 # CHANGELOG
 
+## [1.5.0] - 2026-10-19
+
+### Added
+- **严格 Git Flow**：`main` / `develop` / `feature/*` / `release/*` / `hotfix/*`，配套本地钩子、分支校验工作流与 `scripts/gitflow.sh`
+- **GitHub Actions 体系**：后端 pytest + ruff + 覆盖率棘轮、前端 ESLint + Vitest + 构建、CodeQL、Dependency Review、gitleaks、OpenSSF Scorecard、Docker 构建、actionlint
+- **机器人**：Dependabot（目标 `develop`，patch/minor 自动合并）、CodeRabbit、labeler、stale、welcome、Release Drafter、`main → develop` 回合并提醒
+- **视觉体系 v2「青绿山水 · 档案册」**：黛青/宣纸/墨/印章朱砂令牌，宋体标题 + 等宽数据字体；重做首页、登录、注册、后台壳、仪表盘、资产目录、证书、溯源与错误页
+- **前端测试基座**：Vitest + @vue/test-utils + jsdom，覆盖工具函数、状态组件与用户 store，并接入 CI
+- **后端安全回归**：新增限流 429、安全响应头、健康检查用例（后端共 87 个用例）
+- **鲁棒性测试**：JPEG q50、噪声、50%–150% 缩放、非 8 倍数尺寸的回归覆盖
+- **前端 E2E**：Playwright 5 个点击流用例，覆盖首页、移动端导航、溯源页、管理员登录、普通用户浏览资产，并接入 `e2e.yml`
+- **矢量水印**：新增 SHP/ZIP 上传、嵌入、提取的算法与 API 回归，包含无 vr 的溯源场景
+- **端到端验证**：`scripts/e2e_flow.py` 覆盖注册 → 上传 → 发布审核 → 水印 → 上链 → 证书 → 双审批 → 下载 → 溯源，全部跑通
+- **工程文档**：`docs/GIT-FLOW.md`、`docs/CI-CHARTER.md`、`docs/UI-DESIGN.md`、`docs/REFERENCE-NOTES.md`
+
+### Security
+- **生产配置**：gunicorn 以 `create_app('production')` 启动，修复 Docker 实际运行在 DEBUG 模式（HSTS 缺失、调度器不启动、CSP 放宽）
+- **密钥一致性**：未配置 `SECRET_KEY` / `JWT_SECRET_KEY` 时生成一次并持久化到 instance 目录，多 worker / 重启后 Token 不再随机失效
+- **账号状态**：登出撤销 access token（jti 黑名单），禁用/封禁用户的旧 Token 立即失效
+- **访问控制**：资产列表/详情的草稿可见性、标签与 AI 分析的对象级权限、授权审批的角色与 action 校验、已审批列表仅审批角色可读
+- **公开溯源防护**：限流 10 次/分钟、20MB 文件上限、ZIP 解压体积/数量上限，临时目录用完即删
+
+### Fixed
+- **矢量水印**：默认 RGBA 水印按二维读取崩溃、水印未二值化、45×45 尺寸不匹配、`np.nditer` 对象数组报错、ZIP 资产无法读取；现已支持 SHP/ZIP 上传与提取，水印 ID 写入 `wm_id` 属性列，矢量溯源可命中资产
+- **矢量几何**：多部件（MultiPoint / MultiLineString / MultiPolygon）按部件嵌入，空几何用占位保持要素下标，修复写回错位与 MultiPoint 被写成 None
+- **AI 降级**：未安装模型/未配置 Key 时，AI 分析、问答、检索、侵权检测统一返回 503 与明确提示，不再 500
+- **依赖兼容与安全**：升级 `geopandas==1.1.2`、`fiona==1.10.1`、`pyogrio==0.13.0`、`pandas==2.2.3`，兼容 SHP 读写并修复 Fiona 内置 GDAL 的 CVE-2023-45853（critical）与 GeoPandas `to_postgis()` SQL 注入（high）
+- **非图片资产**：文档/视频/模型不支持水印时返回 400 而非 500；前端自动禁用不支持的自动水印选项
+- **栅格水印算法**：水印 ID 从未真正嵌入；原 DCT 符号判定在压缩后大量误码；彩色图被转灰度。现改为 ID + 水印图联合嵌入、QIM 低频量化、ID 五重重复编码、缩放自动恢复，彩色图保留颜色。实测 **JPEG q50、噪声、50%–150% 缩放均可还原 ID，NC≈1.0，PSNR≈35 dB**；裁剪仍是已知边界（需结合链上存证核验）
+- **授权审批**：上传资产未写 `uploader_id` 导致创建授权时 500；adm1 看不到未分配申请、adm2 看不到一级已通过的申请
+- **资产下载**：`send_file` 以 app.root_path 解析相对路径导致 500；现统一使用绝对路径
+- **下载权限**：所有者与管理员可下载未发布资产（草稿）；已删除资产仅管理员可见
+- **角色枚举**：资产统计、区块链上链与管理员装饰器统一为六种角色，移除不存在的 `adm3` / `super_admin`
+- **调度器**：APScheduler 延迟导入，未安装时应用仍可正常启动
+- **溯源接口**：引用不存在的 `Certificate.confirmed_at` 导致 500
+- 限流器在 Flask-RESTful 资源中返回元组导致 500（应为 429）
+- 测试环境缺少 JWT 密钥导致登录用例 500；测试间共享限流状态造成连锁失败
+- `OperationLog` 使用 BIGINT 主键在 SQLite 下不自增
+- 前端 ESLint 配置语法错误与 `ecmaVersion` 拼写错误
+- 后端缺少 pytest/geopandas/shapely，生产镜像启动会失败；后端 Dockerfile 缺少健康检查所需的 curl
+- 仪表盘图表初始化时机错误（loading 结束后容器才渲染）
+- API 错误提示重复刷屏，5xx/网络错误改为友好提示并去重
+- **中文文件名**：`secure_filename` 剥掉扩展名导致上传 500，改用原始扩展名 + UUID 存储名
+- **水印格式**：16 位 / CMYK / 调色板图像统一归一化读取，RGBA 保留 alpha；彩色图改为逐通道提取后多数表决，噪声图 NC 从 0.87 提升到 0.998
+- **区块链**：配置合约地址时真实调用 `AssetRegistry.registerAsset`；交易失败不再签发证书或标记已存证
+- **授权**：申请编码加入微秒与随机后缀避免唯一键冲突；新增 `/api/license/my-applications`；“审批中”筛选同时覆盖待一级审批与一级已通过；分页参数非法时不再 500
+- **备份/调度**：SQLite 备份按 Flask-SQLAlchemy 的 instance 路径解析；调度器默认关闭，避免多 worker 重复执行
+- **AI**：Milvus 初始化不再依赖应用上下文；临时文件在 Windows 上可正常删除
+- **前端**：上传读取 `asset_id`、证书按嵌套结构解析、溯源读取顶层 `verified`、刷新失败清空 Pinia 登录态、角色枚举统一、后台上传路由、筛选参数、合同鉴权下载、假控件替换
+- **移动端布局**：修复园林卡片被桌面规则覆盖导致的 2px 挤压与大片空白、页脚品牌竖排；后台资产表格重排，编码不再换行、操作列不再遮挡状态
+- **状态文案**：水印/存证状态与节点状态统一为中文并覆盖 none/pending/verified 等全部取值；修正登录页演示账号密码
+- **网页上传**：请求实例默认 `application/json` 导致 FormData 丢失文件字段（后端报“未上传文件”）；拦截器对 FormData 删除 Content-Type，由浏览器生成 multipart 边界
+- **状态标签**：`StatusTag` 按 watermark/chain 输出“未嵌入/未存证”，资产详情与授权申请页不再统一显示“未处理”
+- **上传草稿**：水印与上链完成前不再显示“提交发布”，避免未完成处理就发布
+- **授权列表**：重排列宽，固定操作列不再遮挡申请时间
+- **CI**：`main → develop` 改为提醒 issue（GITHUB_TOKEN 建的 PR 不会触发必需检查）、Dependabot scope 前缀、GHCR 镜像名小写、Docker 构建补充依赖文件触发路径
+- **前端依赖安全**：升级 `vitest==3.2.6`，并通过 npm overrides 将 `tinypool` 固定到 2.1.2、将 `test-exclude` 的 `glob` 固定到 10.5.0，修复 GHSA-5xrq-8626-4rwp、GHSA-85c8-ppgw-ccpr、GHSA-5gmw-xhrv-c9v3、GHSA-5j98-mcp5-4vw2（critical/high）；41 个前端测试与构建保持通过
+- **CI 修复**：actionlint 的未使用循环变量、PR 标题检查补充 `statuses: write`、welcome action 输入改为下划线命名；CodeQL 路径检查改用临时目录登记表 + `commonpath` 校验
+
+### Changed
+- 运行时升级：Node.js 22、Python 3.11、当前 GitHub Actions 主版本（node24 运行时）
+- 移除 THREE.js 粒子背景、emoji 图标、玻璃拟态与渐变按钮；Element Plus 改为通过 CSS 变量主题化
+- 参考项目目录移出仓库并从发布历史中剔除，仓库体积从约 813 MB 降至约 0.5 MB
+- 前端开发环境统一走 Vite proxy（`VITE_API_BASE_URL=/api`），不再硬编码 `http://localhost:5000/api`
+- 移除未使用的 `minio` / `scipy` / `passlib` 依赖；文档明确 MinIO 为可选组件，文件当前默认存本地磁盘
+
 ## [1.4.0] - 2026-05-08
 
 ### Security

@@ -1,0 +1,60 @@
+#!/bin/sh
+# 提交前检查：敏感文件 / 私钥 / 访问令牌 / 超大文件 / 冲突标记
+set -u
+
+max_size=$((5 * 1024 * 1024)) # 5MB
+files=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$files" ] && exit 0
+
+fail=0
+
+# 按行切分，保留文件名中的空格
+old_ifs=$IFS
+IFS='
+'
+for f in $files; do
+  [ -f "$f" ] || continue
+
+  # 超大文件
+  size=$(wc -c <"$f" | tr -d ' ')
+  if [ "$size" -gt "$max_size" ]; then
+    echo "❌ $f 大小超过 5MB（$size 字节）。请移出仓库或使用 Git LFS。" >&2
+    fail=1
+  fi
+
+  # 敏感文件名
+  case "$f" in
+    .env|*/.env|*.pem|*.key|*.p12|*.pfx|id_rsa|id_rsa.*|id_ed25519|id_ed25519.*)
+      echo "❌ 禁止提交敏感文件: $f（示例请用 .env.example）" >&2
+      fail=1
+      continue
+      ;;
+  esac
+
+  # 私钥
+  if grep -qE 'BEGIN (RSA|OPENSSH|EC|DSA|PGP) PRIVATE KEY' "$f" 2>/dev/null; then
+    echo "❌ $f 疑似包含私钥" >&2
+    fail=1
+  fi
+
+  # 常见访问令牌
+  if grep -qE '(ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{22,}|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,})' "$f" 2>/dev/null; then
+    echo "❌ $f 疑似包含访问令牌" >&2
+    fail=1
+  fi
+
+  # 冲突标记
+  if grep -qE '^(<<<<<<< |=======$|>>>>>>> )' "$f" 2>/dev/null; then
+    echo "❌ $f 含有未解决的合并冲突标记" >&2
+    fail=1
+  fi
+done
+IFS=$old_ifs
+
+if [ "$fail" -ne 0 ]; then
+  echo "" >&2
+  echo "提交已阻止。修复后重新 git add 即可；如需绕过（不推荐）：git commit --no-verify" >&2
+  exit 1
+fi
+
+exit 0

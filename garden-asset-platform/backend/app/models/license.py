@@ -71,6 +71,8 @@ class License(db.Model):
             'end_time': self.end_time.isoformat() if self.end_time else None,
             'is_exclusive': self.is_exclusive,
             'status': self.status,
+            'asset_code': self.asset.asset_code if self.asset else None,
+            'asset_title': self.asset.title if self.asset else None,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
@@ -129,9 +131,17 @@ class LicenseApplication(db.Model):
             'id': self.id,
             'application_code': self.application_code,
             'asset_id': self.asset_id,
+            'asset_code': self.asset.asset_code if self.asset else None,
+            'asset_title': self.asset.title if self.asset else None,
+            'applicant_name': self.applicant.username if self.applicant else None,
             'license_type': self.license_type,
             'usage_scope': self.usage_scope,
+            'usage_purpose': self.usage_purpose,
+            'purpose': self.usage_purpose or self.usage_scope,
+            'duration_months': self.duration_months,
             'status': self.status,
+            'adm1_status': self.adm1_status,
+            'adm2_status': self.adm2_status,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 

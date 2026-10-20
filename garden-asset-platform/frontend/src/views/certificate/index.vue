@@ -24,43 +24,15 @@
     <!-- 证书主体 -->
     <div v-loading="loading" class="certificate-body" ref="certBody">
       <template v-if="certificate.certificate_id">
-        <!-- 证书水印背景 -->
-        <div class="cert-bg-pattern"></div>
-
-        <!-- 顶部装饰 -->
+        <!-- 顶部 -->
         <div class="cert-header">
-          <div class="cert-header-decoration">
-            <svg viewBox="0 0 200 20" fill="none">
-              <path d="M0 10 Q50 0 100 10 Q150 20 200 10" stroke="currentColor" stroke-width="1.5" fill="none" opacity="0.3"/>
-              <circle cx="100" cy="10" r="3" fill="currentColor" opacity="0.4"/>
-              <circle cx="80" cy="10" r="2" fill="currentColor" opacity="0.2"/>
-              <circle cx="120" cy="10" r="2" fill="currentColor" opacity="0.2"/>
-            </svg>
-          </div>
-          <div class="cert-logo">
-            <svg viewBox="0 0 32 32" fill="none" width="40" height="40">
-              <path d="M16 2L4 10v12l12 8 12-8V10L16 2z" fill="url(#certLogoGrad)"/>
-              <path d="M16 8L8 13v6l8 5 8-5v-6l-8-5z" fill="white" fill-opacity="0.3"/>
-              <defs>
-                <linearGradient id="certLogoGrad" x1="4" y1="2" x2="28" y2="30">
-                  <stop stop-color="#10b981"/>
-                  <stop offset="1" stop-color="#059669"/>
-                </linearGradient>
-              </defs>
-            </svg>
-          </div>
+          <div class="cert-emblem" aria-hidden="true">园</div>
           <h1 class="cert-title">数字资产存证证书</h1>
           <p class="cert-subtitle">Digital Asset Certificate of Evidence</p>
           <div class="cert-id">证书编号：{{ certificate.certificate_id }}</div>
         </div>
 
-        <div class="cert-divider">
-          <span class="divider-icon">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-            </svg>
-          </span>
-        </div>
+        <div class="cert-divider" aria-hidden="true"></div>
 
         <!-- 存证信息 -->
         <div class="cert-section">
@@ -88,7 +60,9 @@
             </div>
             <div class="info-item">
               <span class="info-label">水印状态</span>
-              <el-tag type="success" size="small">已嵌入</el-tag>
+              <el-tag :type="certificate.watermark_id ? 'success' : 'info'" size="small">
+                {{ certificate.watermark_id ? '已嵌入' : '未嵌入' }}
+              </el-tag>
             </div>
           </div>
         </div>
@@ -97,13 +71,7 @@
         <div class="cert-section">
           <div class="section-title">区块链存证</div>
           <div class="blockchain-card">
-            <div class="bc-icon">
-              <svg viewBox="0 0 48 48" fill="none" width="48" height="48">
-                <rect x="2" y="2" width="44" height="44" rx="12" fill="currentColor" opacity="0.1"/>
-                <path d="M24 10L16 15v10l8 5 8-5V15L24 10z" fill="currentColor" opacity="0.6"/>
-                <path d="M24 17L19 20.5v5l5 3 5-3v-5L24 17z" fill="currentColor"/>
-              </svg>
-            </div>
+            <el-icon class="bc-icon"><Link /></el-icon>
             <div class="bc-info">
               <div class="bc-name">FISCO BCOS 联盟链</div>
               <div class="bc-desc">国产自主可控区块链底层平台</div>
@@ -151,34 +119,31 @@
           </div>
         </div>
 
-        <!-- 验证结果 -->
-        <div class="verify-section" :class="{ verified: certificate.verified, failed: !certificate.verified }">
-          <div class="verify-icon">
-            <svg v-if="certificate.verified" viewBox="0 0 64 64" fill="none">
-              <circle cx="32" cy="32" r="28" stroke="currentColor" stroke-width="2"/>
-              <path d="M20 32L28 40L44 24" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <svg v-else viewBox="0 0 64 64" fill="none">
-              <circle cx="32" cy="32" r="28" stroke="currentColor" stroke-width="2"/>
-              <path d="M24 24L40 40M40 24L24 40" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
-            </svg>
-          </div>
+        <!-- 链上存证状态 -->
+        <div class="verify-section" :class="certificate.tx_hash ? 'verified' : 'failed'">
+          <el-icon class="verify-icon">
+            <CircleCheck v-if="certificate.tx_hash" />
+            <CircleClose v-else />
+          </el-icon>
           <div class="verify-text">
-            <div class="verify-title">{{ certificate.verified ? '存证验证通过' : '存证验证失败' }}</div>
+            <div class="verify-title">{{ certificate.tx_hash ? '链上存证已确认' : '尚未生成链上存证交易' }}</div>
             <div class="verify-desc">
-              {{ certificate.verified
-                ? '区块链存证数据完整，未被篡改。该证书可作为数字资产权属的区块链证据。'
-                : '区块链存证数据验证失败，数据可能被篡改。请核实数据来源。' }}
+              {{ certificate.tx_hash
+                ? '该证书对应的存证信息已写入区块链，可通过交易哈希与区块高度在链上核验。'
+                : '该资产尚未完成上链存证，请先完成水印嵌入与上链操作后再查看证书。' }}
             </div>
           </div>
-          <el-button v-if="!certificate.verified" size="small" @click="verifyAgain" class="no-print">
-            重新验证
-          </el-button>
+        </div>
+
+        <!-- 平台签章 -->
+        <div class="cert-signature">
+          <span class="signature-org">苏州园林数字资产平台</span>
+          <span class="cert-seal" aria-hidden="true">园</span>
         </div>
 
         <!-- 页脚 -->
         <div class="cert-footer">
-          <p>本证书由苏州园林数字资产平台基于FISCO BCOS区块链技术签发</p>
+          <p>本证书由苏州园林数字资产平台基于 FISCO BCOS 区块链技术签发</p>
           <p>证书数据已上链存证，不可篡改，永久可追溯</p>
           <p class="cert-footer-date">签发日期：{{ formatDate(certificate.created_at || new Date().toISOString()) }}</p>
         </div>
@@ -195,7 +160,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, Printer, Share } from '@element-plus/icons-vue'
+import { ArrowLeft, Printer, Share, Link, CircleCheck, CircleClose } from '@element-plus/icons-vue'
 import { blockchainApi } from '@/api/modules'
 
 const route = useRoute()
@@ -210,7 +175,20 @@ async function loadCertificate() {
   try {
     const response = await blockchainApi.getCertificate(route.params.id)
     if (response.data.code === 200) {
-      certificate.value = response.data.data
+      // 后端返回 { data: { certificate: {...}, asset: {...} } }
+      const payload = response.data.data || {}
+      const certificateData = payload.certificate || {}
+      const assetData = payload.asset || {}
+      certificate.value = {
+        ...assetData,
+        ...certificateData,
+        asset_title: assetData.title || certificateData.asset_title || '',
+        owner_name: certificateData.creator_name || assetData.owner_name || '',
+        confirmed_at: certificateData.confirmed_at || certificateData.created_at,
+        right_type: getOwnershipName(certificateData.ownership_type)
+      }
+    } else {
+      certificate.value = {}
     }
   } catch {
     ElMessage.error('加载证书失败')
@@ -223,18 +201,6 @@ function copyHash(hash) {
   if (!hash) return
   navigator.clipboard.writeText(hash)
   ElMessage.success('已复制到剪贴板')
-}
-
-async function verifyAgain() {
-  try {
-    const response = await blockchainApi.verify(certificate.value.asset_id)
-    if (response.data.code === 200) {
-      certificate.value.verified = response.data.data.verified
-      ElMessage.success(certificate.value.verified ? '验证通过' : '验证失败')
-    }
-  } catch {
-    ElMessage.error('验证失败')
-  }
 }
 
 function printCertificate() {
@@ -253,8 +219,14 @@ function shareCertificate() {
 }
 
 function getTypeName(type) {
+  if (!type) return '-'
   const map = { image: '影像', model: '模型', vector: '矢量', document: '文献', video: '视频' }
   return map[type] || type
+}
+
+function getOwnershipName(type) {
+  const map = { original: '原创', authorized: '授权使用', derived: '衍生作品' }
+  return map[type] || '著作权'
 }
 
 function formatDate(dateStr) {
@@ -272,114 +244,102 @@ onMounted(() => {
 
 .certificate-page {
   min-height: 100vh;
-  background: $bg-primary;
   padding: 24px;
+  background: $bg-secondary;
 }
 
 .toolbar {
   max-width: 860px;
-  margin: 0 auto 24px;
+  margin: 0 auto 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
 }
 
 .toolbar-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
+// 纸面
 .certificate-body {
+  position: relative;
   max-width: 860px;
   margin: 0 auto;
-  background: white;
-  border-radius: $radius-xl;
-  box-shadow: $shadow-lg;
   padding: 48px 56px;
-  position: relative;
+  background: $bg-card;
+  border: 1px solid $border-color;
+  border-radius: $radius-md;
+  box-shadow: $shadow-sm;
   overflow: hidden;
 }
 
-.cert-bg-pattern {
-  position: absolute;
-  inset: 0;
-  background-image: radial-gradient(circle at 20% 20%, rgba(16, 185, 129, 0.03) 0%, transparent 50%),
-                    radial-gradient(circle at 80% 80%, rgba(16, 185, 129, 0.03) 0%, transparent 50%);
-  pointer-events: none;
-}
-
+// 证头
 .cert-header {
-  text-align: center;
-  margin-bottom: 24px;
   position: relative;
+  margin-bottom: 28px;
+  text-align: center;
 }
 
-.cert-header-decoration {
-  color: $primary-color;
-  margin-bottom: 16px;
-}
-
-.cert-logo {
-  margin-bottom: 20px;
+.cert-emblem {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: $bg-secondary;
+  border: 1px solid $border-color;
+  border-radius: $radius-sm;
+  color: $primary-dark;
+  font-family: $font-display;
+  font-size: 22px;
+  line-height: 1;
+  user-select: none;
 }
 
 .cert-title {
-  font-size: 28px;
-  font-weight: $font-weight-bold;
+  margin: 0 0 6px;
+  font-family: $font-display;
+  font-size: 30px;
+  font-weight: 600;
   color: $text-primary;
-  margin: 0 0 4px;
-  letter-spacing: 2px;
+  letter-spacing: 0.12em;
 }
 
 .cert-subtitle {
-  font-size: $font-size-xs;
-  color: $text-placeholder;
   margin: 0 0 12px;
-  text-transform: uppercase;
-  letter-spacing: 4px;
+  font-size: 12px;
+  color: $text-placeholder;
+  letter-spacing: 0.2em;
 }
 
 .cert-id {
-  font-size: $font-size-sm;
-  color: $text-secondary;
   font-family: $font-mono;
+  font-size: 13px;
+  color: $text-secondary;
 }
 
 .cert-divider {
-  text-align: center;
   margin: 28px 0;
-  position: relative;
-
-  &::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 50%;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, $border-color, transparent);
-  }
-
-  .divider-icon {
-    display: inline-flex;
-    padding: 0 16px;
-    background: white;
-    position: relative;
-    color: $primary-color;
-  }
+  border-top: 1px solid $border-color;
 }
 
+// 分节
 .cert-section {
   margin-bottom: 28px;
 }
 
 .section-title {
-  font-size: $font-size-lg;
-  font-weight: $font-weight-semibold;
-  color: $text-primary;
   margin-bottom: 16px;
   padding-left: 12px;
-  border-left: 3px solid $primary-color;
+  border-left: 2px solid $accent-color;
+  font-family: $font-display;
+  font-size: 16px;
+  font-weight: 600;
+  color: $text-primary;
 }
 
 .info-grid {
@@ -398,14 +358,14 @@ onMounted(() => {
   }
 
   .info-label {
-    font-size: $font-size-xs;
+    font-size: 12px;
     color: $text-placeholder;
   }
 
   .info-value {
-    font-size: $font-size-sm;
+    font-size: 13px;
+    font-weight: 500;
     color: $text-primary;
-    font-weight: $font-weight-medium;
 
     &.hash {
       font-family: $font-mono;
@@ -419,116 +379,174 @@ onMounted(() => {
 .blockchain-card {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 20px;
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(5, 150, 105, 0.04));
-  border-radius: $radius-lg;
+  gap: 14px;
   margin-bottom: 16px;
+  padding: 18px 20px;
+  background: $bg-secondary;
+  border: 1px solid $border-color;
+  border-radius: $radius-lg;
   color: $primary-dark;
 
+  .bc-icon {
+    flex-shrink: 0;
+    font-size: 28px;
+    color: $primary-color;
+  }
+
   .bc-name {
-    font-size: $font-size-lg;
-    font-weight: $font-weight-semibold;
+    font-family: $font-display;
+    font-size: 16px;
+    font-weight: 600;
   }
 
   .bc-desc {
-    font-size: $font-size-xs;
+    font-size: 12px;
     color: $text-secondary;
   }
 }
 
+// 验证结果
 .verify-section {
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding: 24px;
-  border-radius: $radius-lg;
+  gap: 18px;
   margin-bottom: 28px;
+  padding: 22px 24px;
+  border-radius: $radius-lg;
 
   &.verified {
-    background: $success-bg;
-    color: $success-color;
+    background: $bg-secondary;
+    border: 1px solid $border-color;
+    color: $primary-color;
   }
 
   &.failed {
-    background: $error-bg;
-    color: $error-color;
+    background: $bg-card;
+    border: 1px solid $accent-color;
+    color: $accent-color;
   }
 
   .verify-icon {
-    width: 64px;
-    height: 64px;
     flex-shrink: 0;
-
-    svg {
-      width: 100%;
-      height: 100%;
-    }
+    font-size: 40px;
   }
 
   .verify-text {
     flex: 1;
+    min-width: 0;
   }
 
   .verify-title {
-    font-size: $font-size-lg;
-    font-weight: $font-weight-semibold;
     margin-bottom: 4px;
+    font-family: $font-display;
+    font-size: 16px;
+    font-weight: 600;
   }
 
   .verify-desc {
-    font-size: $font-size-sm;
+    font-size: 13px;
+    line-height: 1.7;
     color: $text-secondary;
   }
 }
 
+// 朱砂印章
+.cert-signature {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-top: 4px;
+}
+
+.signature-org {
+  font-family: $font-display;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  color: $text-secondary;
+}
+
+.cert-seal {
+  width: 48px;
+  height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: $accent-color;
+  border-radius: $radius-sm;
+  color: $bg-card;
+  font-family: $font-display;
+  font-size: 24px;
+  line-height: 1;
+  transform: rotate(-6deg);
+  user-select: none;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+// 页脚
 .cert-footer {
+  padding-top: 22px;
+  border-top: 1px solid $border-color;
   text-align: center;
-  padding-top: 24px;
-  border-top: 1px solid $border-light;
 
   p {
     margin: 4px 0;
-    font-size: $font-size-xs;
+    font-size: 12px;
     color: $text-placeholder;
   }
 
   .cert-footer-date {
-    font-family: $font-mono;
     margin-top: 8px;
+    font-family: $font-mono;
   }
 }
 
 // 打印样式
 @media print {
   .certificate-page {
-    background: white;
     padding: 0;
+    background: $bg-card;
   }
 
-  .no-print, .toolbar {
+  .no-print,
+  .toolbar {
     display: none !important;
   }
 
   .certificate-body {
-    box-shadow: none;
-    border-radius: 0;
-    padding: 40px 32px;
     max-width: 100%;
+    padding: 40px 32px;
+    border-radius: 0;
+    box-shadow: none;
   }
 }
 
-@media (max-width: $breakpoint-sm) {
+@media (max-width: 576px) {
+  .certificate-page {
+    padding: 16px;
+  }
+
+  .toolbar {
+    flex-wrap: wrap;
+  }
+
   .certificate-body {
     padding: 24px 20px;
+  }
+
+  .cert-title {
+    font-size: 22px;
+    letter-spacing: 0.08em;
   }
 
   .info-grid {
     grid-template-columns: 1fr;
   }
 
-  .cert-title {
-    font-size: 22px;
+  .cert-signature {
+    justify-content: flex-start;
   }
 }
 </style>

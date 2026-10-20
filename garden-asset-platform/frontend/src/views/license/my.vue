@@ -1,15 +1,24 @@
 <template>
   <div class="license-my">
-    <el-card>
+    <header class="page-bar">
+      <router-link to="/assets" class="page-back">
+        <el-icon><ArrowLeft /></el-icon>
+        返回资产档案
+      </router-link>
+      <h1 class="page-title">我的授权</h1>
+    </header>
+
+    <el-card class="license-card">
       <template #header>
         <div class="card-header">
-          <span>我的授权</span>
-          <el-radio-group v-model="filterStatus" @change="loadLicenses">
+          <span class="card-title">授权记录</span>
+          <el-radio-group v-model="filterStatus" @change="handleFilterChange">
             <el-radio-button label="">全部</el-radio-button>
             <el-radio-button label="pending">审批中</el-radio-button>
             <el-radio-button label="active">已生效</el-radio-button>
             <el-radio-button label="rejected">已拒绝</el-radio-button>
             <el-radio-button label="expired">已过期</el-radio-button>
+            <el-radio-button label="revoked">已撤销</el-radio-button>
           </el-radio-group>
         </div>
       </template>
@@ -29,32 +38,52 @@
         </template>
         <template #default>
           <el-table :data="licenses" stripe>
-            <el-table-column prop="license_code" label="授权编码" width="180" />
-            <el-table-column prop="asset_title" label="资产标题" min-width="200" show-overflow-tooltip />
-            <el-table-column prop="license_type" label="类型" width="100">
+            <el-table-column label="编码" width="170">
+              <template #default="{ row }">
+                <span class="mono">{{ row.license_code || row.application_code || '-' }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="资产标题" min-width="170" show-overflow-tooltip>
+              <template #default="{ row }">
+                {{ row.asset_title || '-' }}
+              </template>
+            </el-table-column>
+            <el-table-column label="资产编码" width="160">
+              <template #default="{ row }">
+                <span class="mono">{{ row.asset_code || '-' }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="license_type" label="类型" width="85">
               <template #default="{ row }">
                 <el-tag size="small">{{ getLicenseType(row.license_type) }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column prop="status" label="状态" width="80">
               <template #default="{ row }">
-                <StatusTag :status="row.status" />
+                <el-tag :type="getStatusMeta(row.status).type" size="small">
+                  {{ getStatusMeta(row.status).label }}
+                </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="valid_until" label="有效期" width="140">
+            <el-table-column prop="end_time" label="有效期" width="110">
               <template #default="{ row }">
-                {{ row.valid_until ? formatDate(row.valid_until) : '永久' }}
+                {{ row.end_time ? formatDate(row.end_time) : '-' }}
               </template>
             </el-table-column>
-            <el-table-column prop="created_at" label="申请时间" width="140">
+            <el-table-column prop="created_at" label="申请时间" width="110">
               <template #default="{ row }">
-                {{ formatDate(row.created_at) }}
+                {{ formatDate(row.created_at) || '-' }}
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="160" fixed="right">
+            <el-table-column label="操作" width="130" fixed="right">
               <template #default="{ row }">
                 <el-button size="small" @click="viewDetail(row)">详情</el-button>
-                <el-button size="small" type="primary" @click="downloadAsset(row)" :disabled="row.status !== 'active'">
+                <el-button
+                  size="small"
+                  type="primary"
+                  @click="downloadAsset(row)"
+                  :disabled="row.status !== 'active' || !row.asset_id"
+                >
                   下载
                 </el-button>
               </template>
@@ -63,7 +92,7 @@
 
           <EmptyState
             v-if="!loading && licenses.length === 0"
-            description="暂无授权记录"
+            :description="emptyDescription"
             :show-action="true"
             action-text="申请授权"
             @action="$router.push('/license/apply')"
@@ -79,35 +108,41 @@
         layout="total, sizes, prev, pager, next"
         @size-change="loadLicenses"
         @current-change="loadLicenses"
-        style="margin-top: 20px; justify-content: center"
+        class="license-pagination"
       />
     </el-card>
 
     <!-- 详情对话框 -->
-    <el-dialog v-model="detailVisible" title="授权详情" width="600px">
+    <el-dialog v-model="detailVisible" title="授权详情" width="min(600px, 92vw)">
       <el-descriptions :column="2" border>
-        <el-descriptions-item label="授权编码">{{ detail.license_code }}</el-descriptions-item>
+        <el-descriptions-item label="编码">{{ detail.license_code || detail.application_code || '-' }}</el-descriptions-item>
         <el-descriptions-item label="状态">
-          <StatusTag :status="detail.status" />
+          <el-tag :type="getStatusMeta(detail.status).type" size="small">
+            {{ getStatusMeta(detail.status).label }}
+          </el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="资产标题" :span="2">{{ detail.asset_title }}</el-descriptions-item>
+        <el-descriptions-item label="资产标题" :span="2">{{ detail.asset_title || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="资产编码">{{ detail.asset_code || '-' }}</el-descriptions-item>
         <el-descriptions-item label="授权类型">{{ getLicenseType(detail.license_type) }}</el-descriptions-item>
-        <el-descriptions-item label="使用期限">{{ detail.valid_until ? formatDate(detail.valid_until) : '永久' }}</el-descriptions-item>
-        <el-descriptions-item label="使用范围" :span="2">{{ detail.scope?.join('、') || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="使用目的" :span="2">{{ detail.purpose }}</el-descriptions-item>
+        <el-descriptions-item label="使用期限">{{ detail.end_time ? formatDate(detail.end_time) : '-' }}</el-descriptions-item>
+        <el-descriptions-item label="使用范围">{{ formatScope(detail) }}</el-descriptions-item>
+        <el-descriptions-item label="使用目的" :span="2">{{ detail.purpose || detail.usage_purpose || detail.usage_scope || '-' }}</el-descriptions-item>
         <el-descriptions-item label="区块链存证" :span="2">
           <span v-if="detail.tx_hash" class="mono">{{ detail.tx_hash }}</span>
           <span v-else>未上链</span>
         </el-descriptions-item>
-        <el-descriptions-item label="审批意见" :span="2">{{ detail.approve_comment || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="审批意见" :span="2">
+          {{ detail.approve_comment || detail.adm2_review_comment || detail.adm1_review_comment || '-' }}
+        </el-descriptions-item>
       </el-descriptions>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { ArrowLeft } from '@element-plus/icons-vue'
 import { licenseApi, assetApi } from '@/api/modules'
 
 const loading = ref(false)
@@ -120,21 +155,63 @@ const filterStatus = ref('')
 const detailVisible = ref(false)
 const detail = ref({})
 
+// 审批中/已拒绝查询的是“我的申请”，其余状态查询的是“我的授权”
+const APPLICATION_STATUSES = ['pending', 'rejected']
+const isApplicationView = computed(() => APPLICATION_STATUSES.includes(filterStatus.value))
+const emptyDescription = computed(() => isApplicationView.value ? '暂无申请记录' : '暂无授权记录')
+
+const STATUS_META = {
+  pending: { label: '审批中', type: 'warning' },
+  adm1_approved: { label: '一级已通过', type: 'warning' },
+  adm2_approved: { label: '二级已通过', type: 'warning' },
+  approved: { label: '已通过', type: 'success' },
+  active: { label: '生效中', type: 'success' },
+  rejected: { label: '已拒绝', type: 'danger' },
+  cancelled: { label: '已取消', type: 'info' },
+  expired: { label: '已过期', type: 'info' },
+  revoked: { label: '已撤销', type: 'danger' }
+}
+
+function getStatusMeta(status) {
+  return STATUS_META[status] || { label: status || '未知', type: 'info' }
+}
+
+function handleFilterChange() {
+  page.value = 1
+  loadLicenses()
+}
+
 async function loadLicenses() {
   loading.value = true
   try {
     const params = {
       page: page.value,
-      per_page: perPage.value,
-      status: filterStatus.value
+      per_page: perPage.value
     }
-    const response = await licenseApi.getMyLicenses(params)
-    if (response.data.code === 200) {
-      licenses.value = response.data.data.items
-      total.value = response.data.data.total
+    if (filterStatus.value) {
+      // “审批中”同时包含待一级审批与一级已通过、待二级审批
+      params.status = (isApplicationView.value && filterStatus.value === 'pending')
+        ? 'in_progress'
+        : filterStatus.value
+    }
+
+    const response = isApplicationView.value
+      ? await licenseApi.myApplications(params)
+      : await licenseApi.getMyLicenses(params)
+
+    if (response.data?.code === 200) {
+      const data = response.data.data
+      const items = Array.isArray(data) ? data : (data?.items || [])
+      licenses.value = items
+      total.value = Array.isArray(data) ? items.length : (data?.total || 0)
+    } else {
+      licenses.value = []
+      total.value = 0
     }
   } catch (error) {
-    ElMessage.error('加载失败')
+    console.error('加载授权记录失败:', error)
+    licenses.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }
@@ -174,7 +251,14 @@ function getLicenseType(type) {
     display: '展览展示',
     derivative: '衍生创作'
   }
-  return map[type] || type
+  return map[type] || type || '-'
+}
+
+function formatScope(detail) {
+  if (Array.isArray(detail.scope) && detail.scope.length > 0) {
+    return detail.scope.join('、')
+  }
+  return detail.usage_scope || '-'
 }
 
 function formatDate(dateStr) {
@@ -191,9 +275,55 @@ onMounted(() => {
 @use '@/assets/styles/variables.scss' as *;
 
 .license-my {
-  padding: $spacing-lg;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: $spacing-2xl $spacing-3xl;
   min-height: 100vh;
   background: $bg-primary;
+}
+
+// ========== 页眉 ==========
+.page-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: $spacing-md;
+  padding-bottom: $spacing-md;
+  margin-bottom: $spacing-xl;
+  border-bottom: 1px solid $border-light;
+}
+
+.page-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: $font-size-sm;
+  color: $text-secondary;
+  transition: color $transition-fast;
+
+  &:hover {
+    color: $primary-dark;
+  }
+}
+
+.page-title {
+  font-family: $font-display;
+  font-size: 23px;
+  font-weight: $font-weight-semibold;
+  line-height: $line-height-tight;
+  letter-spacing: 0.02em;
+  color: $text-primary;
+}
+
+.license-card {
+  :deep(.el-card__header) {
+    padding: $spacing-lg $spacing-xl;
+    border-bottom: 1px solid $border-light;
+  }
+
+  :deep(.el-card__body) {
+    padding: $spacing-xl;
+  }
 }
 
 .card-header {
@@ -201,23 +331,41 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: $spacing-sm;
+  gap: $spacing-sm $spacing-md;
+}
+
+.card-title {
+  font-family: $font-display;
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: $text-primary;
+}
+
+.license-pagination {
+  margin-top: $spacing-xl;
+  justify-content: center;
 }
 
 .mono {
-  font-family: 'Courier New', monospace;
+  font-family: $font-mono;
   font-size: $font-size-xs;
+  letter-spacing: 0.02em;
   word-break: break-all;
 }
 
-@media (max-width: $breakpoint-sm) {
+@media (max-width: $breakpoint-md) {
   .license-my {
-    padding: $spacing-md;
+    padding: $spacing-lg;
   }
 
   .card-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .license-card :deep(.el-radio-group) {
+    flex-wrap: wrap;
+    row-gap: $spacing-xs;
   }
 }
 </style>

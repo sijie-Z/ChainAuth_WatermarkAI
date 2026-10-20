@@ -1,0 +1,10 @@
+# 代码所有者：PR 会自动请求以下人员审查
+# 语法: <pattern> <owner>...
+
+*                                   @sijie-Z
+
+# 核心业务与安全敏感模块
+/garden-asset-platform/backend/      @sijie-Z
+/garden-asset-platform/frontend/     @sijie-Z
+/.github/                            @sijie-Z
+/scripts/                            @sijie-Z

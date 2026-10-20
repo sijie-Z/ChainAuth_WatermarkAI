@@ -1,12 +1,21 @@
-"""
-Pytest配置
-"""
-[pytest]
-testpaths = tests
-python_files = test_*.py
-python_classes = Test*
-python_functions = test_*
-addopts = -v --tb=short --cov=app --cov-report=term-missing
-filterwarnings =
-    ignore::DeprecationWarning
-    ignore::PendingDeprecationWarning
+# 工具配置（pytest 配置以 pytest.ini 为准）
+# 有效的 TOML：不要在这里写 INI 风格的 [pytest] 段。
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+exclude = [
+  ".git",
+  "__pycache__",
+  "migrations",
+  "uploads",
+  "data",
+]
+
+[tool.ruff.lint]
+# CI 只启用致命规则；后续可以逐步扩大
+select = ["E9", "F63", "F7", "F82"]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["tests/*", "migrations/*"]

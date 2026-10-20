@@ -8,7 +8,6 @@ from datetime import datetime
 from flask import request, current_app
 from flask_restful import Resource
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from werkzeug.utils import secure_filename
 from app.extensions import db
 from app.models.user import User
 from app.models.asset import Asset, AssetTag, AssetFeature
@@ -16,7 +15,11 @@ from app.models.garden import Garden
 from app.models.license import LicenseApplication, License
 from app.models.log import OperationLog
 from app.utils.middleware import rate_limit
-from sqlalchemy import func
+from sqlalchemy import func, or_
+
+
+ADMIN_ROLES = ('admin', 'asset_admin', 'license_admin', 'adm1', 'adm2')
+ASSET_STATUSES = ('draft', 'pending', 'published', 'rejected', 'deleted')
 
 
 class PublicStatsResource(Resource):
@@ -24,9 +27,13 @@ class PublicStatsResource(Resource):
 
     def get(self):
         total = Asset.query.filter(Asset.status != 'deleted').count()
-        watermarked = Asset.query.filter(Asset.watermark_id.isnot(None)).count()
-        chained = Asset.query.filter(Asset.chain_tx_hash.isnot(None)).count()
-        total_licenses = License.query.count()
+        watermarked = Asset.query.filter(
+            Asset.watermark_id.isnot(None), Asset.status != 'deleted'
+        ).count()
+        chained = Asset.query.filter(
+            Asset.chain_tx_hash.isnot(None), Asset.status != 'deleted'
+        ).count()
+        total_licenses = License.query.join(Asset).filter(Asset.status != 'deleted').count()
 
         by_type = {}
         for type_name in ['image', 'model', 'vector', 'document', 'video']:
@@ -53,7 +60,7 @@ class PublicStatsResource(Resource):
 ALLOWED_EXTENSIONS = {
     'image': ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'webp'],
     'model': ['obj', 'fbx', 'gltf', 'glb', 'stl'],
-    'vector': ['shp', 'geojson', 'kml', 'kmz'],
+    'vector': ['shp', 'geojson', 'kml', 'kmz', 'zip'],
     'document': ['pdf', 'doc', 'docx', 'dwg', 'dxf'],
     'video': ['mp4', 'mov', 'avi', 'mkv']
 }
@@ -89,6 +96,7 @@ MAGIC_BYTES = {
     'geojson': [b'{'],
     'kml': [b'<?xml', b'<kml'],
     'kmz': [b'PK\x03\x04'],
+    'zip': [b'PK\x03\x04'],
     # 3D模型
     'obj': [b'# ', b'v ', b'f '],
     'stl': [b'solid'],
@@ -142,22 +150,43 @@ class AssetListResource(Resource):
     @jwt_required()
     def get(self):
         """获取资产列表"""
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        if not user:
+            return {'code': 401, 'message': '用户不存在'}, 401
+
         page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 20, type=int)
+        per_page = min(max(request.args.get('per_page', 20, type=int), 1), 100)
         asset_type = request.args.get('asset_type')
         garden_id = request.args.get('garden_id', type=int)
-        status = request.args.get('status', 'published')
+        status = (request.args.get('status') or '').strip()
+        watermark_status = (request.args.get('watermark_status') or '').strip()
+        chain_status = (request.args.get('chain_status') or '').strip()
         keyword = request.args.get('keyword')
 
         query = Asset.query
+
+        # 状态可见性：管理员可按状态筛选；普通用户只能看已发布
+        if status:
+            if status not in ASSET_STATUSES:
+                return {'code': 400, 'message': '无效的状态筛选'}, 400
+            if status != 'published' and user.role not in ADMIN_ROLES:
+                return {'code': 403, 'message': '无权限查看该状态的资产'}, 403
+            query = query.filter_by(status=status)
+        elif user.role in ADMIN_ROLES:
+            query = query.filter(Asset.status != 'deleted')
+        else:
+            query = query.filter_by(status='published')
 
         # 过滤条件
         if asset_type:
             query = query.filter_by(asset_type=asset_type)
         if garden_id:
             query = query.filter_by(garden_id=garden_id)
-        if status:
-            query = query.filter_by(status=status)
+        if watermark_status in ('none', 'embedded', 'verified', 'failed'):
+            query = query.filter_by(watermark_status=watermark_status)
+        if chain_status in ('none', 'pending', 'confirmed', 'failed'):
+            query = query.filter_by(chain_status=chain_status)
         if keyword:
             query = query.filter(Asset.title.ilike(f'%{keyword}%'))
 
@@ -185,9 +214,23 @@ class AssetResource(Resource):
     @jwt_required()
     def get(self, asset_id):
         """获取资产详情"""
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
         asset = Asset.query.get(asset_id)
 
         if not asset:
+            return {'code': 404, 'message': '资产不存在'}, 404
+
+        if user:
+            is_admin = user.role in ADMIN_ROLES
+            is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
+        else:
+            is_admin = is_owner = False
+
+        # 已删除仅管理员可见；未发布仅所有者/管理员可见
+        if asset.status == 'deleted' and not is_admin:
+            return {'code': 404, 'message': '资产不存在'}, 404
+        if asset.status != 'published' and not (is_admin or is_owner):
             return {'code': 404, 'message': '资产不存在'}, 404
 
         # 增加浏览次数
@@ -210,7 +253,7 @@ class AssetResource(Resource):
             return {'code': 404, 'message': '资产不存在'}, 404
 
         # 权限检查
-        if asset.creator_id != user_id and user.role not in ['admin', 'adm1', 'adm2', 'adm3']:
+        if asset.creator_id != user_id and user.role not in ADMIN_ROLES:
             return {'code': 403, 'message': '无权限修改'}, 403
 
         data = request.get_json()
@@ -250,10 +293,14 @@ class AssetResource(Resource):
             return {'code': 404, 'message': '资产不存在'}, 404
 
         # 权限检查
-        if asset.creator_id != user_id and user.role not in ['admin', 'adm1', 'adm2', 'adm3']:
+        if asset.creator_id != user_id and user.role not in ADMIN_ROLES:
             return {'code': 403, 'message': '无权限删除'}, 403
 
         asset.status = 'deleted'
+        # 删除后撤销仍然有效的授权，避免继续下载
+        License.query.filter_by(asset_id=asset_id, status='active').update(
+            {'status': 'revoked'}, synchronize_session=False
+        )
         db.session.commit()
 
         OperationLog.log(
@@ -300,7 +347,10 @@ class AssetUploadResource(Resource):
         if not allowed_file(file.filename, asset_type):
             return {'code': 400, 'message': '不支持的文件类型'}, 400
 
-        ext = file.filename.rsplit('.', 1)[1].lower()
+        original_name = file.filename or ''
+        if '.' not in original_name:
+            return {'code': 400, 'message': '文件名缺少扩展名'}, 400
+        ext = original_name.rsplit('.', 1)[1].lower()
         if not validate_magic_bytes(file, ext):
             return {'code': 400, 'message': '文件内容与扩展名不匹配'}, 400
 
@@ -324,9 +374,7 @@ class AssetUploadResource(Resource):
                 'data': {'existing_asset_id': existing.id}
             }, 400
 
-        # 生成文件名和路径
-        filename = secure_filename(file.filename)
-        ext = filename.rsplit('.', 1)[1].lower()
+        # 生成文件名和路径（UUID + 已验证扩展名；中文原名会被 secure_filename 剥掉扩展名）
         new_filename = f"{uuid.uuid4().hex}.{ext}"
 
         # 获取园林编码
@@ -363,6 +411,7 @@ class AssetUploadResource(Resource):
             storage_path=file_path,
             garden_id=garden_id,
             creator_id=user_id,
+            uploader_id=user_id,
             owner_id=user_id,
             status='draft'
         )
@@ -405,18 +454,25 @@ class AssetDownloadResource(Resource):
         if not asset:
             return {'code': 404, 'message': '资产不存在'}, 404
 
-        if asset.status != 'published':
+        is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
+
+        # 所有者与管理员可下载未发布资产；已删除仅管理员可见
+        if asset.status == 'deleted' and user.role not in ADMIN_ROLES:
+            return {'code': 404, 'message': '资产不存在'}, 404
+        if asset.status != 'published' and not (is_owner or user.role in ADMIN_ROLES):
             return {'code': 403, 'message': '资产未发布'}, 403
 
-        # 检查下载权限
+        # 检查下载权限：有效授权未过期，或本人/管理员
         from app.models.license import License
-        has_license = License.query.filter_by(
-            asset_id=asset_id,
-            licensee_id=user_id,
-            status='active'
+        now = datetime.utcnow()
+        has_license = License.query.filter(
+            License.asset_id == asset_id,
+            License.licensee_id == user_id,
+            License.status == 'active',
+            or_(License.end_time.is_(None), License.end_time > now),
         ).first()
 
-        if not has_license and asset.creator_id != user_id and user.role not in ['admin', 'adm1', 'adm2', 'adm3']:
+        if not has_license and not is_owner and user.role not in ADMIN_ROLES:
             return {'code': 403, 'message': '无下载权限，请先申请授权'}, 403
 
         # 记录下载
@@ -444,7 +500,8 @@ class AssetDownloadResource(Resource):
         from flask import send_file as flask_send_file
 
         # 优先返回嵌入水印后的文件，否则返回原始文件
-        file_path = asset.watermarked_path or asset.storage_path
+        # send_file 以 app.root_path 为基准解析相对路径，这里统一转成绝对路径
+        file_path = os.path.abspath(asset.watermarked_path or asset.storage_path or '')
         if not file_path or not os.path.exists(file_path):
             return {'code': 404, 'message': '文件不存在'}, 404
 
@@ -524,7 +581,7 @@ class AssetStatsResource(Resource):
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
 
-        if user.role not in ['admin', 'adm1', 'adm2', 'adm3']:
+        if user.role not in ADMIN_ROLES:
             return {'code': 403, 'message': '无权限'}, 403
 
         # 统计数据
@@ -596,14 +653,18 @@ class MyAssetsResource(Resource):
     def get(self):
         """获取用户自己的资产列表"""
         user_id = get_jwt_identity()
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 20, type=int)
-        status = request.args.get('status')
+        page = max(request.args.get('page', 1, type=int), 1)
+        per_page = min(max(request.args.get('per_page', 20, type=int), 1), 100)
+        status = (request.args.get('status') or '').strip()
 
         query = Asset.query.filter_by(creator_id=user_id)
 
         if status:
+            if status not in ASSET_STATUSES:
+                return {'code': 400, 'message': '无效的状态筛选'}, 400
             query = query.filter_by(status=status)
+        else:
+            query = query.filter(Asset.status != 'deleted')
 
         query = query.order_by(Asset.created_at.desc())
         pagination = query.paginate(page=page, per_page=per_page, error_out=False)
@@ -639,13 +700,20 @@ class AssetTagsResource(Resource):
     def post(self, asset_id):
         """添加标签"""
         user_id = get_jwt_identity()
+        user = User.query.get(user_id)
         asset = Asset.query.get(asset_id)
 
         if not asset:
             return {'code': 404, 'message': '资产不存在'}, 404
 
-        data = request.get_json()
+        is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
+        if not is_owner and user.role not in ADMIN_ROLES:
+            return {'code': 403, 'message': '无权限修改标签'}, 403
+
+        data = request.get_json() or {}
         tags = data.get('tags', [])
+        if not isinstance(tags, list) or len(tags) > 20:
+            return {'code': 400, 'message': '标签格式错误'}, 400
 
         for tag_name in tags:
             existing = AssetTag.query.filter_by(
@@ -661,7 +729,7 @@ class AssetTagsResource(Resource):
 
         db.session.commit()
 
-        return {'code': 200, 'message': '标签添加��功'}, 200
+        return {'code': 200, 'message': '标签添加成功'}, 200
 
 
 class AssetPublishResource(Resource):
@@ -704,7 +772,7 @@ class AssetApproveResource(Resource):
         if not asset:
             return {'code': 404, 'message': '资产不存在'}, 404
 
-        if user.role not in ['admin', 'adm1', 'adm2']:
+        if user.role not in ('admin', 'asset_admin', 'adm1', 'adm2'):
             return {'code': 403, 'message': '无审核权限'}, 403
 
         if asset.status != 'pending':

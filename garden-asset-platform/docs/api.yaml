@@ -5,7 +5,7 @@ info:
   description: 基于数字水印和AI推理的苏州园林数字资产安全分发与溯源系统
   version: 1.0.0
   contact:
-    name: 挑战杯项目团队
+    name: 苏州园林数字资产平台团队
 
 servers:
   - url: http://localhost:5000/api

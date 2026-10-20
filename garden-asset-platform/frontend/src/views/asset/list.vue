@@ -69,7 +69,7 @@
           <div class="filter-item">
             <el-select v-model="search.garden_id" placeholder="所属园林" clearable size="large" style="width: 160px">
               <el-option label="全部园林" value="" />
-              <el-option v-for="g in gardens" :key="g.id" :label="g.name" :value="g.id" />
+              <el-option v-for="g in gardens" :key="g.id" :label="gardensOffline ? `${g.name}（离线示例）` : g.name" :value="g.id" />
             </el-select>
           </div>
           <div class="filter-item">
@@ -77,6 +77,7 @@
               <el-option label="全部状态" value="" />
               <el-option label="已发布" value="published" />
               <el-option label="待审核" value="pending" />
+              <el-option label="已拒绝" value="rejected" />
               <el-option label="草稿" value="draft" />
             </el-select>
           </div>
@@ -84,6 +85,9 @@
             <el-icon><Search /></el-icon>
             搜索
           </el-button>
+          <el-tag v-if="gardensOffline" type="warning" size="small" effect="plain">
+            园林筛选为离线示例数据
+          </el-tag>
         </div>
       </div>
     </div>
@@ -94,11 +98,11 @@
         <span class="result-count">共 {{ pagination.total }} 项资产</span>
         <div class="view-switch">
           <el-radio-group v-model="viewMode" size="small">
-            <el-radio-button label="grid">
-              <el-icon><Grid /></el-icon>
+            <el-radio-button label="grid" aria-label="网格视图" title="网格视图">
+              <el-icon aria-hidden="true"><Grid /></el-icon>
             </el-radio-button>
-            <el-radio-button label="list">
-              <el-icon><List /></el-icon>
+            <el-radio-button label="list" aria-label="列表视图" title="列表视图">
+              <el-icon aria-hidden="true"><List /></el-icon>
             </el-radio-button>
           </el-radio-group>
         </div>
@@ -122,7 +126,12 @@
           class="asset-card"
           v-for="asset in assets"
           :key="asset.id"
+          role="button"
+          tabindex="0"
+          :aria-label="`查看资产 ${asset.title || asset.asset_code || ''}`"
           @click="viewDetail(asset.id)"
+          @keydown.enter.prevent="viewDetail(asset.id)"
+          @keydown.space.prevent="viewDetail(asset.id)"
         >
           <div class="asset-thumbnail">
             <img :src="getThumbnail(asset)" :alt="asset.title" />
@@ -237,10 +246,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, shallowRef } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { assetApi, gardenApi, publicApi } from '@/api/modules'
-import { Upload, Search, Grid, List, Calendar, Picture, Document, VideoCamera, Collection, Link } from '@element-plus/icons-vue'
+import { Upload, Search, Grid, List, Calendar, Picture, Document, Collection } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -249,13 +258,14 @@ const loading = ref(false)
 const statsLoading = ref(true)
 const assets = ref([])
 const gardens = ref([])
+const gardensOffline = ref(false)
 const viewMode = ref('grid')
 
 const search = reactive({
   keyword: '',
   asset_type: '',
   garden_id: '',
-  status: 'published'
+  status: ''
 })
 
 const pagination = reactive({
@@ -265,11 +275,11 @@ const pagination = reactive({
 })
 
 // 统计数据
-const stats = ref([
-  { key: 'total', label: '总资产', value: 0, icon: 'Picture', gradient: 'linear-gradient(135deg, #10b981, #059669)' },
-  { key: 'image', label: '影像', value: 0, icon: 'Picture', gradient: 'linear-gradient(135deg, #3b82f6, #1d4ed8)' },
-  { key: 'model', label: '模型', value: 0, icon: 'Collection', gradient: 'linear-gradient(135deg, #8b5cf6, #6d28d9)' },
-  { key: 'vector', label: '矢量', value: 0, icon: 'Document', gradient: 'linear-gradient(135deg, #f59e0b, #d97706)' }
+const stats = shallowRef([
+  { key: 'total', label: '总资产', value: 0, icon: Picture, gradient: '#eaf0eb' },
+  { key: 'image', label: '影像', value: 0, icon: Picture, gradient: '#eaf0eb' },
+  { key: 'model', label: '模型', value: 0, icon: Collection, gradient: '#eaf0eb' },
+  { key: 'vector', label: '矢量', value: 0, icon: Document, gradient: '#eaf0eb' }
 ])
 
 async function loadStats() {
@@ -279,10 +289,10 @@ async function loadStats() {
     if (response.data?.code === 200) {
       const d = response.data.data
       stats.value = [
-        { key: 'total', label: '总资产', value: d.total_assets || 0, icon: 'Picture', gradient: 'linear-gradient(135deg, #10b981, #059669)' },
-        { key: 'image', label: '影像', value: d.by_type?.image || 0, icon: 'Picture', gradient: 'linear-gradient(135deg, #3b82f6, #1d4ed8)' },
-        { key: 'model', label: '模型', value: d.by_type?.model || 0, icon: 'Collection', gradient: 'linear-gradient(135deg, #8b5cf6, #6d28d9)' },
-        { key: 'vector', label: '矢量', value: d.by_type?.vector || 0, icon: 'Document', gradient: 'linear-gradient(135deg, #f59e0b, #d97706)' }
+        { key: 'total', label: '总资产', value: d.total_assets || 0, icon: Picture, gradient: '#eaf0eb' },
+        { key: 'image', label: '影像', value: d.by_type?.image || 0, icon: Picture, gradient: '#eaf0eb' },
+        { key: 'model', label: '模型', value: d.by_type?.model || 0, icon: Collection, gradient: '#eaf0eb' },
+        { key: 'vector', label: '矢量', value: d.by_type?.vector || 0, icon: Document, gradient: '#eaf0eb' }
       ]
     }
   } catch {
@@ -301,7 +311,7 @@ async function loadAssets() {
       keyword: search.keyword || undefined,
       asset_type: search.asset_type || undefined,
       garden_id: search.garden_id || undefined,
-      status: search.status || 'published'
+      status: search.status || undefined
     }
     const response = await assetApi.getList(params)
     if (response.data?.code === 200) {
@@ -322,8 +332,12 @@ async function loadGardens() {
     const response = await gardenApi.getList()
     if (response.data?.code === 200) {
       gardens.value = response.data.data || []
+      gardensOffline.value = false
     }
   } catch (error) {
+    // 接口失败时使用兜底数据，并在界面明确标注为离线示例，避免掩盖故障
+    console.error('加载园林列表失败，使用离线示例数据:', error)
+    gardensOffline.value = true
     gardens.value = [
       { id: 1, name: '拙政园', code: 'ZZY' },
       { id: 2, name: '留园', code: 'LY' },
@@ -351,8 +365,8 @@ function applyLicense(id) {
 
 function getThumbnail(asset) {
   if (asset.thumbnail_path) return asset.thumbnail_path
-  const colors = { image: '#10b981', vector: '#3b82f6', model: '#8b5cf6', document: '#f59e0b', video: '#ef4444' }
-  const color = (colors[asset.asset_type] || '#6b7280').replace('#', '')
+  const colors = { image: '#2f6b5a', vector: '#4c6e8a', model: '#6d5b7a', document: '#b07a2a', video: '#a6402f' }
+  const color = (colors[asset.asset_type] || '#5b675f').replace('#', '')
   const label = (asset.asset_type || 'FILE').substring(0, 3).toUpperCase()
   return `data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="300"%3E%3Crect fill="%23${color}" width="400" height="300" rx="8"/%3E%3Ctext x="200" y="160" text-anchor="middle" fill="white" font-size="28"%3E${label}%3C/text%3E%3C/svg%3E`
 }
@@ -368,12 +382,12 @@ function getTypeTag(type) {
 }
 
 function getWatermarkStatus(status) {
-  const map = { none: '未嵌入', pending: '处理中', embedded: '已嵌入' }
+  const map = { none: '未嵌入', pending: '处理中', embedded: '已嵌入', verified: '已校验', failed: '失败' }
   return map[status] || '未知'
 }
 
 function getChainStatus(status) {
-  const map = { none: '未存证', pending: '处理中', confirmed: '已存证' }
+  const map = { none: '未存证', pending: '处理中', confirmed: '已存证', failed: '存证失败' }
   return map[status] || '未知'
 }
 
@@ -404,8 +418,8 @@ onMounted(() => {
 
 // 页面头部
 .page-header {
-  background: white;
-  padding: 32px 48px;
+  background: $bg-card;
+  padding: 28px 40px;
   border-bottom: 1px solid $border-light;
 
   .header-content {
@@ -418,10 +432,11 @@ onMounted(() => {
 
   .title-section {
     .page-title {
-      font-size: 28px;
-      font-weight: $font-weight-bold;
+      font-family: $font-display;
+      font-size: 26px;
+      font-weight: 600;
       color: $text-primary;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
 
     .page-subtitle {
@@ -431,14 +446,11 @@ onMounted(() => {
   }
 
   .upload-btn {
-    background: $primary-gradient;
-    border: none;
-    padding: 12px 24px;
+    background: $primary-color;
+    border: 1px solid $primary-dark;
+    padding: 10px 20px;
+    border-radius: $radius-sm;
     font-weight: $font-weight-medium;
-
-    &:hover {
-      opacity: 0.9;
-    }
   }
 }
 
@@ -452,36 +464,39 @@ onMounted(() => {
   gap: 20px;
 
   .stat-card {
-    background: white;
-    border-radius: $radius-xl;
-    padding: 24px;
+    background: $bg-card;
+    border: 1px solid $border-color;
+    border-radius: $radius-lg;
+    padding: 18px;
     display: flex;
     align-items: center;
-    gap: 16px;
-    box-shadow: $shadow-card;
-    transition: all $transition-base;
+    gap: 14px;
+    box-shadow: $shadow-sm;
+    transition: border-color $transition-fast;
 
     &:hover {
-      transform: translateY(-2px);
-      box-shadow: $shadow-card-hover;
+      border-color: $border-dark;
     }
 
     .stat-icon {
-      width: 56px;
-      height: 56px;
-      border-radius: $radius-lg;
+      width: 42px;
+      height: 42px;
+      border-radius: $radius-md;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 24px;
-      color: white;
+      font-size: 20px;
+      color: $primary-dark;
+      border: 1px solid $border-color;
     }
 
     .stat-info {
       .stat-value {
-        font-size: 28px;
-        font-weight: $font-weight-bold;
+        font-family: $font-display;
+        font-size: 26px;
+        font-weight: 600;
         color: $text-primary;
+        line-height: 1.2;
       }
 
       .stat-label {
@@ -499,10 +514,11 @@ onMounted(() => {
   padding: 0 48px 24px;
 
   .filter-card {
-    background: white;
-    border-radius: $radius-xl;
-    padding: 20px 24px;
-    box-shadow: $shadow-card;
+    background: $bg-card;
+    border: 1px solid $border-color;
+    border-radius: $radius-lg;
+    padding: 16px 20px;
+    box-shadow: $shadow-sm;
   }
 
   .filter-row {
@@ -547,24 +563,30 @@ onMounted(() => {
   gap: 24px;
 
   .asset-card {
-    background: white;
-    border-radius: $radius-2xl;
+    background: $bg-card;
+    border: 1px solid $border-color;
+    border-radius: $radius-md;
     overflow: hidden;
-    box-shadow: $shadow-card;
+    box-shadow: $shadow-sm;
     cursor: pointer;
-    transition: all $transition-base;
+    transition: border-color $transition-fast, box-shadow $transition-fast;
 
     &:hover {
-      transform: translateY(-4px);
-      box-shadow: $shadow-xl;
+      border-color: $border-dark;
+      box-shadow: $shadow-md;
 
       .asset-overlay {
         opacity: 1;
       }
 
       .asset-thumbnail img {
-        transform: scale(1.05);
+        transform: scale(1.03);
       }
+    }
+
+    &:focus-visible {
+      outline: 2px solid $primary-color;
+      outline-offset: 2px;
     }
 
     .asset-thumbnail {
@@ -598,15 +620,16 @@ onMounted(() => {
         font-size: 12px;
         font-weight: $font-weight-medium;
         color: white;
-        background: rgba(0, 0, 0, 0.5);
+        background: rgba(0, 0, 0, 0.42);
         backdrop-filter: blur(4px);
-        border-radius: $radius-full;
+        border: 1px solid rgba(252, 253, 251, 0.18);
+        border-radius: $radius-xs;
 
         &.image { background: rgba($primary-color, 0.9); }
-        &.model { background: rgba(#8b5cf6, 0.9); }
-        &.vector { background: rgba(#3b82f6, 0.9); }
-        &.document { background: rgba(#f59e0b, 0.9); }
-        &.video { background: rgba(#ef4444, 0.9); }
+        &.model { background: rgba(#6d5b7a, 0.9); }
+        &.vector { background: rgba(#4c6e8a, 0.9); }
+        &.document { background: rgba(#b07a2a, 0.9); }
+        &.video { background: rgba(#a6402f, 0.9); }
       }
     }
 
@@ -657,9 +680,14 @@ onMounted(() => {
         background: $bg-secondary;
         color: $text-secondary;
 
-        &.embedded, &.confirmed {
+        &.embedded, &.confirmed, &.verified {
           background: rgba($success-color, 0.1);
           color: $success-color;
+        }
+
+        &.failed {
+          background: rgba($error-color, 0.1);
+          color: $error-color;
         }
       }
     }
@@ -712,7 +740,8 @@ onMounted(() => {
 
     &.none { background: $text-placeholder; }
     &.pending { background: $warning-color; }
-    &.embedded, &.confirmed { background: $success-color; }
+    &.embedded, &.confirmed, &.verified { background: $success-color; }
+    &.failed { background: $error-color; }
   }
 
   .action-buttons {

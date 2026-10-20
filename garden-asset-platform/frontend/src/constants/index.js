@@ -4,20 +4,20 @@
 
 // 资产类型
 export const ASSET_TYPES = [
-  { value: 'image', label: '影像', color: '#409eff' },
-  { value: 'model', label: '三维模型', color: '#67c23a' },
-  { value: 'vector', label: '矢量数据', color: '#e6a23c' },
-  { value: 'document', label: '文献', color: '#909399' },
-  { value: 'video', label: '视频', color: '#f56c6c' }
+  { value: 'image', label: '影像', color: '#2f6b5a' },
+  { value: 'model', label: '三维模型', color: '#3f7d5b' },
+  { value: 'vector', label: '矢量数据', color: '#b07a2a' },
+  { value: 'document', label: '文献', color: '#5b675f' },
+  { value: 'video', label: '视频', color: '#a6402f' }
 ]
 
 // 授权类型
 export const LICENSE_TYPES = [
-  { value: 'personal', label: '个人使用', color: '#409eff' },
-  { value: 'academic', label: '学术研究', color: '#67c23a' },
-  { value: 'commercial', label: '商业使用', color: '#e6a23c' },
-  { value: 'display', label: '展览展示', color: '#909399' },
-  { value: 'derivative', label: '衍生创作', color: '#f56c6c' }
+  { value: 'personal', label: '个人使用', color: '#2f6b5a' },
+  { value: 'academic', label: '学术研究', color: '#3f7d5b' },
+  { value: 'commercial', label: '商业使用', color: '#b07a2a' },
+  { value: 'display', label: '展览展示', color: '#5b675f' },
+  { value: 'derivative', label: '衍生创作', color: '#a6402f' }
 ]
 
 // 使用期限
@@ -66,5 +66,5 @@ export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 export const APP_INFO = {
   title: '苏州园林数字资产平台',
   description: '基于数字水印和AI推理的苏州园林数字资产安全分发与溯源系统',
-  copyright: '© 2026 挑战杯项目团队'
+  copyright: '© 2026 苏州园林数字资产平台团队'
 }

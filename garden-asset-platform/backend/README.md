@@ -4,7 +4,7 @@
 
 ## 环境要求
 
-- Python 3.9+
+- Python 3.11+
 - PostgreSQL 14+ (或SQLite用于开发)
 - Redis 6+ (可选，用于Celery任务队列)
 

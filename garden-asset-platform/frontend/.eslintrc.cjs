@@ -1,6 +1,6 @@
-"""
-ESLint配置
-"""
+/**
+ * ESLint 配置
+ */
 module.exports = {
   root: true,
   env: {
@@ -14,7 +14,7 @@ module.exports = {
     '@vue/eslint-config-prettier'
   ],
   parserOptions: {
-    ecjsVersion: 'latest',
+    ecmaVersion: 'latest',
     sourceType: 'module'
   },
   rules: {

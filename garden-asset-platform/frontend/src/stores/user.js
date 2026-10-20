@@ -26,13 +26,18 @@ export const useUserStore = defineStore('user', () => {
     localStorage.setItem('user', JSON.stringify(userData))
   }
 
-  function logout() {
+  // 清除本地登录态：供退出登录、token 刷新失败、路由守卫复用
+  function clearAuth() {
     token.value = ''
     refreshToken.value = ''
     user.value = null
     localStorage.removeItem('token')
     localStorage.removeItem('refreshToken')
     localStorage.removeItem('user')
+  }
+
+  function logout() {
+    clearAuth()
   }
 
   async function login(credentials) {
@@ -64,9 +69,11 @@ export const useUserStore = defineStore('user', () => {
 
   function initStore() {
     const savedToken = localStorage.getItem('token')
+    const savedRefreshToken = localStorage.getItem('refreshToken')
     const savedUser = localStorage.getItem('user')
     if (savedToken && savedUser) {
       token.value = savedToken
+      refreshToken.value = savedRefreshToken || ''
       user.value = JSON.parse(savedUser)
     }
   }
@@ -80,6 +87,7 @@ export const useUserStore = defineStore('user', () => {
     username,
     setToken,
     setUser,
+    clearAuth,
     logout,
     login,
     register,

@@ -1,0 +1,65 @@
+# Release Drafter：根据已合并的 PR 自动生成发布说明草稿（v7 配置）
+# 文档: https://github.com/release-drafter/release-drafter
+
+name-template: "v$RESOLVED_VERSION"
+tag-template: "v$RESOLVED_VERSION"
+
+categories:
+  - title: "🚀 新功能"
+    semver-increment: minor
+    when:
+      labels: [feature, enhancement]
+
+  - title: "🐛 缺陷修复"
+    when:
+      labels: [bug, fix]
+
+  - title: "🔒 安全"
+    when:
+      labels: [security]
+
+  - title: "⚡ 性能与重构"
+    when:
+      labels: [performance, refactor]
+
+  - title: "🧪 测试与 CI"
+    when:
+      labels: [tests, ci]
+
+  - title: "📦 依赖更新"
+    when:
+      labels: [dependencies, docker]
+
+  - title: "📝 文档"
+    when:
+      labels: [documentation, docs]
+
+  - title: "🔧 其他变更"
+    when:
+      labels: ["*"]
+
+  # 不进入发布说明
+  - type: "pre-exclude"
+    when:
+      label: skip-changelog
+
+  # 版本解析：major 优先，其余默认 patch（新功能类别已声明 minor）
+  - type: "version-resolver"
+    semver-increment: major
+    when:
+      labels: [major, breaking-change]
+
+  - type: "version-resolver"
+    semver-increment: patch
+
+change-template: "- $TITLE @$AUTHORS (#$NUMBER)"
+change-title-escapes: '\<*_&'
+
+template: |
+  ## 变更内容
+
+  $CHANGES
+
+  **完整变更**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
+
+  **贡献者**: $CONTRIBUTORS

@@ -9,7 +9,12 @@ class OperationLog(db.Model):
     """操作日志表"""
     __tablename__ = 'operation_logs'
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    # SQLite 只有 INTEGER PRIMARY KEY 才会自增，BIGINT 主键会报 NOT NULL
+    id = db.Column(
+        db.BigInteger().with_variant(db.Integer, 'sqlite'),
+        primary_key=True,
+        autoincrement=True,
+    )
 
     # 操作用户
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)

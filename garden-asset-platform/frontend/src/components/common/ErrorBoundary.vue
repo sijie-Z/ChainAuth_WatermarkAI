@@ -1,7 +1,7 @@
 <template>
   <div v-if="error" class="error-boundary">
     <div class="error-content">
-      <el-icon :size="64" color="#f56c6c"><WarningFilled /></el-icon>
+      <el-icon :size="64" color="#a6402f"><WarningFilled /></el-icon>
       <h2>页面出现错误</h2>
       <p class="error-message">{{ error.message || '未知错误' }}</p>
       <div class="error-actions">

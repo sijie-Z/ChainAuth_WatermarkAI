@@ -1,6 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 
+// 管理员角色集合，与后端角色枚举保持一致（无 adm3 / super_admin）
+const ADMIN_ROLES = ['admin', 'asset_admin', 'license_admin', 'adm1', 'adm2']
+
 const routes = [
   {
     path: '/',
@@ -95,7 +98,7 @@ const routes = [
     path: '/admin',
     name: 'AdminLayout',
     component: () => import('@/views/admin/layout.vue'),
-    meta: { requiresAuth: true, roles: ['admin', 'adm1', 'adm2', 'adm3'] },
+    meta: { requiresAuth: true, roles: ADMIN_ROLES },
     children: [
       {
         path: '',
@@ -119,7 +122,7 @@ const routes = [
         path: 'license/pending',
         name: 'AdminLicensePending',
         component: () => import('@/views/admin/license-pending.vue'),
-        meta: { title: '待审批', roles: ['admin', 'adm1', 'adm2'] }
+        meta: { title: '待审批', roles: ADMIN_ROLES }
       },
       {
         path: 'license/approved',
@@ -155,9 +158,9 @@ router.beforeEach((to, from, next) => {
 
   const userStore = useUserStore()
 
-  // 已登录用户访问登录/注册页时重定向
+  // 已登录用户访问登录/注册页时按角色重定向
   if (userStore.isLoggedIn && (to.path === '/login' || to.path === '/register')) {
-    return next('/assets')
+    return next(ADMIN_ROLES.includes(userStore.userRole) ? '/admin' : '/assets')
   }
 
   // 需要认证的路由

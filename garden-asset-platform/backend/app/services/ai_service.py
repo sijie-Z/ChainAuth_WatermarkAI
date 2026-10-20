@@ -33,7 +33,7 @@ class AIService:
 
         if self.enabled:
             self._init_clip()
-            self._init_milvus()
+            self._init_milvus(app)
             self._init_glm(app)
 
     def _init_clip(self):
@@ -60,13 +60,13 @@ class AIService:
             logger.error(f"CLIP模型加载失败: {e}")
             self.enabled = False
 
-    def _init_milvus(self):
+    def _init_milvus(self, app):
         """初始化Milvus向量数据库"""
         try:
             from pymilvus import MilvusClient
 
             # 使用Lite版本（嵌入式）
-            db_path = current_app.config.get('MILVUS_DB_PATH', './data/milvus.db')
+            db_path = app.config.get('MILVUS_DB_PATH', './data/milvus.db')
             os.makedirs(os.path.dirname(db_path), exist_ok=True)
 
             self._milvus_client = MilvusClient(db_path)
