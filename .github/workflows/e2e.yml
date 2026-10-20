@@ -59,7 +59,7 @@ jobs:
         working-directory: garden-asset-platform/backend
         run: |
           nohup python -c "from app import create_app; app=create_app('development'); app.run(host='127.0.0.1', port=5000, debug=False, use_reloader=False)" > /tmp/backend.log 2>&1 &
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if curl -sf http://127.0.0.1:5000/health; then break; fi
             sleep 1
           done

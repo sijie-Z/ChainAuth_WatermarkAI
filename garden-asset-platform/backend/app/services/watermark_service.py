@@ -6,7 +6,6 @@ import os
 import logging
 from datetime import datetime
 from flask import current_app
-from werkzeug.utils import secure_filename
 
 from algorithm.vector.embed import embed_vector_watermark
 from algorithm.vector.extract import extract_vector_watermark
@@ -18,6 +17,9 @@ from app.models.log import OperationLog
 
 
 logger = logging.getLogger(__name__)
+
+# 记录本进程创建的矢量临时解压目录，清理时只允许删除这些目录
+_VECTOR_TEMP_DIRS = set()
 
 
 class WatermarkService:
@@ -79,6 +81,7 @@ class WatermarkService:
         os.makedirs(base_dir, exist_ok=True)
         extract_dir = tempfile.mkdtemp(prefix='vector_', dir=base_dir)
         root_real = os.path.realpath(extract_dir)
+        _VECTOR_TEMP_DIRS.add(root_real)
         max_total = current_app.config.get('VECTOR_EXTRACT_MAX_BYTES', 200 * 1024 * 1024)
 
         try:
@@ -102,17 +105,29 @@ class WatermarkService:
             raise ValueError('矢量压缩包中未找到 .shp 文件')
         except Exception:
             shutil.rmtree(extract_dir, ignore_errors=True)
+            _VECTOR_TEMP_DIRS.discard(root_real)
             raise
 
     @staticmethod
     def cleanup_vector_temp(path):
         """删除 resolve_vector_path 产生的临时解压目录。"""
-        if not path or not path.lower().endswith('.shp'):
+        if not path:
             return
-        parent = os.path.dirname(path)
-        if os.path.basename(parent).startswith('vector_'):
-            import shutil
-            shutil.rmtree(parent, ignore_errors=True)
+
+        parent = os.path.realpath(os.path.dirname(path))
+        base_dir = os.path.realpath(current_app.config.get('UPLOAD_FOLDER', './uploads'))
+        try:
+            inside_uploads = os.path.commonpath([base_dir, parent]) == base_dir
+        except ValueError:
+            inside_uploads = False
+
+        # 只删除本进程创建、且位于 uploads 目录内的临时目录
+        if not inside_uploads or parent not in _VECTOR_TEMP_DIRS:
+            return
+
+        import shutil
+        shutil.rmtree(parent, ignore_errors=True)
+        _VECTOR_TEMP_DIRS.discard(parent)
 
     @staticmethod
     def embed_watermark(asset, user=None, watermark_path=None):

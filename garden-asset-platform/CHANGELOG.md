@@ -27,6 +27,7 @@
 - **矢量几何**：多部件（MultiPoint / MultiLineString / MultiPolygon）按部件嵌入，空几何用占位保持要素下标，修复写回错位与 MultiPoint 被写成 None
 - **AI 降级**：未安装模型/未配置 Key 时，AI 分析、问答、检索、侵权检测统一返回 503 与明确提示，不再 500
 - **依赖兼容**：锁定 `fiona==1.9.6`、`pandas==2.2.3`，修复 geopandas 0.14 在新版 fiona/pandas 下无法读写 SHP
+- **依赖安全**：升级 `geopandas==0.14.4` + `fiona==1.10.1`，修复 Fiona 1.9.6 内置 GDAL 的 CVE-2023-45853（critical）；矢量测试保持通过
 - **非图片资产**：文档/视频/模型不支持水印时返回 400 而非 500；前端自动禁用不支持的自动水印选项
 - **栅格水印算法**：水印 ID 从未真正嵌入；原 DCT 符号判定在压缩后大量误码；彩色图被转灰度。现改为 ID + 水印图联合嵌入、QIM 低频量化、ID 五重重复编码、缩放自动恢复，彩色图保留颜色。实测 **JPEG q50、噪声、50%–150% 缩放均可还原 ID，NC≈1.0，PSNR≈35 dB**；裁剪仍是已知边界（需结合链上存证核验）
 - **授权审批**：上传资产未写 `uploader_id` 导致创建授权时 500；adm1 看不到未分配申请、adm2 看不到一级已通过的申请
@@ -56,6 +57,7 @@
 - **上传草稿**：水印与上链完成前不再显示“提交发布”，避免未完成处理就发布
 - **授权列表**：重排列宽，固定操作列不再遮挡申请时间
 - **CI**：`main → develop` 改为提醒 issue（GITHUB_TOKEN 建的 PR 不会触发必需检查）、Dependabot scope 前缀、GHCR 镜像名小写、Docker 构建补充依赖文件触发路径
+- **CI 修复**：actionlint 的未使用循环变量、PR 标题检查补充 `statuses: write`、welcome action 输入改为下划线命名；CodeQL 路径检查改用临时目录登记表 + `commonpath` 校验
 
 ### Changed
 - 运行时升级：Node.js 22、Python 3.11、当前 GitHub Actions 主版本（node24 运行时）

@@ -209,7 +209,6 @@ def extract_raster_watermark(watermarked_path, original_watermark_path, output_f
     if method == 'dct' and not watermark_id:
         restored_image, restored_id = _resolve_scaled_image(watermarked_image, alpha)
         if restored_image is not None:
-            watermarked_image = restored_image
             image_array = np.array(restored_image.convert('RGB' if use_color else 'L'))
             height, width = image_array.shape[:2]
             watermark_id = restored_id

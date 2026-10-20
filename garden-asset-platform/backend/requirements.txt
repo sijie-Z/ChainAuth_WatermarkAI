@@ -40,8 +40,8 @@ APScheduler==3.10.4
 
 # Watermark algorithm
 opencv-python-headless==4.8.1.78
-geopandas==0.14.1
+geopandas==0.14.4
 shapely==2.0.6
-# geopandas 0.14 与 fiona>=1.10 / pandas>=3 不兼容，显式锁定
-fiona==1.9.6
+# GeoPandas 0.14.4 适配 Fiona 1.10；1.9.6 的 wheel 含 GDAL 3.6.4（CVE-2023-45853）
+fiona==1.10.1
 pandas==2.2.3

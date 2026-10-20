@@ -191,6 +191,7 @@ if watermarked_path:
         with open(watermarked_path, 'rb') as fh:
             trace_source = fh.read()
     except OSError:
+        # 读不到水印文件时退回原始图片继续验证
         pass
 
 r = requests.post(f'{BASE}/watermark/trace', files={'file': ('trace.png', trace_source, 'image/png')}, timeout=120)

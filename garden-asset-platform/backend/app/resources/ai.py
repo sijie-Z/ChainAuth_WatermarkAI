@@ -85,6 +85,7 @@ class AISearchResource(Resource):
             try:
                 os.unlink(tmp_path)
             except OSError:
+                # 临时文件可能已被系统清理，忽略即可
                 pass
 
         return {
@@ -126,6 +127,7 @@ class AIInfringementResource(Resource):
             try:
                 os.unlink(tmp_path)
             except OSError:
+                # 临时文件可能已被系统清理，忽略即可
                 pass
 
         return {
