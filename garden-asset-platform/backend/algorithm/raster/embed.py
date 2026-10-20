@@ -10,10 +10,12 @@ import numpy as np
 from PIL import Image
 import cv2
 
+from algorithm.raster.image_io import alpha_channel, load_image_array
+
 
 logger = logging.getLogger(__name__)
 
-# 水印 ID 固定占 48 字节（384 bit），不足补零；重复 3 份做多数表决
+# 水印 ID 固定占 48 字节（384 bit），不足补零；重复 5 份做多数表决
 ID_FIELD_BYTES = 48
 ID_BITS = ID_FIELD_BYTES * 8
 ID_REPEAT = 5
@@ -24,7 +26,7 @@ EMBED_POSITIONS = [(1, 1), (1, 2), (2, 1)]
 
 
 def id_to_bits(watermark_id):
-    """把水印 ID 编码为固定长度的比特序列（重复 3 份）"""
+    """把水印 ID 编码为固定长度的比特序列（重复 5 份）"""
     payload = watermark_id.encode('utf-8')[:ID_FIELD_BYTES].ljust(ID_FIELD_BYTES, b'\x00')
     bits = []
     for byte in payload:
@@ -230,14 +232,8 @@ def embed_raster_watermark(image_path, watermark_path, output_folder, method='dc
 
     logger.info(f"开始栅格水印嵌入, 水印ID: {watermark_id}, 方法: {method}")
 
-    # 读取图像
-    original_image = Image.open(image_path)
-
-    # 转换为灰度图像（如果是彩色）
-    if original_image.mode != 'L':
-        image_array = np.array(original_image.convert('L'))
-    else:
-        image_array = np.array(original_image)
+    # 读取图像（16 位/浮点先归一化，避免 convert('L') 截断）
+    image_array = load_image_array(image_path, 'L')
 
     height, width = image_array.shape[:2]
     watermark_bits, watermark_side = build_payload(
@@ -297,9 +293,9 @@ def embed_raster_watermark_color(image_path, watermark_path, output_folder, meth
 
     logger.info(f"开始彩色图像水印嵌入, 水印ID: {watermark_id}")
 
-    # 读取图像，统一为 RGB 三通道，保留原始颜色
-    original_image = Image.open(image_path).convert('RGB')
-    image_array = np.array(original_image)
+    # 读取图像，统一为 RGB 三通道，保留原始颜色与 alpha
+    transparency = alpha_channel(image_path)
+    image_array = load_image_array(image_path, 'RGB')
     height, width = image_array.shape[:2]
 
     watermark_bits, watermark_side = build_payload(
@@ -331,7 +327,12 @@ def embed_raster_watermark_color(image_path, watermark_path, output_folder, meth
     output_filename = f"{watermark_id}.png"
     output_path = os.path.join(output_folder, output_filename)
 
-    watermarked_image = Image.fromarray(result.astype(np.uint8))
+    if transparency is not None:
+        watermarked_image = Image.fromarray(
+            np.dstack([result, transparency]).astype(np.uint8), 'RGBA'
+        )
+    else:
+        watermarked_image = Image.fromarray(result.astype(np.uint8))
     watermarked_image.save(output_path)
 
     return {

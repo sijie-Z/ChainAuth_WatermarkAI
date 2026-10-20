@@ -9,6 +9,7 @@ import numpy as np
 from PIL import Image
 import cv2
 
+from algorithm.raster.image_io import load_image_array
 from algorithm.raster.embed import (
     DEFAULT_ALPHA,
     EMBED_POSITIONS,
@@ -23,9 +24,35 @@ ID_PATTERN = re.compile(r'^[A-Z]{2,4}-(?:IMG|VEC|MDL|DOC|VID)-\d{14}-[0-9A-F]{4}
 SCALE_CANDIDATES = [2.0, 1.5, 4 / 3, 1.25, 1.2, 1.1, 0.9, 0.8, 0.75, 2 / 3, 0.5]
 
 
+def _extract_bits(image_array, watermark_length, method='dct', alpha=DEFAULT_ALPHA):
+    """2D 图直接提取；彩色图逐通道提取后按位多数表决。
+
+    彩色嵌入时三个通道写入相同比特，但各自的量化格点可能不同，
+    单取灰度平均会在格点边界附近产生误码；逐通道表决可消除这类错误。
+    """
+    if image_array.ndim == 2:
+        if method == 'dct':
+            return dct_extract(image_array, watermark_length, alpha=alpha)
+        return lsb_extract(image_array, watermark_length)
+
+    channel_bits = []
+    for channel in range(image_array.shape[2]):
+        channel_array = image_array[:, :, channel]
+        if method == 'dct':
+            channel_bits.append(dct_extract(channel_array, watermark_length, alpha=alpha))
+        else:
+            channel_bits.append(lsb_extract(channel_array, watermark_length))
+
+    voted = []
+    for index in range(watermark_length):
+        ones = sum(bits[index] for bits in channel_bits)
+        voted.append(1 if ones * 2 >= len(channel_bits) else 0)
+    return voted
+
+
 def _decode_valid_id(image_array, alpha=DEFAULT_ALPHA):
     """只解码 ID 位并用格式校验，避免把随机比特误判为水印 ID"""
-    bits = dct_extract(image_array, ID_TOTAL_BITS, alpha=alpha)
+    bits = _extract_bits(image_array, ID_TOTAL_BITS, 'dct', alpha)
     watermark_id = bits_to_id(bits)
     if watermark_id and ID_PATTERN.match(watermark_id):
         return watermark_id
@@ -35,10 +62,12 @@ def _decode_valid_id(image_array, alpha=DEFAULT_ALPHA):
 def _resolve_scaled_image(image, alpha=DEFAULT_ALPHA):
     """ID 解码失败时，尝试常见缩放比例，返回能解出有效 ID 的图像与 ID"""
     base_width, base_height = image.size
+    use_color = image.mode in ('RGB', 'RGBA', 'P', 'CMYK', 'LA')
     for factor in SCALE_CANDIDATES:
         size = (max(8, int(base_width * factor)), max(8, int(base_height * factor)))
         candidate = image.resize(size, Image.LANCZOS)
-        watermark_id = _decode_valid_id(np.array(candidate.convert('L')), alpha)
+        candidate_array = np.array(candidate.convert('RGB' if use_color else 'L'))
+        watermark_id = _decode_valid_id(candidate_array, alpha)
         if watermark_id:
             logger.info(f'检测到缩放攻击，按 {factor:.2f} 倍恢复后解码成功')
             return candidate, watermark_id
@@ -171,7 +200,8 @@ def extract_raster_watermark(watermarked_path, original_watermark_path, output_f
 
     # 读取原始水印用于计算 NC（按实际嵌入尺寸缩放）
     watermarked_image = Image.open(watermarked_path)
-    image_array = np.array(watermarked_image.convert('L'))
+    use_color = watermarked_image.mode in ('RGB', 'RGBA', 'P', 'CMYK', 'LA')
+    image_array = load_image_array(watermarked_path, 'RGB' if use_color else 'L')
     height, width = image_array.shape[:2]
 
     # 先尝试直接解码 ID；失败则尝试常见缩放比例（缩放攻击恢复）
@@ -180,7 +210,7 @@ def extract_raster_watermark(watermarked_path, original_watermark_path, output_f
         restored_image, restored_id = _resolve_scaled_image(watermarked_image, alpha)
         if restored_image is not None:
             watermarked_image = restored_image
-            image_array = np.array(restored_image.convert('L'))
+            image_array = np.array(restored_image.convert('RGB' if use_color else 'L'))
             height, width = image_array.shape[:2]
             watermark_id = restored_id
 
@@ -192,11 +222,8 @@ def extract_raster_watermark(watermarked_path, original_watermark_path, output_f
         f"水印 {watermark_side}x{watermark_side}, 读取 {total_bits} bit"
     )
 
-    # 提取比特：前 ID_BITS 位是水印 ID，其余是水印图像
-    if method == 'dct':
-        bits = dct_extract(image_array, total_bits, alpha=alpha)
-    else:
-        bits = lsb_extract(image_array, total_bits)
+    # 提取比特：前 ID_BITS 位是水印 ID，其余是水印图像（彩色图逐通道多数表决）
+    bits = _extract_bits(image_array, total_bits, method, alpha)
 
     watermark_id = watermark_id or bits_to_id(bits[:ID_TOTAL_BITS])
     extracted_watermark = bits_to_watermark(

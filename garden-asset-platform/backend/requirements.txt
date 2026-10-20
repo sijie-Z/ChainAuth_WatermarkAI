@@ -36,6 +36,12 @@ passlib==1.7.4
 # Production
 gunicorn==21.2.0
 
+# Task scheduler (backup / license expiry / temp cleanup)
+APScheduler==3.10.4
+
+# Real blockchain witness (optional; falls back to simulated mode when absent)
+# web3==7.6.0
+
 # Watermark algorithm
 opencv-python-headless==4.8.1.78
 scipy==1.11.4

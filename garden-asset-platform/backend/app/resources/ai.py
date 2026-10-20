@@ -37,6 +37,12 @@ class AIAnalyzeResource(Resource):
         if not asset:
             return {'code': 404, 'message': '资产不存在'}, 404
 
+        user = User.query.get(user_id)
+        is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
+        is_admin = bool(user) and user.role in ('admin', 'asset_admin')
+        if asset.status != 'published' and not (is_owner or is_admin):
+            return {'code': 404, 'message': '资产不存在'}, 404
+
         result = ai_service.process_asset(asset)
 
         if result['success']:
@@ -66,17 +72,20 @@ class AISearchResource(Resource):
         if file.filename == '':
             return {'code': 400, 'message': '未选择文件'}, 400
 
-        # 保存临时文件
+        # 保存临时文件（先关闭句柄再处理，Windows 上才能删除）
+        import os
         import tempfile
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
-            file.save(tmp.name)
-
-            # 搜索相似图像
-            results = ai_service.search_similar(tmp.name, top_k=10)
-
-            # 清理临时文件
-            import os
-            os.unlink(tmp.name)
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
+        tmp_path = tmp.name
+        tmp.close()
+        try:
+            file.save(tmp_path)
+            results = ai_service.search_similar(tmp_path, top_k=10)
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
         return {
             'code': 200,
@@ -104,17 +113,20 @@ class AIInfringementResource(Resource):
         if file.filename == '':
             return {'code': 400, 'message': '未选择文件'}, 400
 
-        # 保存临时文件
+        # 保存临时文件（先关闭句柄再处理，Windows 上才能删除）
+        import os
         import tempfile
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
-            file.save(tmp.name)
-
-            # 检测侵权
-            result = ai_service.check_infringement(tmp.name)
-
-            # 清理临时文件
-            import os
-            os.unlink(tmp.name)
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
+        tmp_path = tmp.name
+        tmp.close()
+        try:
+            file.save(tmp_path)
+            result = ai_service.check_infringement(tmp_path)
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
         return {
             'code': 200,

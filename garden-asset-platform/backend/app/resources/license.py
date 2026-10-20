@@ -1,6 +1,7 @@
 """
 授权管理API资源
 """
+import uuid
 from datetime import datetime, timedelta
 from flask import request
 from flask_restful import Resource
@@ -30,8 +31,19 @@ class LicenseApplyResource(Resource):
         if not asset:
             return {'code': 404, 'message': '资产不存在'}, 404
 
+        if asset.status != 'published':
+            return {'code': 400, 'message': '只能申请已发布资产的授权'}, 400
+
+        existing = LicenseApplication.query.filter(
+            LicenseApplication.asset_id == asset_id,
+            LicenseApplication.applicant_id == current_user_id,
+            LicenseApplication.status.in_(['pending', 'adm1_approved']),
+        ).first()
+        if existing:
+            return {'code': 400, 'message': '该资产已有待审批的申请'}, 400
+
         application = LicenseApplication(
-            application_code=f"APP-{datetime.now().strftime('%Y%m%d%H%M%S')}-{asset_id[:4].upper()}",
+            application_code=f"APP-{datetime.now().strftime('%Y%m%d%H%M%S%f')}-{uuid.uuid4().hex[:4].upper()}",
             asset_id=asset_id,
             applicant_id=current_user_id,
             license_type=data.get('license_type', 'personal'),
@@ -126,39 +138,58 @@ class LicenseApproveResource(Resource):
     @jwt_required()
     def post(self, application_id):
         """审批操作"""
-        data = request.get_json()
+        data = request.get_json() or {}
         current_user_id = get_jwt_identity()
         user = User.query.get(current_user_id)
+
+        if not user or user.role not in ['admin', 'asset_admin', 'license_admin', 'adm1', 'adm2']:
+            return {'code': 403, 'message': '无审批权限'}, 403
 
         application = LicenseApplication.query.get(application_id)
         if not application:
             return {'code': 404, 'message': '申请不存在'}, 404
 
-        action = data.get('action')  # approve or reject
+        action = data.get('action')
+        if action not in ('approve', 'reject'):
+            return {'code': 400, 'message': 'action 必须是 approve 或 reject'}, 400
         comment = data.get('comment', '')
 
-        # 双重审批流程
-        if user.role in ['admin', 'asset_admin', 'adm1']:
-            if application.adm1_status == 'pending':
-                application.adm1_reviewer_id = current_user_id
-                application.adm1_review_time = datetime.utcnow()
-                application.adm1_review_comment = comment
-                application.adm1_status = 'approved' if action == 'approve' else 'rejected'
-                application.status = 'adm1_approved' if action == 'approve' else 'rejected'
+        acted = False
 
-        if user.role in ['admin', 'license_admin', 'adm2']:
-            if application.adm1_status == 'approved' and application.adm2_status == 'pending':
-                application.adm2_reviewer_id = current_user_id
-                application.adm2_review_time = datetime.utcnow()
-                application.adm2_review_comment = comment
-                application.adm2_status = 'approved' if action == 'approve' else 'rejected'
+        # 一级审批：adm1 / asset_admin / admin
+        if user.role in ['admin', 'asset_admin', 'adm1'] and application.adm1_status == 'pending':
+            if application.adm1_reviewer_id not in (None, current_user_id):
+                return {'code': 403, 'message': '该申请已分配给其他审批人'}, 403
+            application.adm1_reviewer_id = current_user_id
+            application.adm1_review_time = datetime.utcnow()
+            application.adm1_review_comment = comment
+            application.adm1_status = 'approved' if action == 'approve' else 'rejected'
+            application.status = 'adm1_approved' if action == 'approve' else 'rejected'
+            acted = True
 
-                if action == 'approve':
-                    application.status = 'approved'
-                    # 创建授权记录
-                    self._create_license(application)
-                else:
-                    application.status = 'rejected'
+        # 二级审批：adm2 / license_admin / admin
+        elif (
+            user.role in ['admin', 'license_admin', 'adm2']
+            and application.adm1_status == 'approved'
+            and application.adm2_status == 'pending'
+        ):
+            if application.adm2_reviewer_id not in (None, current_user_id):
+                return {'code': 403, 'message': '该申请已分配给其他审批人'}, 403
+            application.adm2_reviewer_id = current_user_id
+            application.adm2_review_time = datetime.utcnow()
+            application.adm2_review_comment = comment
+            application.adm2_status = 'approved' if action == 'approve' else 'rejected'
+
+            if action == 'approve':
+                application.status = 'approved'
+                # 创建授权记录
+                self._create_license(application)
+            else:
+                application.status = 'rejected'
+            acted = True
+
+        if not acted:
+            return {'code': 400, 'message': '当前状态不可审批，或不属于你的审批阶段'}, 400
 
         db.session.commit()
 
@@ -172,7 +203,7 @@ class LicenseApproveResource(Resource):
             end_time = datetime.utcnow() + timedelta(days=application.duration_months * 30)
 
         license = License(
-            license_code=f"LIC-{datetime.now().strftime('%Y%m%d%H%M%S')}-{asset.asset_code[:4]}",
+            license_code=f"LIC-{datetime.now().strftime('%Y%m%d%H%M%S%f')}-{uuid.uuid4().hex[:4].upper()}",
             asset_id=asset.id,
             # 兼容历史数据：旧资产的 uploader_id 可能为空
             licensor_id=asset.owner_id or asset.creator_id or asset.uploader_id,
@@ -193,14 +224,21 @@ class LicenseApprovedResource(Resource):
 
     @jwt_required()
     def get(self):
-        """获取已审批列表"""
+        """获取已审批列表（仅审批/管理员角色）"""
+        current_user_id = get_jwt_identity()
+        user = User.query.get(current_user_id)
+        if not user or user.role not in ['admin', 'asset_admin', 'license_admin', 'adm1', 'adm2']:
+            return {'code': 403, 'message': '无权限'}, 403
+
         data = request.args
-        page = int(data.get('page', 1))
-        per_page = int(data.get('per_page', 20))
-        status = data.get('status', '')
+        page = max(data.get('page', 1, type=int), 1)
+        per_page = min(max(data.get('per_page', 20, type=int), 1), 100)
+        status = (data.get('status') or '').strip()
 
         query = License.query
         if status:
+            if status not in ('pending', 'active', 'expired', 'revoked'):
+                return {'code': 400, 'message': '无效的状态筛选'}, 400
             query = query.filter_by(status=status)
 
         pagination = query.order_by(License.created_at.desc()).paginate(
@@ -232,12 +270,14 @@ class MyLicenseResource(Resource):
         """获取当前用户的授权列表"""
         current_user_id = get_jwt_identity()
         data = request.args
-        page = int(data.get('page', 1))
-        per_page = int(data.get('per_page', 20))
-        status = data.get('status', '')
+        page = max(data.get('page', 1, type=int), 1)
+        per_page = min(max(data.get('per_page', 20, type=int), 1), 100)
+        status = (data.get('status') or '').strip()
 
         query = License.query.filter_by(licensee_id=current_user_id)
         if status:
+            if status not in ('pending', 'active', 'expired', 'revoked'):
+                return {'code': 400, 'message': '无效的状态筛选'}, 400
             query = query.filter_by(status=status)
 
         pagination = query.order_by(License.created_at.desc()).paginate(
@@ -254,6 +294,36 @@ class MyLicenseResource(Resource):
             'code': 200,
             'data': {
                 'items': result,
+                'total': pagination.total
+            }
+        }
+
+
+class MyApplicationsResource(Resource):
+    """我的授权申请（含审批中与已拒绝）"""
+
+    @jwt_required()
+    def get(self):
+        current_user_id = get_jwt_identity()
+        data = request.args
+        page = max(data.get('page', 1, type=int), 1)
+        per_page = min(max(data.get('per_page', 20, type=int), 1), 100)
+        status = (data.get('status') or '').strip()
+
+        query = LicenseApplication.query.filter_by(applicant_id=current_user_id)
+        if status:
+            if status not in ('pending', 'adm1_approved', 'approved', 'rejected', 'cancelled'):
+                return {'code': 400, 'message': '无效的状态筛选'}, 400
+            query = query.filter_by(status=status)
+
+        pagination = query.order_by(LicenseApplication.created_at.desc()).paginate(
+            page=page, per_page=per_page, error_out=False
+        )
+
+        return {
+            'code': 200,
+            'data': {
+                'items': [application.to_dict() for application in pagination.items],
                 'total': pagination.total
             }
         }

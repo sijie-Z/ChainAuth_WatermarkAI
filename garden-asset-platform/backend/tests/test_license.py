@@ -78,10 +78,10 @@ class TestLicense:
         assert data['code'] == 200
         assert data['data']['total'] == 0
 
-    def test_approved_list(self, client, auth_header):
-        """测试已审批列表"""
+    def test_approved_list(self, client, admin_header):
+        """测试已审批列表（仅审批/管理员可访问）"""
         response = client.get('/api/license/approved',
-            headers=auth_header
+            headers=admin_header
         )
 
         assert response.status_code == 200
@@ -89,6 +89,11 @@ class TestLicense:
         assert data['code'] == 200
         assert 'items' in data['data']
         assert 'total' in data['data']
+
+    def test_approved_list_forbidden_for_user(self, client, auth_header):
+        """普通用户不能拉取全平台授权记录"""
+        response = client.get('/api/license/approved', headers=auth_header)
+        assert response.status_code == 403
 
     def test_approve_not_found(self, client, admin_header):
         """测试审批不存在的申请"""

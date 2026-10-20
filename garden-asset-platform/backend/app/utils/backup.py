@@ -12,9 +12,9 @@ def backup_database(output_dir='./backups'):
     os.makedirs(output_dir, exist_ok=True)
 
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    backup_file = os.path.join(output_dir, f'backup_{timestamp}.sql')
-
     db_url = current_app.config.get('SQLALCHEMY_DATABASE_URI', '')
+    suffix = 'sql' if db_url.startswith('postgresql') else 'db'
+    backup_file = os.path.join(output_dir, f'backup_{timestamp}.{suffix}')
 
     if db_url.startswith('postgresql'):
         # PostgreSQL备份
@@ -45,8 +45,13 @@ def backup_database(output_dir='./backups'):
         subprocess.run(cmd, env=env, check=True)
 
     elif db_url.startswith('sqlite'):
-        # SQLite备份
-        db_path = db_url.replace('sqlite:///', '')
+        # Flask-SQLAlchemy 会把相对 SQLite 路径解析到 instance 目录
+        from app.extensions import db
+        db_path = db.engine.url.database
+        if not db_path or db_path == ':memory:':
+            raise ValueError('SQLite 内存数据库无法备份')
+        if not os.path.isabs(db_path):
+            db_path = os.path.join(current_app.instance_path, db_path)
         import shutil
         shutil.copy(db_path, backup_file)
 
@@ -87,7 +92,12 @@ def restore_database(backup_file):
         subprocess.run(cmd, env=env, check=True)
 
     elif db_url.startswith('sqlite'):
-        db_path = db_url.replace('sqlite:///', '')
+        from app.extensions import db
+        db_path = db.engine.url.database
+        if not db_path or db_path == ':memory:':
+            raise ValueError('SQLite 内存数据库无法恢复')
+        if not os.path.isabs(db_path):
+            db_path = os.path.join(current_app.instance_path, db_path)
         import shutil
         shutil.copy(backup_file, db_path)
 

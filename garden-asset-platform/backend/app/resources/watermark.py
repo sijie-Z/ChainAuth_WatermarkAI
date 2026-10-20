@@ -4,12 +4,11 @@
 from flask import request, current_app
 from flask_restful import Resource
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from werkzeug.utils import secure_filename
-from app.extensions import db
 from app.models.user import User
 from app.models.asset import Asset
 from app.models.log import OperationLog
 from app.services.watermark_service import WatermarkService
+from app.utils.middleware import rate_limit
 
 
 class WatermarkEmbedResource(Resource):
@@ -31,8 +30,9 @@ class WatermarkEmbedResource(Resource):
         if not asset:
             return {'code': 404, 'message': '资产不存在'}, 404
 
-        # 权限检查
-        if asset.creator_id != user_id and user.role not in ['admin', 'adm1', 'adm2', 'adm3']:
+        # 权限检查：仅所有者或资产管理员可嵌入水印
+        is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
+        if not is_owner and user.role not in ('admin', 'asset_admin'):
             return {'code': 403, 'message': '无权限操作'}, 403
 
         # 调用服务嵌入水印
@@ -71,6 +71,11 @@ class WatermarkExtractResource(Resource):
         asset = Asset.query.get(asset_id)
         if not asset:
             return {'code': 404, 'message': '资产不存在'}, 404
+
+        # 权限检查：仅所有者或资产管理员可提取水印
+        is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
+        if not is_owner and user.role not in ('admin', 'asset_admin'):
+            return {'code': 403, 'message': '无权限操作'}, 403
 
         # 调用服务提取水印
         result = WatermarkService.extract_watermark(asset, user)
@@ -130,6 +135,7 @@ class WatermarkVerifyResource(Resource):
 class WatermarkTraceResource(Resource):
     """水印溯源"""
 
+    @rate_limit(limit=10, window=60)
     def post(self):
         """通过上传文件溯源"""
         if 'file' not in request.files:
@@ -141,12 +147,25 @@ class WatermarkTraceResource(Resource):
 
         import os
         import uuid
-        from datetime import datetime
 
-        # 保存临时文件
-        filename = secure_filename(file.filename)
-        temp_dir = current_app.config.get('UPLOAD_FOLDER', './uploads')
-        temp_path = os.path.join(temp_dir, f"trace_{uuid.uuid4().hex[:8]}_{filename}")
+        ext = os.path.splitext(file.filename or '')[1].lower()
+        allowed_exts = {'.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff', '.webp', '.zip'}
+        if ext not in allowed_exts:
+            return {'code': 400, 'message': '不支持的文件类型'}, 400
+
+        # 公开接口：限制单次溯源文件大小，避免匿名用户用大文件打满磁盘/CPU
+        max_bytes = current_app.config.get('TRACE_MAX_CONTENT_LENGTH', 20 * 1024 * 1024)
+        file.seek(0, os.SEEK_END)
+        file_size = file.tell()
+        file.seek(0)
+        if file_size > max_bytes:
+            return {'code': 400, 'message': f'文件大小超过限制 ({max_bytes // 1024 // 1024}MB)'}, 400
+
+        # 保存临时文件（保留原扩展名；trace_tmp 独立目录便于清理）
+        upload_root = current_app.config.get('UPLOAD_FOLDER', './uploads')
+        temp_dir = os.path.join(upload_root, 'trace_tmp')
+        os.makedirs(temp_dir, exist_ok=True)
+        temp_path = os.path.join(temp_dir, f"trace_{uuid.uuid4().hex}{ext}")
         file.save(temp_path)
 
         try:
@@ -210,7 +229,7 @@ class WatermarkLogsResource(Resource):
         current_user_id = get_jwt_identity()
         user = User.query.get(current_user_id)
 
-        if user.role not in ['admin', 'asset_admin', 'adm1', 'adm2']:
+        if user.role not in ('admin', 'asset_admin'):
             return {'code': 403, 'message': '无权限'}, 403
 
         logs = OperationLog.query.filter_by(module='watermark').order_by(

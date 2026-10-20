@@ -71,6 +71,7 @@ class WatermarkService:
         if not path or not path.lower().endswith('.zip'):
             return path
 
+        import shutil
         import zipfile
         import tempfile
 
@@ -78,20 +79,40 @@ class WatermarkService:
         os.makedirs(base_dir, exist_ok=True)
         extract_dir = tempfile.mkdtemp(prefix='vector_', dir=base_dir)
         root_real = os.path.realpath(extract_dir)
+        max_total = current_app.config.get('VECTOR_EXTRACT_MAX_BYTES', 200 * 1024 * 1024)
 
-        with zipfile.ZipFile(path) as archive:
-            for member in archive.infolist():
-                target = os.path.realpath(os.path.join(extract_dir, member.filename))
-                if not target.startswith(root_real + os.sep) and target != root_real:
-                    raise ValueError('矢量压缩包包含非法路径')
-            archive.extractall(extract_dir)
+        try:
+            with zipfile.ZipFile(path) as archive:
+                infos = archive.infolist()
+                if len(infos) > 1000:
+                    raise ValueError('矢量压缩包文件数量过多')
+                if sum(item.file_size for item in infos) > max_total:
+                    raise ValueError('矢量压缩包解压后体积超过限制')
+                for member in infos:
+                    target = os.path.realpath(os.path.join(extract_dir, member.filename))
+                    if not target.startswith(root_real + os.sep) and target != root_real:
+                        raise ValueError('矢量压缩包包含非法路径')
+                archive.extractall(extract_dir)
 
-        for root, _, files in os.walk(extract_dir):
-            for name in files:
-                if name.lower().endswith('.shp'):
-                    return os.path.join(root, name)
+            for root, _, files in os.walk(extract_dir):
+                for name in files:
+                    if name.lower().endswith('.shp'):
+                        return os.path.join(root, name)
 
-        raise ValueError('矢量压缩包中未找到 .shp 文件')
+            raise ValueError('矢量压缩包中未找到 .shp 文件')
+        except Exception:
+            shutil.rmtree(extract_dir, ignore_errors=True)
+            raise
+
+    @staticmethod
+    def cleanup_vector_temp(path):
+        """删除 resolve_vector_path 产生的临时解压目录。"""
+        if not path or not path.lower().endswith('.shp'):
+            return
+        parent = os.path.dirname(path)
+        if os.path.basename(parent).startswith('vector_'):
+            import shutil
+            shutil.rmtree(parent, ignore_errors=True)
 
     @staticmethod
     def embed_watermark(asset, user=None, watermark_path=None):
@@ -144,14 +165,18 @@ class WatermarkService:
         try:
             # 根据资产类型选择嵌入算法
             if asset.asset_type == 'vector':
-                # 矢量数据水印嵌入
-                result = embed_vector_watermark(
-                    shpfile_path=WatermarkService.resolve_vector_path(asset.storage_path),
-                    watermark_path=watermark_path,
-                    output_folder=output_folder,
-                    garden_code=garden_code,
-                    asset_type_code=asset_type_code
-                )
+                # 矢量数据水印嵌入（ZIP 解压到临时目录，用完立即清理）
+                vector_source = WatermarkService.resolve_vector_path(asset.storage_path)
+                try:
+                    result = embed_vector_watermark(
+                        shpfile_path=vector_source,
+                        watermark_path=watermark_path,
+                        output_folder=output_folder,
+                        garden_code=garden_code,
+                        asset_type_code=asset_type_code
+                    )
+                finally:
+                    WatermarkService.cleanup_vector_temp(vector_source)
 
                 asset.watermarked_path = os.path.abspath(result['zip_file_path'])
                 asset.vr_value = str(result['vr'])  # 存储验证值
@@ -263,11 +288,15 @@ class WatermarkService:
                 import ast
                 vr = ast.literal_eval(asset.vr_value) if asset.vr_value else None
 
-                result = extract_vector_watermark(
-                    watermarked_shpfile_path=WatermarkService.resolve_vector_path(asset.watermarked_path),
-                    vr=vr,
-                    output_folder=output_folder
-                )
+                vector_source = WatermarkService.resolve_vector_path(asset.watermarked_path)
+                try:
+                    result = extract_vector_watermark(
+                        watermarked_shpfile_path=vector_source,
+                        vr=vr,
+                        output_folder=output_folder
+                    )
+                finally:
+                    WatermarkService.cleanup_vector_temp(vector_source)
 
             elif asset.asset_type == 'image':
                 # 栅格图像水印提取
@@ -374,12 +403,16 @@ class WatermarkService:
             ext = os.path.splitext(file_path)[1].lower()
 
             if ext in ['.shp', '.zip']:
-                # 矢量数据水印提取
-                result = extract_vector_watermark(
-                    watermarked_shpfile_path=WatermarkService.resolve_vector_path(file_path),
-                    vr=None,  # 溯源时未知vr值
-                    output_folder=output_folder
-                )
+                # 矢量数据水印提取（临时解压目录用完立即清理）
+                vector_source = WatermarkService.resolve_vector_path(file_path)
+                try:
+                    result = extract_vector_watermark(
+                        watermarked_shpfile_path=vector_source,
+                        vr=None,  # 溯源时未知vr值
+                        output_folder=output_folder
+                    )
+                finally:
+                    WatermarkService.cleanup_vector_temp(vector_source)
             elif ext in ['.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff']:
                 # 栅格图像水印提取
                 result = extract_raster_watermark(

@@ -131,6 +131,7 @@ class BlockchainCertificateResource(Resource):
 class BlockchainHistoryResource(Resource):
     """存证历史"""
 
+    @jwt_required()
     def get(self, asset_id=None):
         """获取存证历史"""
         if asset_id:
@@ -177,11 +178,27 @@ class BlockchainStatusResource(Resource):
         """获取区块链连接状态"""
         connected = blockchain_service.is_connected()
 
+        from app.models.blockchain import Certificate
+        total_certificates = Certificate.query.count()
+        pending_assets = Asset.query.filter(
+            Asset.status == 'published', Asset.chain_status == 'none'
+        ).count()
+
+        if connected:
+            node_status = 'connected'
+        elif blockchain_service.enabled:
+            node_status = 'disconnected'
+        else:
+            node_status = 'simulated'
+
         return {
             'code': 200,
             'data': {
                 'connected': connected,
                 'rpc_url': blockchain_service.rpc_url,
-                'simulated': not blockchain_service.enabled
+                'simulated': not blockchain_service.enabled,
+                'total_certificates': total_certificates,
+                'pending_assets': pending_assets,
+                'node_status': node_status
             }
         }, 200

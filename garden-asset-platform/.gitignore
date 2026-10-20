@@ -42,6 +42,9 @@ env/
 *.db
 *.sqlite
 *.sqlite3
+# Flask instance 目录（持久化密钥与本地 SQLite，禁止提交）
+backend/instance/
+instance/
 
 # 日志
 *.log

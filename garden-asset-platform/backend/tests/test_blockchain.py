@@ -65,17 +65,17 @@ class TestBlockchain:
 
         assert response.status_code == 404
 
-    def test_history_all(self, client):
-        """测试获取所有存证历史"""
-        response = client.get('/api/blockchain/history')
+    def test_history_all(self, client, auth_header):
+        """测试获取所有存证历史（需登录）"""
+        response = client.get('/api/blockchain/history', headers=auth_header)
 
         assert response.status_code == 200
         data = response.get_json()
         assert data['code'] == 200
         assert isinstance(data['data'], list)
 
-    def test_history_asset_not_found(self, client):
+    def test_history_asset_not_found(self, client, auth_header):
         """测试获取不存在资产的存证历史"""
-        response = client.get('/api/blockchain/history/nonexistent-id')
+        response = client.get('/api/blockchain/history/nonexistent-id', headers=auth_header)
 
         assert response.status_code == 404
