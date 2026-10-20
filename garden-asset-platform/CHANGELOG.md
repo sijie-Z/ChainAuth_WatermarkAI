@@ -56,6 +56,7 @@
 - **上传草稿**：水印与上链完成前不再显示“提交发布”，避免未完成处理就发布
 - **授权列表**：重排列宽，固定操作列不再遮挡申请时间
 - **CI**：`main → develop` 改为提醒 issue（GITHUB_TOKEN 建的 PR 不会触发必需检查）、Dependabot scope 前缀、GHCR 镜像名小写、Docker 构建补充依赖文件触发路径
+- **前端依赖安全**：通过 npm overrides 将 Vitest 的 `tinypool` 固定到 2.1.2，修复 GHSA-85c8-ppgw-ccpr / GHSA-5gmw-xhrv-c9v3（critical）；41 个前端测试保持通过
 - **CI 修复**：actionlint 的未使用循环变量、PR 标题检查补充 `statuses: write`、welcome action 输入改为下划线命名；CodeQL 路径检查改用临时目录登记表 + `commonpath` 校验
 
 ### Changed
