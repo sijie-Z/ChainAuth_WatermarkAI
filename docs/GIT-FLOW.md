@@ -88,6 +88,16 @@ GitHub 侧使用仓库 Ruleset（脚本 `scripts/setup-github.sh` 可自动创�
 
 > 单人项目无法自我批准（GitHub 不允许 PR 作者批准自己的 PR），因此批准数设为 0；CI、CodeRabbit 与 Ruleset 仍然强制。新增协作者后请把 `required_approving_review_count` 调整为 1。
 
+### 空仓库首次推送
+
+仓库刚创建时 `main` / `develop` 尚不存在，而 Ruleset 在创建分支时也会要求状态检查。使用一次性脚本：
+
+```bash
+bash scripts/bootstrap-push.sh
+```
+
+脚本会临时把 `protect-main` / `protect-develop` 降为 `evaluate`，推送 `main`、`develop` 与两个 feature 分支后自动恢复 `active`。仅在空仓库首次推送时使用。
+
 工作流 `gitflow.yml` 会在每次 PR 时检查来源/目标分支组合，配置错误会直接红灯。
 
 ## 6. 常见问题
