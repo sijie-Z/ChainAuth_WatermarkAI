@@ -454,7 +454,12 @@ class AssetDownloadResource(Resource):
         if not asset:
             return {'code': 404, 'message': '资产不存在'}, 404
 
-        if asset.status != 'published':
+        is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
+
+        # 所有者与管理员可下载未发布资产；已删除仅管理员可见
+        if asset.status == 'deleted' and user.role not in ADMIN_ROLES:
+            return {'code': 404, 'message': '资产不存在'}, 404
+        if asset.status != 'published' and not (is_owner or user.role in ADMIN_ROLES):
             return {'code': 403, 'message': '资产未发布'}, 403
 
         # 检查下载权限：有效授权未过期，或本人/管理员
@@ -467,7 +472,6 @@ class AssetDownloadResource(Resource):
             or_(License.end_time.is_(None), License.end_time > now),
         ).first()
 
-        is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
         if not has_license and not is_owner and user.role not in ADMIN_ROLES:
             return {'code': 403, 'message': '无下载权限，请先申请授权'}, 403
 
@@ -577,7 +581,7 @@ class AssetStatsResource(Resource):
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
 
-        if user.role not in ['admin', 'adm1', 'adm2', 'adm3']:
+        if user.role not in ADMIN_ROLES:
             return {'code': 403, 'message': '无权限'}, 403
 
         # 统计数据

@@ -16,7 +16,7 @@ def admin_required():
             user_id = get_jwt_identity()
             user = User.query.get(user_id)
 
-            if not user or user.role not in ['admin', 'super_admin']:
+            if not user or user.role != 'admin':
                 return jsonify({
                     'code': 403,
                     'message': '需要管理员权限'

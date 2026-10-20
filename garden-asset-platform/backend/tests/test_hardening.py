@@ -73,7 +73,12 @@ def test_upload_accepts_chinese_filename(client, auth_header):
         content_type='multipart/form-data',
     )
     assert response.status_code == 200, response.get_json()
-    assert response.get_json()['data']['asset_id']
+    asset_id = response.get_json()['data']['asset_id']
+
+    # 所有者可以下载尚未发布的草稿
+    response = client.get(f'/api/assets/{asset_id}/download', headers=auth_header)
+    assert response.status_code == 200
+    assert len(response.data) > 0
 
 
 def test_non_admin_cannot_list_or_read_drafts(client, auth_header, admin_header, app):

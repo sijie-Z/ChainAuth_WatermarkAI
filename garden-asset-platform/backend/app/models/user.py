@@ -23,7 +23,7 @@ class User(db.Model):
     id_number = db.Column(db.String(50), nullable=True)  # 身份证号(加密存储)
 
     # 用户角色
-    role = db.Column(db.String(20), nullable=False, default='user')  # user/admin/adm1/adm2/adm3
+    role = db.Column(db.String(20), nullable=False, default='user')  # user/asset_admin/license_admin/adm1/adm2/admin
     user_number = db.Column(db.String(50), nullable=True)  # 工号/管理员编号
 
     # 状态

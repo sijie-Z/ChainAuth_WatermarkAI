@@ -1,14 +1,16 @@
 """
 任务调度
 """
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
-
-
-scheduler = BackgroundScheduler()
+scheduler = None
 
 
 def init_scheduler(app):
+    """初始化任务调度器（APScheduler 为可选依赖，导入放在函数内）"""
+    global scheduler
+    from apscheduler.schedulers.background import BackgroundScheduler
+    from apscheduler.triggers.cron import CronTrigger
+
+    scheduler = BackgroundScheduler()
     """初始化任务调度器"""
     from app.utils.backup import backup_database
     from app.services.watermark_service import WatermarkService
@@ -76,4 +78,5 @@ def init_scheduler(app):
 
 def shutdown_scheduler():
     """关闭调度器"""
-    scheduler.shutdown()
+    if scheduler is not None:
+        scheduler.shutdown()

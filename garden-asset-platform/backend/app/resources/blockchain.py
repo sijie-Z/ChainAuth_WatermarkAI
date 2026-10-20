@@ -30,8 +30,9 @@ class BlockchainRegisterResource(Resource):
         if not asset:
             return {'code': 404, 'message': '资产不存在'}, 404
 
-        # 权限检查
-        if asset.creator_id != user_id and user.role not in ['admin', 'adm1', 'adm2', 'adm3']:
+        # 权限检查：仅资产所有者或资产管理员可上链
+        is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
+        if not is_owner and user.role not in ('admin', 'asset_admin'):
             return {'code': 403, 'message': '无权限操作'}, 403
 
         # 调用服务存证

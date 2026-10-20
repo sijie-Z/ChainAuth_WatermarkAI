@@ -236,6 +236,8 @@ Docker 部署见 `garden-asset-platform/.env.example`；本地开发见 `backend
 | `ZHIPU_API_KEY` | 智谱AI密钥 | - |
 | `BAIDU_OCR_API_KEY` | 百度OCR密钥 | - |
 
+> 多 worker 部署（4 个 gunicorn worker）默认关闭任务调度器，避免备份/授权过期任务重复执行。如需启用，设置 `SCHEDULER_ENABLED=true`，并确保只运行一个调度进程（或改用外部 cron）。
+
 ## 许可证
 
 MIT License
