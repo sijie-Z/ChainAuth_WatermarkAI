@@ -44,7 +44,7 @@ backend/
 │   │   ├── cache.py             # Redis缓存工具
 │   │   ├── errors.py            # 错误处理器
 │   │   └── commands.py          # Flask CLI命令
-│   └── tasks.py                 # Celery异步任务
+│   └── tasks.py                 # Celery异步任务（预留，当前未部署 worker）
 ├── algorithm/                   # 水印算法
 │   ├── vector/                  # 矢量水印
 │   │   ├── embed.py             # 坐标扰动嵌入
@@ -303,7 +303,7 @@ frontend/
 - Python 3.11+
 - Node.js 22+
 - PostgreSQL 14+ (或SQLite用于开发)
-- Redis 6+ (可选，用于Celery)
+- Redis 6+ (可选，用于限流/缓存；Celery 预留在未来启用)
 
 ### 后端启动
 
@@ -390,7 +390,7 @@ flask reset-password user1 newpassword
 | Flask-Migrate | 4.0.5 | 数据库迁移 |
 | Flask-JWT-Extended | 4.6.0 | JWT认证 |
 | Flask-CORS | 4.0.0 | 跨域支持 |
-| Celery | 5.3.4 | 异步任务 |
+| Celery | 5.3.4 | 异步任务（预留，当前未部署 worker） |
 | Pillow | 10.1.0 | 图像处理 |
 | GeoPandas | 0.14.1 | 空间数据处理 |
 | zhipuai | 2.0.1 | GLM API |
@@ -412,7 +412,7 @@ flask reset-password user1 newpassword
 | Redis | 缓存/消息队列 |
 | FISCO BCOS | 区块链 |
 | Milvus | 向量数据库 |
-| MinIO | 对象存储 |
+| MinIO | 对象存储（可选，当前默认本地磁盘） |
 
 ## 项目亮点
 

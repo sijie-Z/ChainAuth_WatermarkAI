@@ -91,8 +91,8 @@ bash scripts/setup-git-hooks.sh
 | 层级 | 技术 |
 |------|------|
 | 前端 | Vue 3.4、Vite 5、Pinia、Element Plus、ECharts |
-| 后端 | Flask 3.0、Flask-RESTful、SQLAlchemy 2、JWT、Celery |
-| 存储 | PostgreSQL、Redis、MinIO、Milvus |
+| 后端 | Flask 3.0、Flask-RESTful、SQLAlchemy 2、JWT；Celery 预留（定时任务由 APScheduler 承担） |
+| 存储 | PostgreSQL、Redis、Milvus；MinIO 为 docker-compose 可选服务（当前文件默认存本地磁盘） |
 | 区块链 | FISCO BCOS 3.x |
 | AI | 智谱 GLM-4V、CLIP、DINOv2、百度 OCR |
 | 部署 | Docker Compose、Gunicorn、Nginx、GitHub Actions |

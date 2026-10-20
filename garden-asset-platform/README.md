@@ -24,7 +24,7 @@
                       │
                       ├──→ Flask REST API ──→ PostgreSQL
                       │                    ├──→ Redis (缓存/限流)
-                      │                    ├──→ MinIO (对象存储)
+                      │                    ├──→ MinIO (可选对象存储，当前默认本地磁盘)
                       │                    └──→ Milvus (向量检索)
                       │
                       └──→ FISCO BCOS (区块链存证)
@@ -36,7 +36,7 @@
 |------|------|
 | 前端 | Vue 3.4, Vite 5, Pinia, Element Plus, ECharts |
 | 后端 | Flask 3.0, Flask-RESTful, SQLAlchemy, Flask-JWT-Extended |
-| 存储 | PostgreSQL, Redis, MinIO, Milvus |
+| 存储 | PostgreSQL, Redis, Milvus；MinIO 为可选服务（当前默认本地磁盘） |
 | 区块链 | FISCO BCOS 3.x |
 | AI | 智谱GLM-4V, CLIP, DINOv2, 百度OCR |
 | 部署 | Docker Compose, Gunicorn, Nginx |
@@ -237,6 +237,8 @@ Docker 部署见 `garden-asset-platform/.env.example`；本地开发见 `backend
 | `BAIDU_OCR_API_KEY` | 百度OCR密钥 | - |
 
 > 多 worker 部署（4 个 gunicorn worker）默认关闭任务调度器，避免备份/授权过期任务重复执行。如需启用，设置 `SCHEDULER_ENABLED=true`，并确保只运行一个调度进程（或改用外部 cron）。
+
+> 文件默认保存在 `backend/uploads/`（Docker 中为挂载卷）。`docker-compose.yml` 中的 MinIO 服务为可选组件，当前版本尚未接入对象存储后端。
 
 ## 许可证
 

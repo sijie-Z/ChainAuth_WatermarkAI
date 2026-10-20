@@ -56,6 +56,7 @@
 - 移除 THREE.js 粒子背景、emoji 图标、玻璃拟态与渐变按钮；Element Plus 改为通过 CSS 变量主题化
 - 参考项目目录移出仓库并从发布历史中剔除，仓库体积从约 813 MB 降至约 0.5 MB
 - 前端开发环境统一走 Vite proxy（`VITE_API_BASE_URL=/api`），不再硬编码 `http://localhost:5000/api`
+- 移除未使用的 `minio` / `scipy` / `passlib` 依赖；文档明确 MinIO 为可选组件，文件当前默认存本地磁盘
 
 ## [1.4.0] - 2026-05-08
 
