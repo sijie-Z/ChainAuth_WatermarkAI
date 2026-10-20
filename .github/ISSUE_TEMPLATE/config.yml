@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 报告安全漏洞
+    url: https://github.com/sijie-Z/ChainAuth_WatermarkAI/security/advisories/new
+    about: 安全漏洞请走私密报告，不要公开提 Issue
+  - name: 📖 贡献指南
+    url: https://github.com/sijie-Z/ChainAuth_WatermarkAI/blob/develop/CONTRIBUTING.md
+    about: 分支模型、提交规范与 PR 流程

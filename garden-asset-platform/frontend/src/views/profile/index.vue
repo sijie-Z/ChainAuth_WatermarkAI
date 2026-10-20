@@ -1,5 +1,13 @@
 <template>
   <div class="profile-page">
+    <header class="page-bar">
+      <router-link to="/home" class="page-back">
+        <el-icon><ArrowLeft /></el-icon>
+        返回首页
+      </router-link>
+      <h1 class="page-title">个人中心</h1>
+    </header>
+
     <div class="profile-container">
       <!-- 左侧：用户信息卡片 -->
       <div class="profile-sidebar">
@@ -43,7 +51,7 @@
               <el-icon class="info-icon"><Clock /></el-icon>
               <div class="info-content">
                 <span class="info-label">最近活跃</span>
-                <span class="info-value">{{ formatDate(user?.last_login) || '刚刚' }}</span>
+                <span class="info-value">{{ formatDate(user?.last_login_at) || '-' }}</span>
               </div>
             </div>
           </div>
@@ -52,42 +60,24 @@
 
       <!-- 右侧：内容区 -->
       <div class="profile-main">
-        <!-- 统计卡片 -->
+        <!-- 统计卡片（仅展示有真实接口的统计） -->
         <div class="stats-grid">
           <div class="stat-card">
-            <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1); color: #10b981;">
+            <div class="stat-icon">
               <el-icon><Picture /></el-icon>
             </div>
             <div class="stat-info">
-              <span class="stat-value">{{ stats.assets }}</span>
-              <span class="stat-label">拥有资产</span>
+              <span class="stat-value">{{ stats.assets ?? '-' }}</span>
+              <span class="stat-label">我的资产</span>
             </div>
           </div>
           <div class="stat-card">
-            <div class="stat-icon" style="background: rgba(59, 130, 246, 0.1); color: #3b82f6;">
-              <el-icon><Stamp /></el-icon>
-            </div>
-            <div class="stat-info">
-              <span class="stat-value">{{ stats.watermarks }}</span>
-              <span class="stat-label">水印记录</span>
-            </div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon" style="background: rgba(245, 158, 11, 0.1); color: #f59e0b;">
+            <div class="stat-icon accent">
               <el-icon><Document /></el-icon>
             </div>
             <div class="stat-info">
-              <span class="stat-value">{{ stats.licenses }}</span>
-              <span class="stat-label">授权申请</span>
-            </div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon" style="background: rgba(139, 92, 246, 0.1); color: #8b5cf6;">
-              <el-icon><Link /></el-icon>
-            </div>
-            <div class="stat-info">
-              <span class="stat-value">{{ stats.blockchain }}</span>
-              <span class="stat-label">链上存证</span>
+              <span class="stat-value">{{ stats.licenses ?? '-' }}</span>
+              <span class="stat-label">我的授权</span>
             </div>
           </div>
         </div>
@@ -126,10 +116,10 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useUserStore } from '@/stores/user'
+import api from '@/api'
 import { licenseApi } from '@/api/modules'
-import { ElMessage } from 'element-plus'
 import {
-  User, Stamp, Calendar, Clock, Picture, Document, Link, Check
+  User, Stamp, Calendar, Clock, Picture, Document, Check, ArrowLeft
 } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
@@ -138,9 +128,10 @@ const username = computed(() => userStore.username)
 const roleLabel = computed(() => {
   const labels = {
     admin: '超级管理员',
-    adm1: '资产管理员',
-    adm2: '授权管理员',
-    adm3: '审核员',
+    asset_admin: '资产管理员',
+    license_admin: '授权管理员',
+    adm1: '一级审批员',
+    adm2: '二级审批员',
     user: '普通用户'
   }
   return labels[userStore.userRole] || '用户'
@@ -149,11 +140,28 @@ const roleLabel = computed(() => {
 const loading = ref(false)
 const activities = ref([])
 const stats = ref({
-  assets: 0,
-  watermarks: 0,
-  licenses: 0,
-  blockchain: 0
+  assets: null,
+  licenses: null
 })
+
+async function loadStats() {
+  const [assetsResult, licensesResult] = await Promise.allSettled([
+    api.get('/assets/my', { params: { page: 1, per_page: 1 } }),
+    licenseApi.getMyLicenses({ page: 1, per_page: 1 })
+  ])
+
+  if (assetsResult.status === 'fulfilled' && assetsResult.value.data?.code === 200) {
+    stats.value.assets = assetsResult.value.data.data?.total ?? 0
+  } else if (assetsResult.status === 'rejected') {
+    console.error('加载资产统计失败:', assetsResult.reason)
+  }
+
+  if (licensesResult.status === 'fulfilled' && licensesResult.value.data?.code === 200) {
+    stats.value.licenses = licensesResult.value.data.data?.total ?? 0
+  } else if (licensesResult.status === 'rejected') {
+    console.error('加载授权统计失败:', licensesResult.reason)
+  }
+}
 
 async function loadActivities() {
   loading.value = true
@@ -176,8 +184,8 @@ async function loadActivities() {
 }
 
 function getActivityColor(type) {
-  const map = { license: '#3b82f6', asset: '#10b981', watermark: '#f59e0b', blockchain: '#8b5cf6' }
-  return map[type] || '#6b7280'
+  const map = { license: '#4c6e8a', asset: '#2f6b5a', watermark: '#b07a2a', blockchain: '#6d5b7a' }
+  return map[type] || '#5b675f'
 }
 
 function getActivityTagType(type) {
@@ -196,6 +204,7 @@ function formatDate(dateStr) {
 }
 
 onMounted(() => {
+  loadStats()
   loadActivities()
 })
 </script>
@@ -204,17 +213,50 @@ onMounted(() => {
 @use '@/assets/styles/variables.scss' as *;
 
 .profile-page {
+  max-width: 1200px;
+  margin: 0 auto;
   min-height: 100vh;
   background: $bg-primary;
-  padding: 32px;
+  padding: $spacing-2xl $spacing-3xl;
+}
+
+// ========== 页眉 ==========
+.page-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: $spacing-md;
+  padding-bottom: $spacing-md;
+  margin-bottom: $spacing-xl;
+  border-bottom: 1px solid $border-light;
+}
+
+.page-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: $font-size-sm;
+  color: $text-secondary;
+  transition: color $transition-fast;
+
+  &:hover {
+    color: $primary-dark;
+  }
+}
+
+.page-title {
+  font-family: $font-display;
+  font-size: 23px;
+  font-weight: $font-weight-semibold;
+  line-height: $line-height-tight;
+  letter-spacing: 0.02em;
+  color: $text-primary;
 }
 
 .profile-container {
-  max-width: 1200px;
-  margin: 0 auto;
   display: grid;
   grid-template-columns: 340px 1fr;
-  gap: 24px;
+  gap: $spacing-2xl;
 }
 
 .profile-sidebar {
@@ -224,17 +266,18 @@ onMounted(() => {
 }
 
 .user-card {
-  background: white;
-  border-radius: $radius-xl;
-  box-shadow: $shadow-card;
+  background: $bg-card;
+  border: 1px solid $border-color;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-sm;
   overflow: hidden;
 }
 
 .user-card-header {
-  background: $primary-gradient;
-  padding: 32px 24px;
+  background: $bg-card;
+  padding: $spacing-3xl $spacing-xl $spacing-xl;
   text-align: center;
-  color: white;
+  border-bottom: 1px solid $border-light;
 }
 
 .avatar-section {
@@ -243,10 +286,12 @@ onMounted(() => {
   margin-bottom: 12px;
 
   .profile-avatar {
-    background: rgba(255, 255, 255, 0.2);
-    border: 3px solid rgba(255, 255, 255, 0.4);
-    font-size: 32px;
-    font-weight: $font-weight-bold;
+    background: $primary-color;
+    border: 1px solid $primary-dark;
+    color: $bg-card;
+    font-family: $font-display;
+    font-size: $font-size-3xl;
+    font-weight: $font-weight-semibold;
   }
 
   .avatar-badge {
@@ -256,32 +301,37 @@ onMounted(() => {
     width: 24px;
     height: 24px;
     border-radius: 50%;
-    background: $success-color;
-    border: 2px solid white;
+    background: $primary-dark;
+    border: 2px solid $bg-card;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
+    color: $bg-card;
     font-size: 12px;
   }
 }
 
 .user-display-name {
-  margin: 0 0 8px;
+  margin: 0 0 $spacing-sm;
+  font-family: $font-display;
   font-size: $font-size-xl;
   font-weight: $font-weight-semibold;
+  color: $text-primary;
 }
 
 .user-role-badge {
   display: inline-block;
-  padding: 4px 14px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: $radius-full;
+  padding: 2px 10px;
+  background: $bg-secondary;
+  border: 1px solid $border-color;
+  border-radius: $radius-xs;
+  color: $text-secondary;
   font-size: $font-size-xs;
+  letter-spacing: 0.08em;
 }
 
 .user-card-body {
-  padding: 20px 24px;
+  padding: $spacing-lg $spacing-xl;
 }
 
 .info-item {
@@ -328,35 +378,43 @@ onMounted(() => {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 24px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: $spacing-lg;
+  margin-bottom: $spacing-2xl;
 }
 
 .stat-card {
-  background: white;
+  background: $bg-card;
+  border: 1px solid $border-color;
   border-radius: $radius-lg;
-  padding: 20px;
+  padding: $spacing-xl;
   display: flex;
   align-items: center;
-  gap: 16px;
-  box-shadow: $shadow-card;
-  transition: all $transition-base;
+  gap: $spacing-lg;
+  box-shadow: $shadow-sm;
+  transition: border-color $transition-fast, box-shadow $transition-fast;
 
   &:hover {
-    box-shadow: $shadow-card-hover;
-    transform: translateY(-2px);
+    border-color: $border-color;
+    box-shadow: $shadow-sm;
   }
 
   .stat-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: $radius-lg;
+    width: 44px;
+    height: 44px;
+    border-radius: $radius-md;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 24px;
+    font-size: 20px;
     flex-shrink: 0;
+    margin-bottom: 0;
+    background: $bg-secondary;
+    color: $primary-color;
+
+    &.accent {
+      color: $accent-color;
+    }
   }
 
   .stat-info {
@@ -364,26 +422,32 @@ onMounted(() => {
     flex-direction: column;
 
     .stat-value {
+      font-family: $font-display;
       font-size: $font-size-3xl;
-      font-weight: $font-weight-bold;
+      font-weight: $font-weight-semibold;
       color: $text-primary;
-      line-height: 1;
+      line-height: 1.1;
+      margin-bottom: 0;
+      font-variant-numeric: tabular-nums;
     }
 
     .stat-label {
       font-size: $font-size-xs;
       color: $text-secondary;
-      margin-top: 4px;
+      margin-top: $spacing-xs;
+      letter-spacing: 0.06em;
     }
   }
 }
 
 .activity-card {
-  border-radius: $radius-xl;
-  box-shadow: $shadow-card;
-
   :deep(.el-card__header) {
-    padding: 20px 24px;
+    padding: $spacing-lg $spacing-xl;
+    border-bottom: 1px solid $border-light;
+  }
+
+  :deep(.el-card__body) {
+    padding: $spacing-xl;
   }
 }
 
@@ -391,8 +455,10 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  font-family: $font-display;
   font-size: $font-size-lg;
   font-weight: $font-weight-semibold;
+  color: $text-primary;
 }
 
 .empty-state {
@@ -451,13 +517,17 @@ onMounted(() => {
   }
 }
 
-@media (max-width: $breakpoint-sm) {
+@media (max-width: $breakpoint-md) {
   .profile-page {
-    padding: 16px;
+    padding: $spacing-lg;
   }
 
   .stats-grid {
     grid-template-columns: 1fr;
+  }
+
+  .activity-item {
+    flex-wrap: wrap;
   }
 }
 </style>

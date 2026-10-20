@@ -20,68 +20,9 @@ onMounted(() => {
 </script>
 
 <style lang="scss">
-@use '@/assets/styles/variables.scss' as *;
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-html {
-  font-size: 16px;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  scroll-behavior: smooth;
-}
-
-body {
-  font-family: $font-family;
-  font-size: $font-size-base;
-  line-height: $line-height-normal;
-  color: $text-primary;
-  background-color: $bg-primary;
-  min-height: 100vh;
-}
-
 #app {
   width: 100%;
   min-height: 100vh;
-}
-
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: $border-dark;
-  border-radius: $radius-full;
-
-  &:hover {
-    background: $text-placeholder;
-  }
-}
-
-::selection {
-  background-color: rgba($primary-color, 0.2);
-  color: $text-primary;
-}
-
-a {
-  color: $primary-color;
-  text-decoration: none;
-  transition: color $transition-fast;
-
-  &:hover {
-    color: $primary-dark;
-  }
 }
 
 img {
@@ -90,32 +31,21 @@ img {
   vertical-align: middle;
 }
 
-// 页面过渡动画
+// 页面过渡
 .fade-slide-enter-active,
 .fade-slide-leave-active {
-  transition: all 0.3s ease;
+  transition: opacity 0.2s ease;
 }
 
-.fade-slide-enter-from {
-  opacity: 0;
-  transform: translateX(20px);
-}
-
+.fade-slide-enter-from,
 .fade-slide-leave-to {
   opacity: 0;
-  transform: translateX(-20px);
 }
 
 // 工具类
 .text-center { text-align: center; }
 .text-left { text-align: left; }
 .text-right { text-align: right; }
-
-.text-truncate {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 .flex { display: flex; }
 .flex-1 { flex: 1; }
@@ -143,79 +73,4 @@ img {
 
 .w-full { width: 100%; }
 .h-full { height: 100%; }
-
-// Element Plus 全局覆盖
-.el-button--primary {
-  background: $primary-gradient !important;
-  border: none !important;
-
-  &:hover {
-    opacity: 0.9;
-  }
-}
-
-.el-card {
-  border-radius: $radius-xl !important;
-  border: 1px solid $border-light !important;
-  box-shadow: $shadow-card !important;
-}
-
-.el-input__wrapper {
-  border-radius: $radius-lg !important;
-  box-shadow: none !important;
-  border: 1px solid $border-color !important;
-
-  &:hover, &:focus-within {
-    border-color: $primary-color !important;
-    box-shadow: 0 0 0 3px rgba($primary-color, 0.1) !important;
-  }
-}
-
-.el-table {
-  border-radius: $radius-xl !important;
-  overflow: hidden;
-
-  th.el-table__cell {
-    background: $bg-secondary !important;
-    font-weight: $font-weight-medium !important;
-    color: $text-secondary !important;
-  }
-
-  td.el-table__cell {
-    border-bottom: 1px solid $border-light !important;
-  }
-
-  .el-table__row:hover td {
-    background: $bg-hover !important;
-  }
-}
-
-.el-tag {
-  border-radius: $radius-full !important;
-  border: none !important;
-  padding: 2px 12px !important;
-}
-
-.el-dialog {
-  border-radius: $radius-2xl !important;
-  overflow: hidden;
-
-  .el-dialog__header {
-    padding: $spacing-2xl $spacing-3xl;
-    border-bottom: 1px solid $border-light;
-  }
-
-  .el-dialog__body {
-    padding: $spacing-3xl;
-  }
-}
-
-.el-message-box {
-  border-radius: $radius-xl !important;
-}
-
-.el-notification {
-  border-radius: $radius-lg !important;
-  border-left: 4px solid $primary-color !important;
-}
 </style>

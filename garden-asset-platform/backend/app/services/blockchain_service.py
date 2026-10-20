@@ -43,16 +43,25 @@ class BlockchainService:
             self._init_web3()
 
     def _init_web3(self):
-        """初始化Web3连接"""
+        """初始化Web3连接；只有配置了合约地址时才认为具备真实上链能力"""
         try:
             from web3 import Web3
             self._web3 = Web3(Web3.HTTPProvider(self.rpc_url))
 
-            if self._web3.is_connected():
-                logger.info(f"区块链连接成功: {self.rpc_url}")
-            else:
+            if not self._web3.is_connected():
                 logger.warning(f"区块链连接失败: {self.rpc_url}")
                 self.enabled = False
+                return
+
+            if not self.contract_address:
+                logger.warning("未配置 CONTRACT_ADDRESS，区块链存证以模拟模式运行")
+                self.enabled = False
+                return
+
+            from contracts.abi import CONTRACT_ABI
+            address = self._web3.to_checksum_address(self.contract_address)
+            self._contract = self._web3.eth.contract(address=address, abi=CONTRACT_ABI)
+            logger.info(f"区块链连接成功: {self.rpc_url}, 合约: {address}")
         except ImportError:
             logger.warning("web3库未安装，使用模拟模式")
             self.enabled = False
@@ -134,7 +143,7 @@ class BlockchainService:
             status='pending'
         )
 
-        if self.enabled and self._web3:
+        if self.enabled and self._web3 and self._contract:
             # 真实链上存证
             result = self._register_on_chain(
                 asset_code=asset.asset_code,
@@ -147,6 +156,8 @@ class BlockchainService:
                 tx.tx_hash = result['tx_hash']
                 tx.block_number = result.get('block_number')
                 tx.from_address = result.get('from_address')
+                tx.to_address = self.contract_address
+                tx.gas_used = result.get('gas_used')
                 tx.status = 'confirmed'
                 tx.confirmed_at = datetime.utcnow()
             else:
@@ -166,6 +177,14 @@ class BlockchainService:
             logger.info(f"模拟存证: {asset.asset_code}, tx={tx.tx_hash}")
 
         db.session.add(tx)
+
+        # 链上交易失败时不能签发证书或把资产标记为已存证
+        if tx.status == 'failed':
+            db.session.commit()
+            return {
+                'success': False,
+                'message': tx.error_message or '链上存证失败'
+            }
 
         # 创建证书
         certificate = Certificate(
@@ -197,7 +216,7 @@ class BlockchainService:
                 'tx_hash': tx.tx_hash,
                 'certificate_id': certificate.certificate_id,
                 'block_number': tx.block_number,
-                'simulated': not self.enabled
+                'simulated': not (self.enabled and self._web3 and self._contract)
             }
         except Exception as e:
             db.session.rollback()
@@ -209,21 +228,47 @@ class BlockchainService:
 
     def _register_on_chain(self, asset_code: str, watermark_id: str,
                            file_hash: str, feature_hash: str) -> Dict[str, Any]:
-        """在真实链上存证"""
+        """在真实链上调用 AssetRegistry 合约存证"""
         try:
-            # 构建交易
+            if not self.private_key:
+                raise ValueError('未配置 PRIVATE_KEY')
+            if not self._contract:
+                raise ValueError('未初始化合约实例')
+
             account = self._web3.eth.account.from_key(self.private_key)
+            nonce = self._web3.eth.get_transaction_count(account.address)
+            transaction = self._contract.functions.registerAsset(
+                asset_code,
+                watermark_id or '',
+                file_hash or '',
+                feature_hash or '',
+            ).build_transaction({
+                'from': account.address,
+                'nonce': nonce,
+                'gas': 3_000_000,
+                'gasPrice': self._web3.eth.gas_price,
+                'chainId': self.chain_id,
+            })
 
-            # 调用智能合约（简化版本，实际需要ABI）
-            # TODO: 完整实现智能合约调用
+            signed = self._web3.eth.account.sign_transaction(
+                transaction, private_key=self.private_key
+            )
+            raw_transaction = getattr(signed, 'raw_transaction', None) or getattr(signed, 'rawTransaction')
+            tx_hash = self._web3.eth.send_raw_transaction(raw_transaction)
+            receipt = self._web3.eth.wait_for_transaction_receipt(tx_hash, timeout=60)
 
-            tx_hash = self.generate_tx_hash()  # 模拟
+            if receipt.status != 1:
+                return {
+                    'success': False,
+                    'message': '链上交易执行失败（receipt.status != 1）'
+                }
 
             return {
                 'success': True,
-                'tx_hash': tx_hash,
+                'tx_hash': tx_hash.hex(),
                 'from_address': account.address,
-                'block_number': self._web3.eth.block_number
+                'block_number': receipt.blockNumber,
+                'gas_used': receipt.gasUsed,
             }
         except Exception as e:
             logger.error(f"链上存证失败: {str(e)}")

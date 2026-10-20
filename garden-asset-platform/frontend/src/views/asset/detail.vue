@@ -1,5 +1,14 @@
 <template>
   <div class="asset-detail-container">
+    <header class="page-bar">
+      <router-link to="/assets" class="page-back">
+        <el-icon><ArrowLeft /></el-icon>
+        返回资产档案
+      </router-link>
+      <h1 class="page-title">资产详情</h1>
+      <span v-if="asset.asset_code" class="page-meta">{{ asset.asset_code }}</span>
+    </header>
+
     <!-- 加载骨架屏 -->
     <el-skeleton :loading="loading" animated>
       <template #template>
@@ -78,7 +87,7 @@
                 <template #header>
                   <div class="card-header">
                     <span>水印状态</span>
-                    <StatusTag :status="asset.watermark_status || 'pending'" />
+                    <StatusTag :status="asset.watermark_status || 'none'" kind="watermark" />
                   </div>
                 </template>
                 <div v-if="asset.watermark_id" class="status-item">
@@ -100,7 +109,7 @@
                 </el-button>
                 <el-button
                   v-else
-                  type="success"
+                  type="primary"
                   style="width: 100%; margin-top: 12px"
                   :loading="extracting"
                   @click="extractWatermark"
@@ -114,7 +123,7 @@
                 <template #header>
                   <div class="card-header">
                     <span>区块链存证</span>
-                    <StatusTag :status="asset.chain_status || 'pending'" />
+                    <StatusTag :status="asset.chain_status || 'none'" kind="chain" />
                   </div>
                 </template>
                 <div v-if="asset.chain_tx_hash" class="status-item">
@@ -137,7 +146,7 @@
                 </el-button>
                 <el-button
                   v-else
-                  type="success"
+                  type="primary"
                   style="width: 100%; margin-top: 12px"
                   @click="viewCertificate"
                 >
@@ -165,7 +174,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Document } from '@element-plus/icons-vue'
+import { ArrowLeft, Document } from '@element-plus/icons-vue'
 import { assetApi, watermarkApi, blockchainApi } from '@/api/modules'
 
 const route = useRoute()
@@ -253,8 +262,8 @@ function goBack() {
 
 function getAssetUrl(asset) {
   if (asset.thumbnail_path) return asset.thumbnail_path
-  const colors = { image: '#10b981', vector: '#3b82f6', model: '#8b5cf6', document: '#f59e0b', video: '#ef4444' }
-  const color = (colors[asset.asset_type] || '#6b7280').replace('#', '')
+  const colors = { image: '#2f6b5a', vector: '#4c6e8a', model: '#6d5b7a', document: '#b07a2a', video: '#a6402f' }
+  const color = (colors[asset.asset_type] || '#5b675f').replace('#', '')
   const label = (asset.asset_type || 'FILE').substring(0, 3).toUpperCase()
   return `data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="800" height="600"%3E%3Crect fill="%23${color}" width="800" height="600" rx="12"/%3E%3Ctext x="400" y="310" text-anchor="middle" fill="white" font-size="48"%3E${label}%3C/text%3E%3C/svg%3E`
 }
@@ -280,15 +289,78 @@ onMounted(() => {
 @use '@/assets/styles/variables.scss' as *;
 
 .asset-detail-container {
-  padding: $spacing-lg;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: $spacing-2xl $spacing-3xl;
   min-height: 100vh;
   background: $bg-primary;
+
+  :deep(.el-card__header) {
+    padding: $spacing-lg $spacing-xl;
+    border-bottom: 1px solid $border-light;
+    font-family: $font-display;
+    font-weight: $font-weight-semibold;
+  }
+
+  :deep(.el-card__body) {
+    padding: $spacing-xl;
+  }
+
+  :deep(.el-card__header .status-tag) {
+    font-family: $font-family;
+    font-weight: $font-weight-medium;
+  }
+}
+
+// ========== 页眉 ==========
+.page-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: $spacing-md;
+  padding-bottom: $spacing-md;
+  margin-bottom: $spacing-xl;
+  border-bottom: 1px solid $border-light;
+}
+
+.page-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: $font-size-sm;
+  color: $text-secondary;
+  transition: color $transition-fast;
+
+  &:hover {
+    color: $primary-dark;
+  }
+}
+
+.page-title {
+  font-family: $font-display;
+  font-size: 23px;
+  font-weight: $font-weight-semibold;
+  line-height: $line-height-tight;
+  letter-spacing: 0.02em;
+  color: $text-primary;
+}
+
+.page-meta {
+  margin-left: auto;
+  font-family: $font-mono;
+  font-size: $font-size-xs;
+  letter-spacing: 0.08em;
+  color: $text-placeholder;
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: $spacing-md;
+  font-family: $font-display;
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
 }
 
 .preview-area {
@@ -298,6 +370,7 @@ onMounted(() => {
   justify-content: center;
   align-items: center;
   background: $bg-secondary;
+  border: 1px solid $border-light;
   margin-bottom: $spacing-lg;
   border-radius: $radius-md;
   gap: $spacing-md;
@@ -319,7 +392,7 @@ onMounted(() => {
 }
 
 .status-card {
-  margin-bottom: $spacing-lg;
+  margin-bottom: $spacing-xl;
 }
 
 .status-item {
@@ -343,8 +416,9 @@ onMounted(() => {
   }
 
   .mono {
-    font-family: 'Courier New', monospace;
+    font-family: $font-mono;
     font-size: $font-size-xs;
+    letter-spacing: 0.02em;
   }
 }
 
@@ -355,9 +429,17 @@ onMounted(() => {
   justify-content: center;
 }
 
-@media (max-width: $breakpoint-sm) {
+@media (max-width: $breakpoint-md) {
   .asset-detail-container {
-    padding: $spacing-md;
+    padding: $spacing-lg;
+
+    :deep(.el-descriptions) {
+      overflow-x: auto;
+    }
+  }
+
+  .page-meta {
+    margin-left: 0;
   }
 
   .preview-area {
@@ -365,7 +447,7 @@ onMounted(() => {
   }
 
   .status-item .value {
-    max-width: 120px;
+    max-width: 140px;
   }
 }
 </style>

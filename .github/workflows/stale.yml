@@ -1,0 +1,39 @@
+name: Stale
+
+on:
+  schedule:
+    # 每周一 02:17 UTC（北京时间 10:17）
+    - cron: "17 2 * * 1"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    name: stale
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Mark and close stale issues/PRs
+        uses: actions/stale@v11
+        with:
+          days-before-issue-stale: 60
+          days-before-issue-close: 14
+          days-before-pr-stale: 45
+          days-before-pr-close: 14
+          stale-issue-label: "stale"
+          stale-pr-label: "stale"
+          exempt-issue-labels: "pinned,security,good first issue"
+          exempt-pr-labels: "pinned,security,dependencies"
+          stale-issue-message: |
+            此 Issue 已超过 60 天没有活动，将被标记为 stale。
+            如果问题仍然存在，请补充信息或评论；14 天后将自动关闭。
+          close-issue-message: |
+            由于长时间没有活动，此 Issue 已自动关闭。如仍需跟进，欢迎重新打开。
+          stale-pr-message: |
+            此 PR 已超过 45 天没有更新，将被标记为 stale。请及时处理冲突或说明进展。
+          close-pr-message: |
+            由于长时间没有活动，此 PR 已自动关闭。如需继续，请重新打开并同步最新 develop。
+          operations-per-run: 50

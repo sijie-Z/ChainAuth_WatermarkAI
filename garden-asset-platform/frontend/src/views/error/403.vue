@@ -1,14 +1,14 @@
 <template>
   <div class="error-page">
-    <div class="error-content">
-      <div class="error-code">403</div>
-      <h2>权限不足</h2>
-      <p>抱歉，您没有访问该页面的权限。</p>
+    <main class="error-content">
+      <p class="error-code" aria-hidden="true">403</p>
+      <h1 class="error-title">权限不足</h1>
+      <p class="error-desc">抱歉，您没有访问该页面的权限。如需访问，请联系管理员，或返回首页继续浏览。</p>
       <div class="error-actions">
         <el-button type="primary" @click="goHome">返回首页</el-button>
-        <el-button @click="goBack">返回上页</el-button>
+        <router-link to="/assets" class="error-link">浏览资产档案</router-link>
       </div>
-    </div>
+    </main>
   </div>
 </template>
 
@@ -20,10 +20,6 @@ const router = useRouter()
 function goHome() {
   router.push('/home')
 }
-
-function goBack() {
-  router.back()
-}
 </script>
 
 <style lang="scss" scoped>
@@ -34,38 +30,68 @@ function goBack() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: $bg-primary;
+  padding: 48px 24px;
+  background: $bg-card;
+  text-align: center;
 }
 
 .error-content {
-  text-align: center;
-  padding: $spacing-3xl;
+  max-width: 460px;
 }
 
 .error-code {
-  font-size: 120px;
-  font-weight: $font-weight-bold;
-  background: $primary-gradient;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  margin: 0 0 20px;
+  font-family: $font-display;
+  font-size: clamp(72px, 16vw, 112px);
+  font-weight: 600;
   line-height: 1;
-  margin-bottom: $spacing-lg;
+  letter-spacing: 0.08em;
+  color: $primary-dark;
 }
 
-h2 {
-  font-size: $font-size-2xl;
+.error-title {
+  margin: 0 0 12px;
+  font-family: $font-display;
+  font-size: 24px;
+  font-weight: 600;
   color: $text-primary;
-  margin-bottom: $spacing-sm;
 }
 
-p {
+.error-desc {
+  margin: 0 auto 32px;
+  max-width: 34em;
+  font-size: 14px;
+  line-height: 1.8;
   color: $text-secondary;
-  margin-bottom: $spacing-xl;
 }
 
 .error-actions {
   display: flex;
-  gap: $spacing-sm;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.error-link {
+  padding-bottom: 1px;
+  border-bottom: 1px solid transparent;
+  font-size: 13px;
+  color: $text-secondary;
+  transition: color 0.15s ease, border-color 0.15s ease;
+
+  &:hover {
+    color: $primary-dark;
+    border-bottom-color: $border-color;
+  }
+}
+
+@media (max-width: 480px) {
+  .error-page {
+    padding: 32px 20px;
+  }
+
+  .error-title {
+    font-size: 20px;
+  }
 }
 </style>

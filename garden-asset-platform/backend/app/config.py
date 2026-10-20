@@ -13,21 +13,49 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', '')
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', '')
 
-    # 生产环境必须配置密钥
+    # 生产环境必须配置密钥；未配置时生成一次并持久化到 instance 目录，
+    # 保证多 worker / 重启后密钥一致（否则各 gunicorn worker 各自随机，Token 互不认）。
     @staticmethod
     def init_app(app):
-        if not app.config.get('SECRET_KEY') or app.config['SECRET_KEY'] == '':
-            if not app.config.get('TESTING'):
-                import warnings
-                warnings.warn('SECRET_KEY 未设置！使用随机密钥（重启后会话失效）')
-                import secrets
-                app.config['SECRET_KEY'] = secrets.token_hex(32)
-        if not app.config.get('JWT_SECRET_KEY') or app.config['JWT_SECRET_KEY'] == '':
-            if not app.config.get('TESTING'):
-                import warnings
-                warnings.warn('JWT_SECRET_KEY 未设置！使用随机密钥（重启后Token失效）')
-                import secrets
-                app.config['JWT_SECRET_KEY'] = secrets.token_hex(32)
+        if app.config.get('TESTING'):
+            return
+        app.config['SECRET_KEY'] = Config._persistent_secret(app, 'SECRET_KEY', '.secret_key')
+        app.config['JWT_SECRET_KEY'] = Config._persistent_secret(app, 'JWT_SECRET_KEY', '.jwt_secret_key')
+
+    @staticmethod
+    def _persistent_secret(app, key, filename):
+        value = app.config.get(key) or ''
+        if value:
+            return value
+
+        import secrets
+        import time
+        import warnings
+
+        os.makedirs(app.instance_path, exist_ok=True)
+        path = os.path.join(app.instance_path, filename)
+        for _ in range(10):
+            try:
+                fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            except FileExistsError:
+                try:
+                    with open(path, 'r', encoding='utf-8') as handle:
+                        saved = handle.read().strip()
+                except OSError:
+                    saved = ''
+                if saved:
+                    warnings.warn(f'{key} 未设置，复用 {path} 中已持久化的密钥')
+                    return saved
+                time.sleep(0.05)
+                continue
+            else:
+                generated = secrets.token_hex(32)
+                with os.fdopen(fd, 'w', encoding='utf-8') as handle:
+                    handle.write(generated)
+                warnings.warn(f'{key} 未设置，已生成并持久化到 {path}')
+                return generated
+
+        raise RuntimeError(f'{key} 未配置，且无法在 {path} 生成持久化密钥')
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=24)
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
 
@@ -77,12 +105,16 @@ class Config:
     CORS_ORIGINS = os.environ.get('CORS_ORIGINS', '*')
 
     # 限流配置
+    RATELIMIT_ENABLED = os.environ.get('RATELIMIT_ENABLED', 'true').lower() == 'true'
     RATELIMIT_LOGIN = int(os.environ.get('RATELIMIT_LOGIN', '5'))
     RATELIMIT_LOGIN_WINDOW = int(os.environ.get('RATELIMIT_LOGIN_WINDOW', '60'))
     RATELIMIT_REGISTER = int(os.environ.get('RATELIMIT_REGISTER', '3'))
     RATELIMIT_REGISTER_WINDOW = int(os.environ.get('RATELIMIT_REGISTER_WINDOW', '3600'))
     RATELIMIT_API = int(os.environ.get('RATELIMIT_API', '100'))
     RATELIMIT_API_WINDOW = int(os.environ.get('RATELIMIT_API_WINDOW', '60'))
+
+    # 任务调度器：多 worker 部署（gunicorn 4 workers）会各自启动一份，默认关闭避免重复执行
+    SCHEDULER_ENABLED = os.environ.get('SCHEDULER_ENABLED', 'false').lower() == 'true'
 
 
 class DevelopmentConfig(Config):
@@ -102,6 +134,15 @@ class TestingConfig(Config):
     """测试环境配置"""
     TESTING = True
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
+    # 测试使用固定密钥，保证 JWT 可签发；生产环境仍要求显式配置
+    SECRET_KEY = 'testing-secret-key-not-for-production'
+    JWT_SECRET_KEY = 'testing-jwt-secret-key-not-for-production'
+    # 测试之间共享进程内存，限流会串扰；限流本身不在这里验证
+    RATELIMIT_ENABLED = False
+    # AI 依赖（torch/CLIP/Milvus）因机器而异，测试固定关闭以保证确定性
+    AI_ENABLED = False
+    BLOCKCHAIN_ENABLED = False
+    SCHEDULER_ENABLED = False
 
 
 config = {

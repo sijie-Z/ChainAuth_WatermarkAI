@@ -61,7 +61,16 @@ def rate_limit(limit=100, window=60):
     def decorator(f):
         @wraps(f)
         def wrapped(*args, **kwargs):
+            if not current_app.config.get('RATELIMIT_ENABLED', True):
+                return f(*args, **kwargs)
+
             key = f'rate_limit:{request.remote_addr}:{request.path}'
+
+            def too_many_requests():
+                # Flask-RESTful 不支持 (Response, status) 元组，必须返回带状态码的 Response
+                response = jsonify({'code': 429, 'message': '请求过于频繁，请稍后再试'})
+                response.status_code = 429
+                return response
 
             # 优先使用Redis
             try:
@@ -71,14 +80,14 @@ def rate_limit(limit=100, window=60):
                     if count == 1:
                         redis_client.expire(key, window)
                     if count > limit:
-                        return jsonify({'code': 429, 'message': '请求过于频繁，请稍后再试'}), 429
+                        return too_many_requests()
                     return f(*args, **kwargs)
             except Exception as e:
                 logger.warning(f'Redis限流失败，切换到内存限流: {e}')
 
             # 降级到内存限流
             if not _check_rate_limit_memory(key, limit, window):
-                return jsonify({'code': 429, 'message': '请求过于频繁，请稍后再试'}), 429
+                return too_many_requests()
 
             return f(*args, **kwargs)
         return wrapped

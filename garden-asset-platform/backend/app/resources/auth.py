@@ -144,6 +144,19 @@ class LogoutResource(Resource):
     def post(self):
         user_id = get_jwt_identity()
 
+        # 将当前 access token 的 jti 写入撤销表，登出后立即失效
+        jwt_data = get_jwt()
+        jti = jwt_data.get('jti')
+        if jti:
+            db.session.add(UserToken(
+                user_id=user_id,
+                token=jti,
+                token_type='access',
+                is_revoked=True,
+                expires_at=datetime.utcfromtimestamp(jwt_data['exp'])
+            ))
+            db.session.commit()
+
         # 记录日志
         user = User.query.get(user_id)
         OperationLog.log(
@@ -263,13 +276,47 @@ class UserListResource(Resource):
         current_user_id = get_jwt_identity()
         current_user = User.query.get(current_user_id)
 
-        if current_user.role not in ['admin', 'super_admin']:
+        if not current_user or current_user.role != 'admin':
             return {'code': 403, 'message': '无权限'}, 403
 
         users = User.query.order_by(User.created_at.desc()).all()
         result = [u.to_dict() for u in users]
 
         return {'code': 200, 'data': result}
+
+    @jwt_required()
+    def post(self):
+        """管理员创建用户（可指定角色与状态）"""
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
+
+        if not current_user or current_user.role != 'admin':
+            return {'code': 403, 'message': '无权限'}, 403
+
+        data = request.get_json() or {}
+        username = (data.get('username') or '').strip()
+        password = data.get('password') or ''
+        email = (data.get('email') or '').strip() or None
+        role = data.get('role', 'user')
+        status = data.get('status', 'active')
+
+        if not username or not password:
+            return {'code': 400, 'message': '用户名和密码不能为空'}, 400
+        if len(password) < 6:
+            return {'code': 400, 'message': '密码长度不能少于 6 位'}, 400
+        if role not in ('user', 'asset_admin', 'license_admin', 'adm1', 'adm2', 'admin'):
+            return {'code': 400, 'message': '无效的角色'}, 400
+        if status not in ('active', 'inactive', 'banned'):
+            return {'code': 400, 'message': '无效的状态'}, 400
+        if User.query.filter_by(username=username).first():
+            return {'code': 400, 'message': '用户名已存在'}, 400
+
+        user = User(username=username, email=email, role=role, status=status)
+        user.set_password(password)
+        db.session.add(user)
+        db.session.commit()
+
+        return {'code': 200, 'message': '创建成功', 'data': user.to_dict()}
 
 
 class UserResource(Resource):
@@ -281,7 +328,7 @@ class UserResource(Resource):
         current_user_id = get_jwt_identity()
         current_user = User.query.get(current_user_id)
 
-        if current_user.role not in ['admin', 'super_admin'] and current_user_id != user_id:
+        if current_user.role != 'admin' and current_user_id != user_id:
             return {'code': 403, 'message': '无权限'}, 403
 
         user = User.query.get(user_id)
@@ -295,9 +342,13 @@ class UserResource(Resource):
             user.email = data['email']
         if 'phone' in data:
             user.phone = data['phone']
-        if 'role' in data and current_user.role in ['admin', 'super_admin']:
+        if 'role' in data and current_user.role == 'admin':
+            if data['role'] not in ('user', 'asset_admin', 'license_admin', 'adm1', 'adm2', 'admin'):
+                return {'code': 400, 'message': '无效的角色'}, 400
             user.role = data['role']
-        if 'status' in data and current_user.role in ['admin', 'super_admin']:
+        if 'status' in data and current_user.role == 'admin':
+            if data['status'] not in ('active', 'inactive', 'banned'):
+                return {'code': 400, 'message': '无效的状态'}, 400
             user.status = data['status']
 
         db.session.commit()

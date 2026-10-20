@@ -60,7 +60,7 @@ def coor_process(coor, argument, dis):
     index = random.randint(0, len(W) - 1)
     w = int(''.join(map(str, W[index])), 2)
 
-    coor = np.array([Decimal(str(x)) for x in np.nditer(coor)])
+    coor = np.array([Decimal(str(x)) for x in np.nditer(coor, flags=['refs_ok'])])
     coor_l = coor // R * R
     embed_coor = watermark_embed(coor, coor_l, w, n, R)
     return embed_coor
@@ -89,12 +89,13 @@ def coor_group_process(coor_group, argument):
     return embed_coor_group
 
 
-def traversal_nested_coor_group(coor_nested, feature_type, argument):
+def traversal_nested_coor_group(x_nested, y_nested, feature_type, argument):
     """
-    对于多线、多面等情况，执行此函数
+    对于多线、多面、多点等情况，按部件逐个处理
 
     Args:
-        coor_nested: 所有要素组成的嵌套坐标数组
+        x_nested: 该要素各部件 x 坐标数组
+        y_nested: 该要素各部件 y 坐标数组
         feature_type: 要素的类型
         argument: 算法参数字典
 
@@ -104,11 +105,13 @@ def traversal_nested_coor_group(coor_nested, feature_type, argument):
     processed_x_nested = []
     processed_y_nested = []
 
-    for feature_index in range(coor_nested.shape[1]):
-        coor_group = np.vstack(coor_nested[:, feature_index])
+    for x_part, y_part in zip(x_nested, y_nested):
+        coor_group = np.vstack((x_part, y_part))
+        if coor_group.size == 0:
+            continue
         processed_coor_group = coor_group_process(coor_group, argument)
 
-        # 如果要素为多面，则需要满足首位顶点的坐标相同
+        # 如果部件为面，则需要满足首尾顶点的坐标相同
         if (feature_type == 'MultiPolygon'
                 and np.size(processed_coor_group) not in [0, 2]
                 and not np.array_equal(processed_coor_group[:, 0], processed_coor_group[:, -1])):
@@ -134,13 +137,20 @@ def traversal_coor_group(coor_nested, shp_type, processed_shpfile, argument):
         processed_shpfile
     """
     for feature_index in range(coor_nested.shape[1]):
-        coor_group = np.vstack(coor_nested[:, feature_index])
+        x_entry = coor_nested[0, feature_index]
+        y_entry = coor_nested[1, feature_index]
         feature_type = shp_type[feature_index]
 
-        # 判断是否是多线、多面等的情况
-        if isinstance(coor_group[0, 0], np.ndarray):
-            processed_coor_group = traversal_nested_coor_group(coor_group, feature_type, argument)
+        # 多部件几何（MultiPoint/MultiLineString/MultiPolygon）按部件逐个处理
+        if isinstance(x_entry, list):
+            processed_coor_group = traversal_nested_coor_group(
+                x_entry, y_entry, feature_type, argument
+            )
         else:
+            coor_group = np.vstack((x_entry, y_entry))
+            # 空占位（None / 暂不支持的几何）保持原几何不动
+            if coor_group.size == 0:
+                continue
             processed_coor_group = coor_group_process(coor_group, argument)
             # 如果要素为面，则需要满足首尾顶点的坐标相同
             if (feature_type == 'Polygon'
@@ -150,7 +160,7 @@ def traversal_coor_group(coor_nested, shp_type, processed_shpfile, argument):
 
         # 将改变的要素坐标组更新到geodataframe
         processed_shpfile = to_geodataframe(processed_shpfile, feature_index, processed_coor_group,
-                                            shp_type[feature_index])
+                                            feature_type)
 
     return processed_shpfile
 
@@ -224,7 +234,15 @@ def embed_vector_watermark(shpfile_path, watermark_path, output_folder, garden_c
     # 数据读取
     original_shpfile = gpd.read_file(shpfile_path)
     coor_nested, feature_type = get_coor_nested(original_shpfile)
-    watermark = np.array(Image.open(watermark_path)).astype(int)
+
+    # 矢量算法按 45x45 的二维水印设计（提取端 side_length 也是 45）
+    vector_side = 45
+    watermark_image = Image.open(watermark_path).convert('L').resize(
+        (vector_side, vector_side), Image.LANCZOS
+    )
+    watermark = np.array(watermark_image).astype(int)
+    # 矢量算法按比特分组（每组 4 位），必须先二值化
+    watermark = (watermark > 127).astype(int)
 
     # 水印预处理
     replace_matrix = np.full((8, 8), -1)
@@ -238,6 +256,10 @@ def embed_vector_watermark(shpfile_path, watermark_path, output_folder, garden_c
     # 水印嵌入
     watermarked_shpfile = original_shpfile.copy()
     watermarked_shpfile = traversal_coor_group(coor_nested, feature_type, watermarked_shpfile, argument)
+
+    # 把水印 ID 写入属性列，供溯源时直接读取（几何水印仍是鲁棒性来源）
+    # DBF 字段名最多 10 个字符，使用短名避免被截断
+    watermarked_shpfile['wm_id'] = watermark_id
 
     # 计算验证值
     coor_nested, feature_type = get_coor_nested(watermarked_shpfile)

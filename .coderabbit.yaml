@@ -1,0 +1,65 @@
+# CodeRabbit AI 代码审查配置
+# 安装 App: https://github.com/apps/coderabbitai
+# 文档: https://docs.coderabbit.ai/reference/configuration
+language: "zh-CN"
+early_access: false
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  high_level_summary_placeholder: "@coderabbitai summary"
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  changed_files_summary: true
+  sequence_diagrams: true
+
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    drafts: false
+    base_branches:
+      - "develop"
+      - "main"
+
+  path_filters:
+    - "!**/node_modules/**"
+    - "!**/dist/**"
+    - "!**/package-lock.json"
+    - "!**/*.lock"
+    - "!**/__pycache__/**"
+    - "!**/data/**"
+    - "!**/uploads/**"
+
+  path_instructions:
+    - path: "garden-asset-platform/backend/**/*.py"
+      instructions: |
+        - 遵循应用工厂与分层：resources 只做参数校验与响应，业务逻辑放 services，模型放 models。
+        - 重点检查：JWT 权限与越权、文件上传魔数校验、路径穿越、XSS、速率限制。
+        - 水印 / 区块链 / AI 相关改动必须有失败回退，且不能泄露密钥。
+        - 测试使用内存 SQLite，不依赖外部服务。
+    - path: "garden-asset-platform/frontend/**/*.{vue,js,cjs}"
+      instructions: |
+        - 遵循 Vue 3 Composition API 与现有 Element Plus 设计系统。
+        - 重点检查：XSS（v-html）、敏感信息写入 localStorage、请求错误处理、路由权限守卫。
+    - path: ".github/**"
+      instructions: |
+        - 检查最小权限声明、Action 版本、不可信输入是否会注入 shell。
+        - 任何 CI 写操作都应聚合，避免高频 GitHub API 调用。
+    - path: "scripts/**"
+      instructions: |
+        - Shell 脚本必须 set -euo pipefail，变量加引号，避免误删与路径注入。
+
+  tools:
+    ruff:
+      enabled: true
+    shellcheck:
+      enabled: true
+    markdownlint:
+      enabled: false
+    actionlint:
+      enabled: true
+
+chat:
+  auto_reply: true

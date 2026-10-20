@@ -188,13 +188,14 @@ def register_api_resources(app):
     from app.resources.license import (
         LicenseApplyResource, LicensePendingResource,
         LicenseApproveResource, LicenseApprovedResource,
-        MyLicenseResource
+        MyLicenseResource, MyApplicationsResource
     )
     api.add_resource(LicenseApplyResource, '/license/apply')
     api.add_resource(LicensePendingResource, '/license/pending')
     api.add_resource(LicenseApproveResource, '/license/approve/<int:application_id>')
     api.add_resource(LicenseApprovedResource, '/license/approved')
     api.add_resource(MyLicenseResource, '/license/my')
+    api.add_resource(MyApplicationsResource, '/license/my-applications')
 
 
 def init_services(app):
@@ -210,11 +211,13 @@ def init_scheduler(app):
     """初始化任务调度器"""
     if app.config.get('TESTING') or app.config.get('DEBUG'):
         return
+    if not app.config.get('SCHEDULER_ENABLED', False):
+        logging.getLogger(__name__).info('调度器未启用（SCHEDULER_ENABLED=false）')
+        return
     try:
         from app.utils.scheduler import init_scheduler as _init
         _init(app)
     except Exception as e:
-        import logging
         logging.getLogger(__name__).warning(f'调度器初始化失败（非致命）: {e}')
 
 

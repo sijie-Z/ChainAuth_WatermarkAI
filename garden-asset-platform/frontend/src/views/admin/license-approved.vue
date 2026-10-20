@@ -1,42 +1,70 @@
 <template>
   <div class="license-approved">
-    <el-card>
-      <template #header>
-        <div class="card-header">
-          <span>已审批申请</span>
-          <el-radio-group v-model="filterStatus" @change="loadLicenses">
-            <el-radio-button label="">全部</el-radio-button>
-            <el-radio-button label="approved">已通过</el-radio-button>
-            <el-radio-button label="rejected">已拒绝</el-radio-button>
-          </el-radio-group>
-        </div>
-      </template>
+    <header class="page-head">
+      <div class="page-heading">
+        <h1 class="page-title">已审批申请</h1>
+        <p class="page-subtitle">已审批授权的归档查询与合同下载</p>
+      </div>
+      <div class="page-actions">
+        <el-button type="primary" @click="loadLicenses">
+          <el-icon><Refresh /></el-icon>
+          刷新
+        </el-button>
+      </div>
+    </header>
+
+    <div class="content-card">
+      <div class="filter-bar">
+        <el-radio-group v-model="filterStatus" @change="handleFilterChange">
+          <el-radio-button label="">全部</el-radio-button>
+          <el-radio-button label="pending">审批中</el-radio-button>
+          <el-radio-button label="active">生效中</el-radio-button>
+          <el-radio-button label="expired">已过期</el-radio-button>
+          <el-radio-button label="revoked">已撤销</el-radio-button>
+        </el-radio-group>
+      </div>
 
       <el-table :data="licenses" v-loading="loading" stripe>
-        <el-table-column prop="license_code" label="授权编码" width="180" />
-        <el-table-column prop="asset_title" label="资产标题" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="license_code" label="授权编码" width="180" class-name="cell-code">
+          <template #default="{ row }">
+            {{ row.license_code || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="asset_title" label="资产标题" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.asset_title || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="license_type" label="授权类型" width="100">
           <template #default="{ row }">
             <el-tag size="small">{{ getLicenseType(row.license_type) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="licensee_name" label="授权方" width="100" />
+        <el-table-column prop="licensee_name" label="授权方" width="100">
+          <template #default="{ row }">
+            {{ row.licensee_name || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="status" label="状态" width="80">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'active' ? 'success' : row.status === 'rejected' ? 'danger' : 'info'" size="small">
+            <el-tag :type="getStatusType(row.status)" size="small">
               {{ getStatusName(row.status) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="valid_until" label="有效期" width="140">
+        <el-table-column prop="end_time" label="有效期" width="140">
           <template #default="{ row }">
-            {{ row.valid_until ? formatDate(row.valid_until) : '永久' }}
+            {{ row.end_time ? formatDate(row.end_time) : '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="approver_name" label="审批人" width="100" />
+        <el-table-column prop="approver_name" label="审批人" width="100">
+          <template #default="{ row }">
+            {{ row.approver_name || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="approved_at" label="审批时间" width="140">
           <template #default="{ row }">
-            {{ formatDate(row.approved_at) }}
+            {{ row.approved_at ? formatDate(row.approved_at) : '-' }}
           </template>
         </el-table-column>
         <el-table-column label="操作" width="160" fixed="right">
@@ -58,29 +86,28 @@
         layout="total, sizes, prev, pager, next"
         @size-change="loadLicenses"
         @current-change="loadLicenses"
-        style="margin-top: 20px; justify-content: center"
       />
-    </el-card>
+    </div>
 
     <!-- 详情对话框 -->
     <el-dialog v-model="detailDialog.visible" title="授权详情" width="600px">
       <el-descriptions :column="2" border>
-        <el-descriptions-item label="授权编码">{{ detailDialog.license_code }}</el-descriptions-item>
+        <el-descriptions-item label="授权编码">{{ detailDialog.license_code || '-' }}</el-descriptions-item>
         <el-descriptions-item label="状态">
-          <el-tag :type="detailDialog.status === 'active' ? 'success' : 'danger'">
+          <el-tag :type="getStatusType(detailDialog.status)">
             {{ getStatusName(detailDialog.status) }}
           </el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="资产标题">{{ detailDialog.asset_title }}</el-descriptions-item>
+        <el-descriptions-item label="资产标题">{{ detailDialog.asset_title || '-' }}</el-descriptions-item>
         <el-descriptions-item label="授权类型">{{ getLicenseType(detailDialog.license_type) }}</el-descriptions-item>
-        <el-descriptions-item label="授权方">{{ detailDialog.licensee_name }}</el-descriptions-item>
-        <el-descriptions-item label="申请方">{{ detailDialog.applicant_name }}</el-descriptions-item>
-        <el-descriptions-item label="有效期">{{ detailDialog.valid_until ? formatDate(detailDialog.valid_until) : '永久' }}</el-descriptions-item>
-        <el-descriptions-item label="审批人">{{ detailDialog.approver_name }}</el-descriptions-item>
-        <el-descriptions-item label="申请用途" :span="2">{{ detailDialog.purpose }}</el-descriptions-item>
-        <el-descriptions-item label="审批意见" :span="2">{{ detailDialog.approve_comment }}</el-descriptions-item>
+        <el-descriptions-item label="授权方">{{ detailDialog.licensee_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="申请方">{{ detailDialog.applicant_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="有效期">{{ detailDialog.end_time ? formatDate(detailDialog.end_time) : '-' }}</el-descriptions-item>
+        <el-descriptions-item label="审批人">{{ detailDialog.approver_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="申请用途" :span="2">{{ detailDialog.purpose || detailDialog.usage_scope || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="审批意见" :span="2">{{ detailDialog.approve_comment || '-' }}</el-descriptions-item>
         <el-descriptions-item label="区块链存证">
-          {{ detailDialog.tx_hash || '未上链' }}
+          <span class="hash-text">{{ detailDialog.tx_hash || '未上链' }}</span>
         </el-descriptions-item>
       </el-descriptions>
     </el-dialog>
@@ -90,6 +117,8 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Refresh } from '@element-plus/icons-vue'
+import api from '@/api'
 import { licenseApi } from '@/api/modules'
 
 const loading = ref(false)
@@ -103,21 +132,28 @@ const detailDialog = ref({
   visible: false
 })
 
+function handleFilterChange() {
+  page.value = 1
+  loadLicenses()
+}
+
 async function loadLicenses() {
   loading.value = true
   try {
     const params = {
       page: page.value,
-      per_page: perPage.value,
-      status: filterStatus.value
+      per_page: perPage.value
+    }
+    if (filterStatus.value) {
+      params.status = filterStatus.value
     }
     const response = await licenseApi.getApproved(params)
-    if (response.data.code === 200) {
-      licenses.value = response.data.data.items
-      total.value = response.data.data.total
+    if (response.data?.code === 200) {
+      licenses.value = response.data.data?.items || []
+      total.value = response.data.data?.total || 0
     }
   } catch (error) {
-    ElMessage.error('加载失败')
+    console.error('加载授权记录失败:', error)
   } finally {
     loading.value = false
   }
@@ -130,13 +166,45 @@ function viewDetail(row) {
   }
 }
 
-function downloadContract(row) {
-  if (row.contract_file) {
-    window.open(row.contract_file, '_blank')
-  } else if (row.asset_id) {
-    window.open(`/api/assets/${row.asset_id}/download`, '_blank')
-  } else {
+// 构造带鉴权的下载请求：/api 路径走默认 baseURL，站点根路径保持原样，绝对 URL 直接请求
+function buildDownloadRequest(path) {
+  const config = { responseType: 'blob', silent: true }
+  if (/^https?:\/\//i.test(path)) {
+    return { url: path, config }
+  }
+  if (path.startsWith('/api/')) {
+    return { url: path.slice(4), config }
+  }
+  if (path.startsWith('/')) {
+    return { url: path, config: { ...config, baseURL: '' } }
+  }
+  return { url: path, config }
+}
+
+async function downloadContract(row) {
+  const rawPath = row.contract_file || (row.asset_id ? `/api/assets/${row.asset_id}/download` : '')
+  if (!rawPath) {
     ElMessage.warning('暂无合同文件')
+    return
+  }
+
+  try {
+    // 通过 axios 实例下载，自动携带 Authorization 头
+    const { url: requestUrl, config } = buildDownloadRequest(rawPath)
+    const response = await api.get(requestUrl, config)
+    const blob = new Blob([response.data])
+    const objectUrl = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = objectUrl
+    link.download = `${row.license_code || row.asset_code || 'license'}-contract`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(objectUrl)
+    ElMessage.success('合同下载开始')
+  } catch (error) {
+    console.error('下载合同失败:', error)
+    ElMessage.error('合同下载失败，请稍后重试')
   }
 }
 
@@ -148,17 +216,29 @@ function getLicenseType(type) {
     display: '展览展示',
     derivative: '衍生创作'
   }
-  return map[type] || type
+  return map[type] || type || '-'
 }
 
 function getStatusName(status) {
   const map = {
+    pending: '审批中',
     active: '生效',
     expired: '过期',
     rejected: '拒绝',
     revoked: '撤销'
   }
-  return map[status] || status
+  return map[status] || status || '-'
+}
+
+function getStatusType(status) {
+  const map = {
+    active: 'success',
+    pending: 'warning',
+    expired: 'info',
+    rejected: 'danger',
+    revoked: 'danger'
+  }
+  return map[status] || 'info'
 }
 
 function formatDate(dateStr) {
@@ -171,14 +251,116 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@use '@/assets/styles/variables.scss' as *;
+
 .license-approved {
-  padding: 0;
+  min-height: 100%;
+  padding: 24px 28px 32px;
 }
 
-.card-header {
+// ========== 页面头部 ==========
+.page-head {
   display: flex;
+  align-items: flex-end;
   justify-content: space-between;
+  gap: $spacing-lg;
+  margin-bottom: $spacing-xl;
+
+  .page-title {
+    font-family: $font-display;
+    font-size: 22px;
+    font-weight: $font-weight-semibold;
+    line-height: $line-height-tight;
+    color: $text-primary;
+    letter-spacing: 0.01em;
+  }
+
+  .page-subtitle {
+    margin-top: 6px;
+    font-size: 13px;
+    color: $text-secondary;
+  }
+}
+
+.page-actions {
+  display: flex;
   align-items: center;
+  gap: $spacing-md;
+  flex-shrink: 0;
+}
+
+// ========== 内容卡片 ==========
+.content-card {
+  background: $bg-card;
+  border: 1px solid $border-color;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-sm;
+  padding: $spacing-xl;
+}
+
+// ========== 状态筛选 ==========
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: $spacing-md;
+  margin-bottom: $spacing-lg;
+}
+
+// 按钮内图标与文字间距
+:deep(.el-button > span) {
+  gap: 6px;
+  align-items: center;
+}
+
+// 台账编码使用等宽字体
+:deep(.cell-code) {
+  font-family: $font-mono;
+  font-size: 12px;
+  color: $text-secondary;
+  font-variant-numeric: tabular-nums;
+}
+
+.hash-text {
+  font-family: $font-mono;
+  font-size: 12px;
+  color: $text-secondary;
+  word-break: break-all;
+}
+
+:deep(.el-pagination) {
+  margin-top: $spacing-xl;
+  justify-content: center;
+}
+
+// ========== 响应式 ==========
+@media (max-width: 768px) {
+  .license-approved {
+    padding: 16px;
+  }
+
+  .page-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: $spacing-md;
+  }
+
+  .content-card {
+    padding: 16px;
+  }
+
+  .filter-bar {
+    overflow-x: auto;
+
+    :deep(.el-radio-group) {
+      flex-shrink: 0;
+    }
+  }
+
+  :deep(.el-pagination) {
+    flex-wrap: wrap;
+    row-gap: $spacing-sm;
+  }
 }
 </style>

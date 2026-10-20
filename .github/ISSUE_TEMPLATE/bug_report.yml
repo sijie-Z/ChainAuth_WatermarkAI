@@ -1,0 +1,102 @@
+name: 🐛 Bug 报告
+description: 报告一个可复现的缺陷
+title: "fix: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！请先搜索已有 Issue，避免重复。安全漏洞请勿在此提交，见 SECURITY.md。
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已搜索现有 Issue，确认这不是重复问题
+          required: true
+        - label: 我已阅读文档（README / DEVELOPMENT / CONTRIBUTING）
+          required: true
+        - label: 该问题不是安全漏洞（安全漏洞走私密报告）
+          required: true
+
+  - type: dropdown
+    id: module
+    attributes:
+      label: 影响模块
+      options:
+        - 资产管理
+        - 数字水印
+        - 区块链存证
+        - AI / 溯源
+        - 授权审批
+        - 用户认证
+        - 前端界面
+        - 部署 / Docker
+        - CI / 工具链
+        - 其他
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 清晰描述你遇到的现象
+      placeholder: 发生了什么？在哪个页面/接口？
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 打开 ...
+        2. 点击 ...
+        3. 看到错误 ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: 运行环境
+      multiple: true
+      options:
+        - Docker Compose
+        - 本地后端（python run.py）
+        - 本地前端（npm run dev）
+        - GitHub Actions CI
+        - 其他
+
+  - type: input
+    id: version
+    attributes:
+      label: 版本 / 提交
+      description: 例如 v1.4.0 或 commit SHA
+      placeholder: v1.4.0
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / 截图
+      description: 请粘贴相关报错、浏览器控制台或后端堆栈（注意脱敏）
+      render: shell
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: 可能的修复思路（可选）

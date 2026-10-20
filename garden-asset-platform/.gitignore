@@ -42,6 +42,9 @@ env/
 *.db
 *.sqlite
 *.sqlite3
+# Flask instance 目录（持久化密钥与本地 SQLite，禁止提交）
+backend/instance/
+instance/
 
 # 日志
 *.log
@@ -51,6 +54,20 @@ logs/
 uploads/*
 !uploads/.gitkeep
 test_uploads/
+
+# 后端运行时生成物（相对 backend/ 目录）
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/test_uploads/
+backend/watermarks/
+backend/extracted/
+backend/logs/
+backend/data/watermark/*.png
+!backend/data/watermark/default.png
+!backend/data/watermark/.gitkeep
+backend/data/models/*
+!backend/data/models/.gitkeep
+backend/*.db
 
 # 临时文件
 tmp/
@@ -73,6 +90,9 @@ yarn-error.log*
 # 构建输出
 frontend/dist/
 backend/dist/
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
 
 # OS
 .DS_Store

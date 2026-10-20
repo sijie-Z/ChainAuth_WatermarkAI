@@ -220,7 +220,7 @@ CELERY_ENABLED = False        # 异步任务
 ### 生产环境要求
 - Ubuntu 20.04+ / CentOS 7+
 - Python 3.11+
-- Node.js 18+
+- Node.js 22+
 - PostgreSQL 14+
 - Redis 6+
 - Nginx 1.20+
@@ -298,7 +298,7 @@ MIT License
 
 ## 十二、联系方式
 
-挑战杯项目团队 - 2026
+苏州园林数字资产平台团队 - 2026
 
 ---
 

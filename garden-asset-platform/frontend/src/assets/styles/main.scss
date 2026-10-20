@@ -1,9 +1,87 @@
 // ============================================
-// 苏州园林数字资产平台 - 主样式文件
-// Main Stylesheet
+// 苏州园林数字资产平台 - 主样式文件 v2
+// 园林档案 / 数字登记册
 // ============================================
 
 @use './variables.scss' as *;
+
+// === 主题令牌：同时驱动 Element Plus ===
+:root {
+  --el-color-primary: #{$primary-color};
+  --el-color-primary-light-3: #{$primary-light};
+  --el-color-primary-light-5: #86ab9c;
+  --el-color-primary-light-7: #b1c8bf;
+  --el-color-primary-light-8: #c7d8d1;
+  --el-color-primary-light-9: #e3ece7;
+  --el-color-primary-dark-2: #{$primary-dark};
+
+  --el-color-success: #{$success-color};
+  --el-color-success-light-3: #{$success-light};
+  --el-color-success-light-5: #9dc4ae;
+  --el-color-success-light-7: #c5dccd;
+  --el-color-success-light-8: #d9e8de;
+  --el-color-success-light-9: #edf5ef;
+  --el-color-success-dark-2: #326549;
+
+  --el-color-warning: #{$warning-color};
+  --el-color-warning-light-3: #{$warning-light};
+  --el-color-warning-light-5: #d3b078;
+  --el-color-warning-light-7: #e3cba6;
+  --el-color-warning-light-8: #ecdabb;
+  --el-color-warning-light-9: #f7f1e6;
+  --el-color-warning-dark-2: #8f6322;
+
+  --el-color-danger: #{$error-color};
+  --el-color-danger-light-3: #{$error-light};
+  --el-color-danger-light-5: #cf887a;
+  --el-color-danger-light-7: #e0b2a9;
+  --el-color-danger-light-8: #eac8c1;
+  --el-color-danger-light-9: #f6ece9;
+  --el-color-danger-dark-2: #7f2f22;
+  --el-color-error: #{$error-color};
+  --el-color-error-light-3: #{$error-light};
+  --el-color-error-light-5: #cf887a;
+  --el-color-error-light-7: #e0b2a9;
+  --el-color-error-light-8: #eac8c1;
+  --el-color-error-light-9: #f6ece9;
+  --el-color-error-dark-2: #7f2f22;
+
+  --el-color-info: #{$info-color};
+  --el-color-info-light-3: #{$info-light};
+  --el-color-info-light-5: #a3b5c5;
+  --el-color-info-light-7: #c6d2dc;
+  --el-color-info-light-8: #d8e1e8;
+  --el-color-info-light-9: #eef2f5;
+  --el-color-info-dark-2: #34506a;
+
+  --el-text-color-primary: #{$text-primary};
+  --el-text-color-regular: #3d4a43;
+  --el-text-color-secondary: #{$text-secondary};
+  --el-text-color-placeholder: #{$text-placeholder};
+  --el-text-color-disabled: #{$text-disabled};
+
+  --el-border-color: #{$border-color};
+  --el-border-color-light: #{$border-light};
+  --el-border-color-lighter: #eef2ee;
+  --el-border-color-extra-light: #f3f6f3;
+
+  --el-fill-color: #{$bg-hover};
+  --el-fill-color-light: #{$bg-secondary};
+  --el-fill-color-lighter: #f4f7f4;
+  --el-fill-color-blank: #{$bg-card};
+  --el-bg-color: #{$bg-card};
+  --el-bg-color-page: #{$bg-primary};
+  --el-bg-color-overlay: #{$bg-card};
+
+  --el-border-radius-base: #{$radius-md};
+  --el-border-radius-small: #{$radius-sm};
+  --el-font-family: #{$font-family};
+
+  --el-font-size-base: 14px;
+  --el-box-shadow-light: 0 2px 8px rgba(18, 28, 23, 0.06);
+  --el-box-shadow: 0 8px 24px rgba(18, 28, 23, 0.08);
+  --el-disabled-bg-color: #f1f4f1;
+}
 
 // === 全局重置 Global Reset ===
 *,
@@ -30,10 +108,27 @@ body {
   min-height: 100vh;
 }
 
-// === 滚动条美化 Scrollbar ===
+// 标题统一使用宋体，形成“档案 / 牌匾”气质
+h1, h2, h3, h4 {
+  font-family: $font-display;
+  font-weight: $font-weight-semibold;
+  letter-spacing: 0.01em;
+  color: $text-primary;
+}
+
+.font-display { font-family: $font-display; }
+.font-mono { font-family: $font-mono; font-variant-numeric: tabular-nums; }
+
+// === 可访问性：键盘焦点 ===
+:focus-visible {
+  outline: 2px solid $primary-color;
+  outline-offset: 2px;
+}
+
+// === 滚动条 Scrollbar ===
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
@@ -42,6 +137,7 @@ body {
 
 ::-webkit-scrollbar-thumb {
   background: $border-dark;
+  border: 3px solid $bg-primary;
   border-radius: $radius-full;
 
   &:hover {
@@ -51,11 +147,11 @@ body {
 
 // === 选中文本 Selection ===
 ::selection {
-  background-color: rgba($primary-color, 0.2);
+  background-color: rgba(47, 107, 90, 0.18);
   color: $text-primary;
 }
 
-// === 链接样式 Links ===
+// === 链接 Links ===
 a {
   color: $primary-color;
   text-decoration: none;
@@ -68,7 +164,6 @@ a {
 
 // === 工具类 Utility Classes ===
 
-// 文字截断
 .text-truncate {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -89,52 +184,77 @@ a {
   overflow: hidden;
 }
 
-// 玻璃态效果
+// 窗棂 / 铺地纹理（用于深色面与页脚）
+.lattice {
+  background-image: url("data:image/svg+xml,%3Csvg width='48' height='48' viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%232f6b5a' stroke-opacity='0.12' stroke-width='1'%3E%3Cpath d='M24 0v48M0 24h48'/%3E%3Cpath d='M0 0l48 48M48 0L0 48' stroke-opacity='0.05'/%3E%3Crect x='10' y='10' width='28' height='28' transform='rotate(45 24 24)'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 48px 48px;
+}
+
+.lattice-light {
+  background-image: url("data:image/svg+xml,%3Csvg width='48' height='48' viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%23fcfdfb' stroke-opacity='0.08' stroke-width='1'%3E%3Cpath d='M24 0v48M0 24h48'/%3E%3Cpath d='M0 0l48 48M48 0L0 48' stroke-opacity='0.035'/%3E%3Crect x='10' y='10' width='28' height='28' transform='rotate(45 24 24)'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 48px 48px;
+}
+
+// 印章式标签
+.seal {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border: 1px solid rgba(166, 64, 47, 0.55);
+  border-radius: $radius-xs;
+  color: $accent-color;
+  font-family: $font-display;
+  font-size: $font-size-xs;
+  letter-spacing: 0.12em;
+  line-height: 1.4;
+}
+
+// 玻璃态（克制使用，仅用于浮层）
 .glass {
   background: $glass-bg;
   backdrop-filter: $glass-blur;
   -webkit-backdrop-filter: $glass-blur;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(23, 32, 28, 0.08);
 }
 
 .glass-dark {
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(14, 59, 51, 0.72);
   backdrop-filter: $glass-blur;
   -webkit-backdrop-filter: $glass-blur;
 }
 
-// 渐变文字
+// 渐变文字（保留兼容，改为黛青到远山蓝的克制渐变）
 .gradient-text {
-  background: $primary-gradient;
+  background: linear-gradient(100deg, $primary-dark 0%, $primary-color 55%, $secondary-color 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-// === 现代卡片 Modern Card ===
+// === 卡片 Modern Card（档案纸页：细边框、轻阴影、无悬浮漂移）===
 .modern-card {
   background: $bg-card;
-  border-radius: $radius-xl;
-  box-shadow: $shadow-card;
-  border: 1px solid rgba(0, 0, 0, 0.02);
-  transition: all $transition-base;
+  border: 1px solid $border-color;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-sm;
+  transition: border-color $transition-fast, box-shadow $transition-fast;
 
   &:hover {
-    box-shadow: $shadow-card-hover;
-    transform: translateY(-2px);
+    border-color: $border-dark;
+    box-shadow: $shadow-md;
   }
 }
 
-// 玻璃卡片
 .glass-card {
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(252, 253, 251, 0.86);
   backdrop-filter: $glass-blur;
-  border-radius: $radius-xl;
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  border: 1px solid $border-color;
+  border-radius: $radius-lg;
   box-shadow: $shadow-glass;
 }
 
-// === 统计卡片 Stat Card ===
+// === 统计卡片 Stat Card（台账格）===
 .stat-card {
   @extend .modern-card;
   padding: $spacing-2xl;
@@ -146,29 +266,32 @@ a {
     position: absolute;
     top: 0;
     left: 0;
-    right: 0;
-    height: 4px;
-    background: $primary-gradient;
-    border-radius: $radius-xl $radius-xl 0 0;
+    bottom: 0;
+    width: 3px;
+    background: $primary-color;
   }
 
   .stat-icon {
-    width: 56px;
-    height: 56px;
-    border-radius: $radius-lg;
+    width: 48px;
+    height: 48px;
+    border-radius: $radius-md;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 24px;
+    font-size: 22px;
     margin-bottom: $spacing-lg;
+    background: $bg-secondary;
+    color: $primary-dark;
   }
 
   .stat-value {
+    font-family: $font-display;
     font-size: $font-size-4xl;
-    font-weight: $font-weight-bold;
+    font-weight: $font-weight-semibold;
     color: $text-primary;
-    line-height: 1.2;
+    line-height: 1.15;
     margin-bottom: $spacing-xs;
+    font-variant-numeric: tabular-nums;
   }
 
   .stat-label {
@@ -183,55 +306,34 @@ a {
     margin-top: $spacing-md;
     font-size: $font-size-sm;
 
-    &.up {
-      color: $success-color;
-    }
-
-    &.down {
-      color: $error-color;
-    }
+    &.up { color: $success-color; }
+    &.down { color: $error-color; }
   }
 }
 
-// === 按钮样式 Button Styles ===
+// === 按钮 Button Styles ===
 .btn-gradient {
-  background: $primary-gradient;
-  color: white;
-  border: none;
-  padding: $spacing-lg $spacing-2xl;
-  border-radius: $radius-lg;
+  background: $primary-color;
+  color: #fcfdfb;
+  border: 1px solid $primary-dark;
+  padding: $spacing-md $spacing-2xl;
+  border-radius: $radius-md;
   font-weight: $font-weight-medium;
   cursor: pointer;
-  transition: all $transition-base;
+  transition: background $transition-fast, border-color $transition-fast;
   position: relative;
-  overflow: hidden;
-
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-    transition: left $transition-slow;
-  }
 
   &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba($primary-color, 0.3);
-
-    &::before {
-      left: 100%;
-    }
+    background: $primary-dark;
+    box-shadow: none;
   }
 
   &:active {
-    transform: translateY(0);
+    background: $primary-dark;
   }
 }
 
-// === 表格样式 Table Styles ===
+// === 表格 Table Styles ===
 .modern-table {
   width: 100%;
   border-collapse: separate;
@@ -241,24 +343,15 @@ a {
     background: $bg-secondary;
     color: $text-secondary;
     font-weight: $font-weight-medium;
-    padding: $spacing-lg $spacing-xl;
+    padding: $spacing-md $spacing-lg;
     text-align: left;
     font-size: $font-size-sm;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.02em;
     border-bottom: 1px solid $border-color;
-
-    &:first-child {
-      border-radius: $radius-lg 0 0 0;
-    }
-
-    &:last-child {
-      border-radius: 0 $radius-lg 0 0;
-    }
   }
 
   td {
-    padding: $spacing-xl;
+    padding: $spacing-lg;
     border-bottom: 1px solid $border-light;
     vertical-align: middle;
   }
@@ -276,38 +369,44 @@ a {
   }
 }
 
-// === 标签样式 Tag Styles ===
+// === 标签 Tag Styles ===
 .status-tag {
   display: inline-flex;
   align-items: center;
   gap: $spacing-xs;
-  padding: $spacing-xs $spacing-md;
-  border-radius: $radius-full;
+  padding: 3px 10px;
+  border-radius: $radius-xs;
+  border: 1px solid transparent;
   font-size: $font-size-xs;
   font-weight: $font-weight-medium;
 
   &.success {
     background: $success-bg;
+    border-color: rgba(63, 125, 91, 0.28);
     color: $success-color;
   }
 
   &.warning {
     background: $warning-bg;
+    border-color: rgba(176, 122, 42, 0.3);
     color: $warning-color;
   }
 
   &.error {
     background: $error-bg;
+    border-color: rgba(166, 64, 47, 0.3);
     color: $error-color;
   }
 
   &.info {
     background: $info-bg;
+    border-color: rgba(76, 110, 138, 0.28);
     color: $info-color;
   }
 
   &.primary {
-    background: rgba($primary-color, 0.1);
+    background: rgba(47, 107, 90, 0.08);
+    border-color: rgba(47, 107, 90, 0.25);
     color: $primary-color;
   }
 }
@@ -316,27 +415,25 @@ a {
 .avatar {
   width: 40px;
   height: 40px;
-  border-radius: $radius-full;
+  border-radius: $radius-md;
   object-fit: cover;
-  border: 2px solid white;
-  box-shadow: $shadow-sm;
+  border: 1px solid $border-color;
+  box-shadow: none;
 }
 
 .avatar-group {
   display: flex;
 
   .avatar {
-    margin-left: -10px;
+    margin-left: -8px;
 
-    &:first-child {
-      margin-left: 0;
-    }
+    &:first-child { margin-left: 0; }
   }
 }
 
 // === 进度条 Progress ===
 .progress-bar {
-  height: 8px;
+  height: 4px;
   background: $bg-secondary;
   border-radius: $radius-full;
   overflow: hidden;
@@ -344,88 +441,46 @@ a {
   .progress-fill {
     height: 100%;
     border-radius: $radius-full;
-    background: $primary-gradient;
+    background: $primary-color;
     transition: width $transition-slow;
   }
 }
 
 // === 动画关键帧 Animations ===
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes slideInRight {
-  from {
-    opacity: 0;
-    transform: translateX(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 @keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
 }
 
 @keyframes float {
-  0%, 100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
 }
 
 @keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
-@keyframes countUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+@keyframes inkReveal {
+  from { opacity: 0; clip-path: inset(0 100% 0 0); }
+  to { opacity: 1; clip-path: inset(0 0 0 0); }
 }
 
-// 动画类
-.animate-fade-in {
-  animation: fadeIn 0.5s ease forwards;
-}
-
-.animate-slide-in {
-  animation: slideInRight 0.3s ease forwards;
-}
-
-.animate-pulse {
-  animation: pulse 2s infinite;
-}
-
-.animate-float {
-  animation: float 3s ease-in-out infinite;
-}
+.animate-fade-in { animation: fadeIn 0.5s ease forwards; }
+.animate-slide-in { animation: slideInRight 0.3s ease forwards; }
+.animate-pulse { animation: pulse 2s infinite; }
+.animate-float { animation: float 3s ease-in-out infinite; }
 
 // 骨架屏
 .skeleton {
@@ -443,12 +498,13 @@ a {
 
 .page-header {
   padding: $spacing-3xl $spacing-4xl;
-  background: white;
+  background: $bg-card;
   border-bottom: 1px solid $border-light;
 
   .page-title {
+    font-family: $font-display;
     font-size: $font-size-3xl;
-    font-weight: $font-weight-bold;
+    font-weight: $font-weight-semibold;
     color: $text-primary;
     margin-bottom: $spacing-sm;
   }
@@ -465,64 +521,80 @@ a {
 
 // === 响应式断点 Responsive ===
 @media (max-width: $breakpoint-lg) {
-  .page-content {
-    padding: $spacing-xl;
-  }
-
-  .stat-card {
-    padding: $spacing-xl;
-  }
+  .page-content { padding: $spacing-xl; }
+  .stat-card { padding: $spacing-xl; }
 }
 
 @media (max-width: $breakpoint-md) {
   .page-header {
     padding: $spacing-2xl;
 
-    .page-title {
-      font-size: $font-size-2xl;
-    }
+    .page-title { font-size: $font-size-2xl; }
   }
 }
 
 // === Element Plus 覆盖 Element Plus Overrides ===
-.el-button--primary {
-  background: $primary-gradient !important;
-  border: none !important;
+.el-button {
+  border-radius: $radius-md !important;
+  font-weight: $font-weight-medium;
+}
 
-  &:hover {
-    opacity: 0.9;
+.el-button--primary {
+  background: $primary-color !important;
+  border-color: $primary-dark !important;
+  color: #fcfdfb !important;
+
+  &:hover,
+  &:focus {
+    background: $primary-dark !important;
+    border-color: $primary-dark !important;
   }
 }
 
+.el-button--primary.is-link,
+.el-button--primary.is-text {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: $primary-color !important;
+}
+
 .el-card {
-  border-radius: $radius-xl !important;
-  border: 1px solid $border-light !important;
-  box-shadow: $shadow-card !important;
+  border-radius: $radius-lg !important;
+  border: 1px solid $border-color !important;
+  box-shadow: $shadow-sm !important;
 }
 
 .el-input__wrapper {
-  border-radius: $radius-lg !important;
-  box-shadow: none !important;
-  border: 1px solid $border-color !important;
+  border-radius: $radius-md !important;
+  box-shadow: 0 0 0 1px $border-color inset !important;
+  background: $bg-card !important;
 
-  &:hover, &:focus-within {
-    border-color: $primary-color !important;
-    box-shadow: 0 0 0 3px rgba($primary-color, 0.1) !important;
+  &:hover {
+    box-shadow: 0 0 0 1px $border-dark inset !important;
+  }
+
+  &.is-focus,
+  &:focus-within {
+    box-shadow: 0 0 0 1px $primary-color inset, 0 0 0 3px rgba(47, 107, 90, 0.1) !important;
   }
 }
 
 .el-select .el-input__wrapper {
-  border-radius: $radius-lg !important;
+  border-radius: $radius-md !important;
 }
 
 .el-table {
-  border-radius: $radius-xl !important;
+  border-radius: $radius-lg !important;
   overflow: hidden;
+  --el-table-header-bg-color: #{$bg-secondary};
+  --el-table-header-text-color: #{$text-secondary};
+  --el-table-row-hover-bg-color: #{$bg-hover};
 
   th.el-table__cell {
     background: $bg-secondary !important;
     font-weight: $font-weight-medium !important;
     color: $text-secondary !important;
+    letter-spacing: 0.02em;
   }
 
   td.el-table__cell {
@@ -535,18 +607,25 @@ a {
 }
 
 .el-tag {
-  border-radius: $radius-full !important;
-  border: none !important;
-  padding: 2px 12px !important;
+  border-radius: $radius-xs !important;
+  border: 1px solid transparent !important;
+  padding: 1px 9px !important;
+  font-weight: $font-weight-medium;
 }
 
 .el-dialog {
-  border-radius: $radius-2xl !important;
+  border-radius: $radius-xl !important;
   overflow: hidden;
 
   .el-dialog__header {
     padding: $spacing-2xl $spacing-3xl;
     border-bottom: 1px solid $border-light;
+    margin-right: 0;
+
+    .el-dialog__title {
+      font-family: $font-display;
+      font-weight: $font-weight-semibold;
+    }
   }
 
   .el-dialog__body {
@@ -555,12 +634,22 @@ a {
 }
 
 .el-message-box {
-  border-radius: $radius-xl !important;
+  border-radius: $radius-lg !important;
 }
 
 .el-notification {
-  border-radius: $radius-lg !important;
-  border-left: 4px solid $primary-color !important;
+  border-radius: $radius-md !important;
+  border-left: 3px solid $primary-color !important;
+}
+
+.el-pagination {
+  --el-pagination-button-bg-color: #{$bg-card};
+  --el-pagination-hover-color: #{$primary-color};
+}
+
+.el-dropdown__popper,
+.el-select__popper {
+  border-radius: $radius-md !important;
 }
 
 // === 园林特色装饰 Garden Theme Decorations ===
@@ -570,17 +659,12 @@ a {
   &::before {
     content: '';
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%2310b981' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg width='48' height='48' viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%232f6b5a' stroke-opacity='0.08' stroke-width='1'%3E%3Cpath d='M24 0v48M0 24h48'/%3E%3Crect x='10' y='10' width='28' height='28' transform='rotate(45 24 24)'/%3E%3C/g%3E%3C/svg%3E");
     pointer-events: none;
-    opacity: 0.5;
   }
 }
 
-// 中国风边框装饰
 .chinese-border {
   position: relative;
 
@@ -588,11 +672,21 @@ a {
     content: '';
     position: absolute;
     bottom: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 60px;
-    height: 3px;
-    background: $primary-gradient;
-    border-radius: $radius-full;
+    left: 0;
+    width: 48px;
+    height: 2px;
+    background: $accent-color;
+  }
+}
+
+// === 尊重减少动态偏好 ===
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

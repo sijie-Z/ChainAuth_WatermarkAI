@@ -1,0 +1,69 @@
+# PR 自动打标签（actions/labeler v5+ 语法）
+# 文档: https://github.com/actions/labeler
+
+backend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "garden-asset-platform/backend/**"
+
+frontend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "garden-asset-platform/frontend/**"
+
+watermark:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "garden-asset-platform/backend/algorithm/**"
+          - "garden-asset-platform/backend/app/services/watermark_service.py"
+          - "garden-asset-platform/backend/app/resources/watermark.py"
+
+blockchain:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "garden-asset-platform/backend/contracts/**"
+          - "garden-asset-platform/backend/app/services/blockchain_service.py"
+          - "garden-asset-platform/backend/app/resources/blockchain.py"
+
+ai:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "garden-asset-platform/backend/app/services/ai_service.py"
+          - "garden-asset-platform/backend/app/resources/ai.py"
+
+docker:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/Dockerfile"
+          - "**/.dockerignore"
+          - "**/docker-compose*.yml"
+          - "**/nginx.conf"
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+          - "scripts/**"
+          - ".githooks/**"
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - "docs/**"
+          - "项目文档/**"
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "garden-asset-platform/backend/tests/**"
+          - "**/*.test.*"
+          - "**/*.spec.*"
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/requirements*.txt"
+          - "**/package.json"
+          - "**/package-lock.json"
+          - "**/pyproject.toml"

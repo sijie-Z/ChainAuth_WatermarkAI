@@ -1,47 +1,60 @@
 {
   "name": "garden-asset-frontend",
-  "version": "1.0.0",
+  "version": "1.5.0",
   "description": "苏州园林数字资产安全分发与溯源系统前端",
-  "author": "挑战杯项目团队",
+  "author": "苏州园林数字资产平台团队",
   "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs --fix",
+    "lint": "eslint src --ext .vue,.js,.jsx,.cjs,.mjs --fix",
+    "lint:check": "eslint src --ext .vue,.js,.jsx,.cjs,.mjs",
     "format": "prettier --write src/",
     "test": "vitest",
+    "test:ci": "vitest run --passWithNoTests",
+    "test:e2e": "playwright test",
     "coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "vue": "^3.4.0",
-    "vue-router": "^4.2.5",
-    "pinia": "^2.1.7",
-    "axios": "^1.6.2",
-    "element-plus": "^2.4.4",
-    "echarts": "^5.4.3",
-    "three": "^0.160.0",
     "@element-plus/icons-vue": "^2.3.1",
+    "axios": "^1.6.2",
     "dayjs": "^1.11.10",
+    "echarts": "^5.4.3",
+    "element-plus": "^2.4.4",
     "lodash-es": "^4.17.21",
     "nprogress": "^0.2.0",
-    "qs": "^6.11.2"
+    "pinia": "^2.1.7",
+    "qs": "^6.11.2",
+    "vue": "^3.4.0",
+    "vue-router": "^4.2.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@vitejs/plugin-vue": "^4.5.2",
-    "vite": "^5.0.10",
-    "sass": "^1.69.5",
+    "@vitest/coverage-v8": "^3.2.6",
+    "@vue/eslint-config-prettier": "^9.0.0",
+    "@vue/test-utils": "^2.5.1",
     "eslint": "^8.56.0",
     "eslint-plugin-vue": "^9.19.2",
+    "jsdom": "^25.0.1",
     "prettier": "^3.1.1",
-    "@vue/eslint-config-prettier": "^9.0.0",
+    "sass": "^1.69.5",
+    "terser": "^5.24.0",
     "unplugin-auto-import": "^0.17.3",
     "unplugin-vue-components": "^0.26.0",
-    "terser": "^5.24.0"
+    "vite": "^5.0.10",
+    "vitest": "^3.2.6"
+  },
+  "overrides": {
+    "tinypool": "2.1.2",
+    "test-exclude": {
+      "glob": "10.5.0"
+    }
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.0.0"
   },
   "browserslist": [
     "> 1%",

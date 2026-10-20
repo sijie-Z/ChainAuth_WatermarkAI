@@ -94,28 +94,6 @@ def coor_group_process(coor_group, W, argument):
     return original_coor_group, W
 
 
-def traversal_nested_coor_group(coor_nested, feature_type, W, argument):
-    """
-    对于多线、多面等情况，执行此函数
-    """
-    processed_x_nested = []
-    processed_y_nested = []
-
-    for feature_index in range(coor_nested.shape[1]):
-        coor_group = np.vstack(coor_nested[:, feature_index])
-        processed_coor_group, W = coor_group_process(coor_group, W, argument)
-
-        if (feature_type == 'MultiPolygon'
-                and np.size(processed_coor_group) not in [0, 2]
-                and not np.array_equal(processed_coor_group[:, 0], processed_coor_group[:, -1])):
-            processed_coor_group[:, -1] = processed_coor_group[:, 0]
-
-        processed_x_nested.append(processed_coor_group[0, :])
-        processed_y_nested.append(processed_coor_group[1, :])
-
-    return np.array([processed_x_nested, processed_y_nested], dtype=object), W
-
-
 def traversal_coor_group(coor_nested, shp_type, processed_shpfile, l, argument):
     """
     对所有要素进行遍历
@@ -123,20 +101,23 @@ def traversal_coor_group(coor_nested, shp_type, processed_shpfile, l, argument):
     W = [[] for _ in range(l)]
 
     for feature_index in range(coor_nested.shape[1]):
-        coor_group = np.vstack(coor_nested[:, feature_index])
-        if isinstance(coor_nested[:, feature_index][0], list):
+        x_entry = coor_nested[0, feature_index]
+        y_entry = coor_nested[1, feature_index]
+
+        # 多部件几何不参与 NC 统计（保持原逻辑）
+        if isinstance(x_entry, list):
+            continue
+
+        coor_group = np.vstack((x_entry, y_entry))
+        if coor_group.size == 0:
             continue
 
         feature_type = shp_type[feature_index]
-
-        if isinstance(coor_group[0, 0], np.ndarray):
-            processed_coor_group, W = traversal_nested_coor_group(coor_group, feature_type, W, argument)
-        else:
-            processed_coor_group, W = coor_group_process(coor_group, W, argument)
-            if (feature_type == 'Polygon'
-                    and np.size(processed_coor_group) not in [0, 2]
-                    and not np.array_equal(processed_coor_group[:, 0], processed_coor_group[:, -1])):
-                processed_coor_group[:, -1] = processed_coor_group[:, 0]
+        processed_coor_group, W = coor_group_process(coor_group, W, argument)
+        if (feature_type == 'Polygon'
+                and np.size(processed_coor_group) not in [0, 2]
+                and not np.array_equal(processed_coor_group[:, 0], processed_coor_group[:, -1])):
+            processed_coor_group[:, -1] = processed_coor_group[:, 0]
 
         processed_shpfile = to_geodataframe(processed_shpfile, feature_index, processed_coor_group,
                                              shp_type[feature_index])
@@ -210,12 +191,21 @@ def extract_vector_watermark(watermarked_shpfile_path, vr, output_folder):
     # 数据读取
     watermarked_shpfile = gpd.read_file(watermarked_shpfile_path)
 
+    # 嵌入时写入的属性列可直接用于溯源（DBF 字段名上限 10 字符）
+    watermark_id = None
+    if 'wm_id' in watermarked_shpfile.columns and len(watermarked_shpfile) > 0:
+        watermark_id = str(watermarked_shpfile['wm_id'].iloc[0])
+
     # 数据预处理
     watermarked_coor_nested, feature_type = get_coor_nested(watermarked_shpfile)
     coor_array = get_coor_array(watermarked_coor_nested, feature_type)
     coor_mean = np.mean(coor_array, axis=1)
 
     logger.info(f"坐标均值: {coor_mean}, 验证值: {vr}")
+
+    # 溯源场景没有 vr，按未缩放处理（ratio=1），仍可恢复水印图像
+    if vr is None:
+        vr = coor_mean
 
     ratio = np.mean(vr / coor_mean)
     logger.info(f"缩放比例: {ratio}")
@@ -246,6 +236,7 @@ def extract_vector_watermark(watermarked_shpfile_path, vr, output_folder):
     logger.info(f"水印保存: {output_watermark_path}")
 
     return {
+        'watermark_id': watermark_id,
         'original_shp_path': output_shapefile_path,
         'watermark_path': output_watermark_path,
         'watermark_array': watermark

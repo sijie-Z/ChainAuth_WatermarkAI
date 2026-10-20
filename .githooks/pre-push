@@ -1,0 +1,29 @@
+#!/bin/sh
+# 推送前检查：禁止直接推送长期分支 main / develop
+# 紧急情况：ALLOW_DIRECT_PUSH=1 git push
+set -u
+
+allow="${ALLOW_DIRECT_PUSH:-0}"
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  # 删除远端分支的推送不拦截
+  [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
+
+  case "$remote_ref" in
+    refs/heads/main|refs/heads/develop)
+      if [ "$allow" != "1" ]; then
+        echo "" >&2
+        echo "❌ 禁止直接推送到 $remote_ref（Git Flow 保护分支）" >&2
+        echo "" >&2
+        echo "   请从 develop 拉出功能分支，通过 Pull Request 合并：" >&2
+        echo "     bash scripts/gitflow.sh feature start <名称>" >&2
+        echo "" >&2
+        echo "   仅初始化仓库等特殊情况可临时放行：" >&2
+        echo "     ALLOW_DIRECT_PUSH=1 git push" >&2
+        exit 1
+      fi
+      ;;
+  esac
+done
+
+exit 0

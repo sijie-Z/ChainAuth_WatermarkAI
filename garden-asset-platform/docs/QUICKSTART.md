@@ -2,8 +2,8 @@
 
 ## 环境要求
 
-- Python 3.9+
-- Node.js 18+
+- Python 3.11+
+- Node.js 22+
 - PostgreSQL 14+ (或使用SQLite开发模式)
 - Redis 6+ (可选，用于缓存)
 
@@ -11,17 +11,11 @@
 
 ### 方式一：一键启动 (推荐)
 
-**Windows:**
 ```bash
-# 双击运行或在命令行执行
-start.bat
+python start.py
 ```
 
-**Linux/Mac:**
-```bash
-chmod +x start.sh
-./start.sh
-```
+Windows 也可以直接双击 `install.bat` 完成依赖安装后运行 `python start.py`。
 
 ### 方式二：手动启动
 

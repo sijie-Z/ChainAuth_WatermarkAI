@@ -30,8 +30,9 @@ class BlockchainRegisterResource(Resource):
         if not asset:
             return {'code': 404, 'message': '资产不存在'}, 404
 
-        # 权限检查
-        if asset.creator_id != user_id and user.role not in ['admin', 'adm1', 'adm2', 'adm3']:
+        # 权限检查：仅资产所有者或资产管理员可上链
+        is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
+        if not is_owner and user.role not in ('admin', 'asset_admin'):
             return {'code': 403, 'message': '无权限操作'}, 403
 
         # 调用服务存证
@@ -131,6 +132,7 @@ class BlockchainCertificateResource(Resource):
 class BlockchainHistoryResource(Resource):
     """存证历史"""
 
+    @jwt_required()
     def get(self, asset_id=None):
         """获取存证历史"""
         if asset_id:
@@ -151,7 +153,7 @@ class BlockchainHistoryResource(Resource):
         else:
             # 获取所有存证记录
             from app.models.blockchain import Certificate
-            certificates = Certificate.query.order_by(Certificate.confirmed_at.desc()).limit(50).all()
+            certificates = Certificate.query.order_by(Certificate.created_at.desc()).limit(50).all()
 
             result = []
             for cert in certificates:
@@ -163,7 +165,8 @@ class BlockchainHistoryResource(Resource):
                     'asset_title': asset.title if asset else None,
                     'tx_hash': cert.tx_hash,
                     'block_number': cert.block_number,
-                    'confirmed_at': cert.confirmed_at.isoformat() if cert.confirmed_at else None
+                    # 兼容旧字段名：证书创建即确认时间
+                    'confirmed_at': cert.created_at.isoformat() if cert.created_at else None
                 })
 
             return {'code': 200, 'data': result}, 200
@@ -176,11 +179,27 @@ class BlockchainStatusResource(Resource):
         """获取区块链连接状态"""
         connected = blockchain_service.is_connected()
 
+        from app.models.blockchain import Certificate
+        total_certificates = Certificate.query.count()
+        pending_assets = Asset.query.filter(
+            Asset.status == 'published', Asset.chain_status == 'none'
+        ).count()
+
+        if connected:
+            node_status = 'connected'
+        elif blockchain_service.enabled:
+            node_status = 'disconnected'
+        else:
+            node_status = 'simulated'
+
         return {
             'code': 200,
             'data': {
                 'connected': connected,
                 'rpc_url': blockchain_service.rpc_url,
-                'simulated': not blockchain_service.enabled
+                'simulated': not blockchain_service.enabled,
+                'total_certificates': total_certificates,
+                'pending_assets': pending_assets,
+                'node_status': node_status
             }
         }, 200

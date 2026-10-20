@@ -10,7 +10,7 @@
           </h1>
           <p class="welcome-subtitle">欢迎回到苏州园林数字资产平台管理后台</p>
         </div>
-        <div class="welcome-actions">
+        <div v-if="canManageAssets" class="welcome-actions">
           <el-button type="primary" class="btn-action" @click="$router.push('/admin/assets')">
             <el-icon><Upload /></el-icon>
             管理资产
@@ -19,21 +19,6 @@
             <el-icon><Stamp /></el-icon>
             水印处理
           </el-button>
-        </div>
-      </div>
-      <div class="welcome-illustration">
-        <div class="illustration-bg">
-          <svg viewBox="0 0 400 200" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="200" cy="100" r="80" fill="url(#paint0_linear)" opacity="0.2"/>
-            <path d="M160 80 L240 80 L240 140 L160 140 Z" fill="white" opacity="0.3"/>
-            <path d="M170 90 L230 90 L230 130 L170 130 Z" fill="white" opacity="0.5"/>
-            <defs>
-              <linearGradient id="paint0_linear" x1="120" y1="20" x2="280" y2="180">
-                <stop stop-color="#10b981"/>
-                <stop offset="1" stop-color="#059669"/>
-              </linearGradient>
-            </defs>
-          </svg>
         </div>
       </div>
     </div>
@@ -58,7 +43,7 @@
             <el-icon class="stat-icon"><component :is="stat.icon" /></el-icon>
           </div>
           <div class="stat-trend" :class="stat.trend > 0 ? 'up' : 'down'" v-if="stat.trend">
-            <el-icon><component :is="stat.trend > 0 ? 'ArrowUp' : 'ArrowDown'" /></el-icon>
+            <el-icon><component :is="stat.trend > 0 ? ArrowUp : ArrowDown" /></el-icon>
             <span>{{ Math.abs(stat.trend) }}%</span>
           </div>
         </div>
@@ -133,7 +118,6 @@
         <div class="activity-card">
           <div class="card-header">
             <h3 class="card-title">最近活动</h3>
-            <el-button type="primary" link size="small">查看全部</el-button>
           </div>
           <el-skeleton v-if="loading" animated :rows="4" style="padding: 16px" />
           <div v-else class="activity-list">
@@ -177,7 +161,7 @@
                   </span>
                 </div>
               </div>
-              <el-button type="primary" size="small" round>处理</el-button>
+              <el-button type="primary" size="small" round @click="goToPendingLicenses">处理</el-button>
             </div>
           </div>
         </div>
@@ -189,7 +173,7 @@
       <div class="table-card">
         <div class="card-header">
           <h3 class="card-title">最近上传资产</h3>
-          <el-button type="primary" link>查看全部 →</el-button>
+          <el-button type="primary" link @click="$router.push('/admin/assets')">查看全部 →</el-button>
         </div>
         <el-skeleton v-if="loading" animated :rows="4" style="padding: 16px" />
         <el-table v-else :data="recentAssets" style="width: 100%" class="modern-table">
@@ -232,7 +216,7 @@
           <el-table-column prop="created_at" label="上传时间" width="160" />
           <el-table-column label="操作" width="100" fixed="right">
             <template #default="{ row }">
-              <el-button type="primary" link size="small">查看</el-button>
+              <el-button type="primary" link size="small" @click="viewAsset(row)">查看</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -242,15 +226,14 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick, shallowRef } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { useRouter } from 'vue-router'
-import { assetApi, licenseApi, blockchainApi } from '@/api/modules'
-import { ElMessage } from 'element-plus'
+import { assetApi, licenseApi } from '@/api/modules'
 import {
   Picture, Stamp, Link, Document, Upload, Clock,
-  ArrowUp, ArrowDown, User, Setting, Files, Grid,
-  CircleCheck, Timer, WarningFilled
+  ArrowUp, ArrowDown, User,
+  CircleCheck, Timer
 } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 
@@ -271,13 +254,13 @@ const chartType = ref('week')
 
 // 统计卡片配置（label/icon/gradient/suffix 为静态，value 从 API 填充）
 const statCardDefs = [
-  { key: 'totalAssets', label: '资产总数', icon: 'Picture', gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', suffix: '个' },
-  { key: 'watermarkedAssets', label: '已嵌入水印', icon: 'Stamp', gradient: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)', suffix: '个' },
-  { key: 'chainedAssets', label: '链上存证', icon: 'Link', gradient: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)', suffix: '个' },
-  { key: 'pendingLicenses', label: '待审批授权', icon: 'Document', gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', suffix: '个' }
+  { key: 'totalAssets', label: '资产总数', icon: Picture, gradient: 'linear-gradient(135deg, #2f6b5a 0%, #1c5145 100%)', suffix: '个' },
+  { key: 'watermarkedAssets', label: '已嵌入水印', icon: Stamp, gradient: 'linear-gradient(135deg, #4c6e8a 0%, #34506a 100%)', suffix: '个' },
+  { key: 'chainedAssets', label: '链上存证', icon: Link, gradient: 'linear-gradient(135deg, #6d5b7a 0%, #584765 100%)', suffix: '个' },
+  { key: 'pendingLicenses', label: '待审批授权', icon: Document, gradient: 'linear-gradient(135deg, #b07a2a 0%, #8f6322 100%)', suffix: '个' }
 ]
 
-const statCards = ref(
+const statCards = shallowRef(
   statCardDefs.map(def => ({ ...def, value: 0, trend: null, progress: 0 }))
 )
 
@@ -289,20 +272,32 @@ const animatedValues = reactive({
   pendingLicenses: 0
 })
 
-// API 数据缓存
-let pieData = []
-let trendData = []
+// API 数据缓存（用于图表切换时重新绘制）
+let rawStats = null
 
-// 快捷操作
-const quickActions = ref([
-  { label: '资产管理', icon: 'Picture', path: '/admin/assets', gradient: 'linear-gradient(135deg, #10b981, #059669)' },
-  { label: '水印处理', icon: 'Stamp', path: '/admin/watermark', gradient: 'linear-gradient(135deg, #3b82f6, #1d4ed8)' },
-  { label: '存证管理', icon: 'Link', path: '/admin/blockchain', gradient: 'linear-gradient(135deg, #8b5cf6, #6d28d9)' },
-  { label: '用户管理', icon: 'User', path: '/admin/users', gradient: 'linear-gradient(135deg, #f59e0b, #d97706)' }
-])
+// 管理后台角色集合（与后端角色枚举一致）
+const ASSET_ROLES = ['admin', 'asset_admin', 'adm1', 'adm2']
+// 后端审批角色：adm1/asset_admin 参与一级审批，adm2/license_admin 参与二级审批
+const LICENSE_ROLES = ['admin', 'asset_admin', 'license_admin', 'adm1', 'adm2']
+
+const currentRole = computed(() => userStore.userRole)
+const canManageAssets = computed(() => ASSET_ROLES.includes(currentRole.value))
+
+// 快捷操作（按角色过滤）
+const quickActionDefs = [
+  { label: '资产管理', icon: Picture, path: '/admin/assets', gradient: 'linear-gradient(135deg, #2f6b5a, #1c5145)', roles: ASSET_ROLES },
+  { label: '水印处理', icon: Stamp, path: '/admin/watermark', gradient: 'linear-gradient(135deg, #4c6e8a, #34506a)', roles: ASSET_ROLES },
+  { label: '存证管理', icon: Link, path: '/admin/blockchain', gradient: 'linear-gradient(135deg, #6d5b7a, #584765)', roles: ASSET_ROLES },
+  { label: '授权审批', icon: Document, path: '/admin/license/pending', gradient: 'linear-gradient(135deg, #b07a2a, #8f6322)', roles: LICENSE_ROLES },
+  { label: '用户管理', icon: User, path: '/admin/users', gradient: 'linear-gradient(135deg, #5b675f, #414b43)', roles: ['admin'] }
+]
+
+const quickActions = computed(() => {
+  return quickActionDefs.filter(action => action.roles.includes(currentRole.value))
+})
 
 // 最近活动
-const recentActivities = ref([])
+const recentActivities = shallowRef([])
 
 // 待办事项（从待审批授权映射）
 const todoList = ref([])
@@ -316,15 +311,19 @@ const recentAssets = ref([])
 async function loadDashboardData() {
   loading.value = true
   try {
-    const [statsRes, pendingLicensesRes] = await Promise.all([
+    // 使用 allSettled：单个接口失败（如权限不足返回 403）不影响其余模块渲染
+    const [statsSettled, pendingLicensesSettled] = await Promise.allSettled([
       assetApi.getDetail('stats'),
       licenseApi.getPending()
     ])
 
     let stats = null
-    if (statsRes.data?.code === 200) {
-      stats = statsRes.data.data
+    if (statsSettled.status === 'fulfilled' && statsSettled.value.data?.code === 200) {
+      stats = statsSettled.value.data.data
+    } else if (statsSettled.status === 'rejected') {
+      console.error('加载统计数据失败:', statsSettled.reason)
     }
+    rawStats = stats
 
     // 统计卡片
     if (stats) {
@@ -344,38 +343,28 @@ async function loadDashboardData() {
       })
     }
 
-    // 饼图数据
-    if (stats?.by_type) {
-      const typeColors = { image: '#10b981', vector: '#3b82f6', model: '#8b5cf6', document: '#f59e0b', video: '#ef4444' }
-      const typeNames = { image: '图片', vector: '矢量', model: '模型', document: '文档', video: '视频' }
-      pieData = Object.entries(stats.by_type)
-        .filter(([, v]) => v > 0)
-        .map(([k, v]) => ({ value: v, name: typeNames[k] || k, itemStyle: { color: typeColors[k] || '#6b7280' } }))
-    }
-
-    // 趋势数据
-    if (stats?.watermark_trends?.length) {
-      trendData = stats.watermark_trends
-    }
-
     // 最近活动
     if (stats?.recent_activities?.length) {
-      const actionIcons = { upload: 'Picture', embed: 'Stamp', extract: 'Stamp', register: 'Link', approve: 'Document', login: 'User' }
-      const actionColors = { upload: '#10b981', embed: '#3b82f6', extract: '#3b82f6', register: '#8b5cf6', approve: '#f59e0b', login: '#6b7280' }
+      const actionIcons = { upload: Picture, embed: Stamp, extract: Stamp, register: Link, approve: Document, login: User }
+      const actionColors = { upload: '#2f6b5a', embed: '#4c6e8a', extract: '#4c6e8a', register: '#6d5b7a', approve: '#b07a2a', login: '#5b675f' }
       recentActivities.value = stats.recent_activities.slice(0, 8).map((a, i) => ({
         id: a.id || i,
-        icon: actionIcons[a.action] || 'CircleCheck',
+        icon: actionIcons[a.action] || CircleCheck,
         title: a.action || a.module || '操作',
         description: a.description || '',
         time: formatTimeAgo(a.created_at),
-        color: actionColors[a.action] || '#6b7280'
+        color: actionColors[a.action] || '#5b675f'
       }))
     }
 
     // 待办事项（来自待审批授权）
-    const pendingApps = pendingLicensesRes.data?.code === 200
-      ? (pendingLicensesRes.data.data?.items || pendingLicensesRes.data.data || [])
-      : []
+    let pendingApps = []
+    if (pendingLicensesSettled.status === 'fulfilled' && pendingLicensesSettled.value.data?.code === 200) {
+      const data = pendingLicensesSettled.value.data.data
+      pendingApps = data?.items || data || []
+    } else if (pendingLicensesSettled.status === 'rejected') {
+      console.error('加载待审批授权失败:', pendingLicensesSettled.reason)
+    }
     if (Array.isArray(pendingApps) && pendingApps.length > 0) {
       todoList.value = pendingApps.slice(0, 5).map(app => ({
         id: app.id,
@@ -397,11 +386,12 @@ async function loadDashboardData() {
 
     // 运行动画和图表
     animateNumbers()
-    nextTick(() => initCharts())
   } catch (e) {
-    ElMessage.warning('部分数据加载失败，使用默认数据')
+    console.error('加载仪表盘数据失败:', e)
   } finally {
     loading.value = false
+    // 图表容器在 loading 结束后才渲染，必须等 DOM 更新后再初始化
+    nextTick(() => initCharts())
   }
 }
 
@@ -418,8 +408,8 @@ function getGreeting() {
 }
 
 function getDefaultThumb(type) {
-  const colors = { image: '#10b981', vector: '#3b82f6', model: '#8b5cf6', document: '#f59e0b', video: '#ef4444' }
-  const color = colors[type] || '#6b7280'
+  const colors = { image: '#2f6b5a', vector: '#4c6e8a', model: '#6d5b7a', document: '#b07a2a', video: '#a6402f' }
+  const color = colors[type] || '#5b675f'
   return `data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="60" height="60"%3E%3Crect fill="%23${color.replace('#', '')}" width="60" height="60" rx="8"/%3E%3Ctext x="30" y="36" text-anchor="middle" fill="white" font-size="14"%3E${(type || 'FILE').substring(0, 3).toUpperCase()}%3C/text%3E%3C/svg%3E`
 }
 
@@ -434,12 +424,12 @@ function getTypeTag(type) {
 }
 
 function getWatermarkStatus(status) {
-  const statusMap = { none: '未处理', pending: '处理中', embedded: '已完成' }
+  const statusMap = { none: '未嵌入', pending: '处理中', embedded: '已嵌入', verified: '已验证', failed: '失败' }
   return statusMap[status] || '未知'
 }
 
 function getChainStatus(status) {
-  const statusMap = { none: '未存证', pending: '处理中', confirmed: '已确认' }
+  const statusMap = { none: '未存证', pending: '处理中', confirmed: '已存证', failed: '存证失败' }
   return statusMap[status] || '未知'
 }
 
@@ -484,26 +474,62 @@ function animateNumbers() {
   })
 }
 
+// 按本周/本月构建资产类型分布数据
+function buildPieData() {
+  const byType = (chartType.value === 'month'
+    ? (rawStats?.by_type_month || rawStats?.by_type)
+    : (rawStats?.by_type_week || rawStats?.by_type))
+  if (!byType) return []
+
+  const typeColors = { image: '#2f6b5a', vector: '#7397ab', model: '#c1925b', document: '#789262', video: '#a6402f' }
+  const typeNames = { image: '图片', vector: '矢量', model: '模型', document: '文档', video: '视频' }
+  return Object.entries(byType)
+    .filter(([, v]) => v > 0)
+    .map(([k, v]) => ({ value: v, name: typeNames[k] || k, itemStyle: { color: typeColors[k] || '#5b675f' } }))
+}
+
+// 本周取最近 7 条趋势，本月取最近 30 条
+function buildTrendData() {
+  const trends = rawStats?.watermark_trends || []
+  if (!Array.isArray(trends) || trends.length === 0) return []
+  return trends.slice(chartType.value === 'week' ? -7 : -30)
+}
+
 // 初始化图表
 function initCharts() {
   // 资产类型分布图
   if (assetChartRef.value) {
     if (assetChart) assetChart.dispose()
     assetChart = echarts.init(assetChartRef.value)
+    const pieData = buildPieData()
     const defaultPieData = [
-      { value: 0, name: '暂无数据', itemStyle: { color: '#e5e7eb' } }
+      { value: 0, name: '暂无数据', itemStyle: { color: '#d8e1da' } }
     ]
     const option = {
-      tooltip: { trigger: 'item', backgroundColor: 'rgba(255,255,255,0.95)', borderColor: '#eee', borderWidth: 1, textStyle: { color: '#333' } },
-      legend: { bottom: '5%', left: 'center', textStyle: { color: '#666' } },
+      tooltip: {
+        trigger: 'item',
+        backgroundColor: '#fcfdfb',
+        borderColor: '#d8e1da',
+        borderWidth: 1,
+        textStyle: { color: '#17201c', fontSize: 13 },
+        extraCssText: 'box-shadow:0 4px 12px rgba(18,28,23,.08);border-radius:6px;'
+      },
+      legend: {
+        bottom: 0,
+        left: 'center',
+        icon: 'circle',
+        itemWidth: 8,
+        itemHeight: 8,
+        textStyle: { color: '#5b675f', fontSize: 12 }
+      },
       series: [{
         name: '资产类型',
         type: 'pie',
-        radius: ['45%', '70%'],
+        radius: ['48%', '70%'],
         avoidLabelOverlap: false,
-        itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
+        itemStyle: { borderRadius: 2, borderColor: '#fcfdfb', borderWidth: 2 },
         label: { show: false },
-        emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' } },
+        emphasis: { label: { show: true, fontSize: 13, fontWeight: 600, color: '#17201c' } },
         labelLine: { show: false },
         data: pieData.length > 0 ? pieData : defaultPieData
       }]
@@ -518,6 +544,7 @@ function initCharts() {
 
     let dates = []
     let counts = []
+    const trendData = buildTrendData()
     if (trendData.length > 0) {
       dates = trendData.map(d => d.date?.substring(5) || d.date) // MM-DD
       counts = trendData.map(d => d.count)
@@ -530,34 +557,44 @@ function initCharts() {
     }
 
     const option = {
-      tooltip: { trigger: 'axis', backgroundColor: 'rgba(255,255,255,0.95)', borderColor: '#eee', borderWidth: 1, textStyle: { color: '#333' } },
-      grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
+      tooltip: {
+        trigger: 'axis',
+        backgroundColor: '#fcfdfb',
+        borderColor: '#d8e1da',
+        borderWidth: 1,
+        padding: [8, 10],
+        textStyle: { color: '#17201c', fontSize: 13 },
+        axisPointer: { type: 'line', lineStyle: { color: '#d8e1da' } },
+        extraCssText: 'box-shadow:0 4px 12px rgba(18,28,23,.08);border-radius:6px;'
+      },
+      grid: { left: 0, right: 8, bottom: 0, top: 18, containLabel: true },
       xAxis: {
         type: 'category',
         boundaryGap: false,
         data: dates,
-        axisLine: { lineStyle: { color: '#e5e7eb' } },
-        axisLabel: { color: '#6b7280' }
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { color: '#5b675f', fontSize: 12, margin: 12 }
       },
       yAxis: {
         type: 'value',
         axisLine: { show: false },
         axisTick: { show: false },
-        splitLine: { lineStyle: { color: '#f3f4f6', type: 'dashed' } },
-        axisLabel: { color: '#6b7280' }
+        splitLine: { lineStyle: { color: '#e8ede9', type: 'solid', width: 1 } },
+        axisLabel: { color: '#5b675f', fontSize: 12 }
       },
       series: [{
         name: '水印嵌入',
         type: 'line',
-        smooth: true,
+        smooth: 0.3,
         symbol: 'circle',
-        symbolSize: 8,
-        lineStyle: { width: 3, color: '#10b981' },
-        itemStyle: { color: '#10b981', borderWidth: 2 },
+        symbolSize: 6,
+        lineStyle: { width: 2, color: '#2f6b5a' },
+        itemStyle: { color: '#2f6b5a', borderWidth: 2, borderColor: '#fcfdfb' },
         areaStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(16, 185, 129, 0.3)' },
-            { offset: 1, color: 'rgba(16, 185, 129, 0.05)' }
+            { offset: 0, color: 'rgba(47, 107, 90, 0.2)' },
+            { offset: 1, color: 'rgba(47, 107, 90, 0.02)' }
           ])
         },
         data: counts
@@ -567,10 +604,24 @@ function initCharts() {
   }
 }
 
+// 本周/本月切换时真正重绘图表
+watch(chartType, () => {
+  nextTick(() => initCharts())
+})
+
 // 窗口大小变化时重绘图表
 function handleResize() {
   assetChart?.resize()
   watermarkChart?.resize()
+}
+
+function viewAsset(row) {
+  if (!row?.id) return
+  router.push(`/assets/${row.id}`)
+}
+
+function goToPendingLicenses() {
+  router.push('/admin/license/pending')
 }
 
 onMounted(() => {
@@ -591,7 +642,6 @@ onUnmounted(() => {
 .dashboard-page {
   min-height: 100%;
   background: $bg-primary;
-  padding: 32px;
 }
 
 // 欢迎区域
@@ -599,21 +649,18 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: linear-gradient(135deg, $primary-color 0%, $primary-dark 100%);
-  border-radius: $radius-2xl;
-  padding: 40px 48px;
-  margin-bottom: 32px;
+  background: $primary-dark;
+  border-radius: $radius-lg;
+  padding: 30px 36px;
+  margin-bottom: 24px;
   position: relative;
   overflow: hidden;
 
   &::before {
     content: '';
     position: absolute;
-    top: -50%;
-    right: -10%;
-    width: 400px;
-    height: 400px;
-    background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%);
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg width='48' height='48' viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%23fcfdfb' stroke-opacity='0.07' stroke-width='1'%3E%3Cpath d='M24 0v48M0 24h48'/%3E%3Crect x='10' y='10' width='28' height='28' transform='rotate(45 24 24)'/%3E%3C/g%3E%3C/svg%3E");
     pointer-events: none;
   }
 
@@ -623,72 +670,59 @@ onUnmounted(() => {
   }
 
   .welcome-title {
-    color: white;
+    color: #fcfdfb;
     margin-bottom: 8px;
 
     .greeting {
-      font-size: 16px;
+      font-size: 14px;
       font-weight: $font-weight-normal;
-      opacity: 0.9;
+      opacity: 0.7;
     }
 
     .username {
       display: block;
-      font-size: 28px;
-      font-weight: $font-weight-bold;
+      font-family: $font-display;
+      font-size: 26px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
     }
   }
 
   .welcome-subtitle {
-    color: rgba(255, 255, 255, 0.85);
-    font-size: 15px;
-    margin-bottom: 24px;
+    color: rgba(252, 253, 251, 0.66);
+    font-size: 14px;
+    margin-bottom: 20px;
   }
 
   .welcome-actions {
     display: flex;
-    gap: 12px;
+    gap: 10px;
 
     .btn-action {
-      background: white !important;
+      background: #fcfdfb !important;
       color: $primary-dark !important;
-      border: none;
+      border: 1px solid #fcfdfb !important;
       font-weight: $font-weight-medium;
-      padding: 12px 24px;
-      border-radius: $radius-lg;
+      padding: 10px 20px;
+      border-radius: $radius-sm;
 
       &:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        background: $bg-secondary !important;
+        color: $primary-dark !important;
       }
     }
 
     .btn-action-secondary {
-      background: rgba(255, 255, 255, 0.2) !important;
-      color: white !important;
-      border: 1px solid rgba(255, 255, 255, 0.3);
+      background: transparent !important;
+      color: #fcfdfb !important;
+      border: 1px solid rgba(252, 253, 251, 0.3) !important;
       font-weight: $font-weight-medium;
-      padding: 12px 24px;
-      border-radius: $radius-lg;
+      padding: 10px 20px;
+      border-radius: $radius-sm;
 
       &:hover {
-        background: rgba(255, 255, 255, 0.3) !important;
-      }
-    }
-  }
-
-  .welcome-illustration {
-    position: relative;
-    z-index: 1;
-
-    .illustration-bg {
-      width: 200px;
-      height: 200px;
-      opacity: 0.6;
-
-      svg {
-        width: 100%;
-        height: 100%;
+        background: rgba(252, 253, 251, 0.08) !important;
+        border-color: rgba(252, 253, 251, 0.5) !important;
       }
     }
   }
@@ -703,18 +737,18 @@ onUnmounted(() => {
 }
 
 .stat-card {
-  background: white;
-  border-radius: $radius-xl;
-  padding: 24px;
-  box-shadow: $shadow-card;
-  border: 1px solid rgba(0, 0, 0, 0.02);
-  transition: all $transition-base;
-  animation: fadeIn 0.6s ease forwards;
+  background: $bg-card;
+  border-radius: $radius-lg;
+  padding: 20px;
+  box-shadow: $shadow-sm;
+  border: 1px solid $border-color;
+  transition: border-color $transition-fast, box-shadow $transition-fast;
+  animation: fadeIn 0.5s ease forwards;
   opacity: 0;
 
   &:hover {
-    transform: translateY(-4px);
-    box-shadow: $shadow-card-hover;
+    border-color: $border-dark;
+    box-shadow: $shadow-md;
   }
 
   .stat-card-header {
@@ -725,17 +759,19 @@ onUnmounted(() => {
   }
 
   .stat-icon-wrapper {
-    width: 48px;
-    height: 48px;
-    border-radius: $radius-lg;
+    width: 40px;
+    height: 40px;
+    border-radius: $radius-md;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    background: $bg-secondary !important;
+    border: 1px solid $border-color;
+    box-shadow: none;
 
     .stat-icon {
-      font-size: 24px;
-      color: white;
+      font-size: 20px;
+      color: $primary-dark;
     }
   }
 
@@ -767,8 +803,9 @@ onUnmounted(() => {
     margin-bottom: 4px;
 
     .value-number {
-      font-size: 32px;
-      font-weight: $font-weight-bold;
+      font-family: $font-display;
+      font-size: 30px;
+      font-weight: 600;
       color: $text-primary;
       font-variant-numeric: tabular-nums;
     }
@@ -829,11 +866,11 @@ onUnmounted(() => {
 
 // 卡片通用样式
 .chart-card, .quick-actions-card, .activity-card, .todo-card, .table-card {
-  background: white;
-  border-radius: $radius-xl;
-  padding: 24px;
-  box-shadow: $shadow-card;
-  border: 1px solid rgba(0, 0, 0, 0.02);
+  background: $bg-card;
+  border-radius: $radius-lg;
+  padding: 20px;
+  box-shadow: $shadow-sm;
+  border: 1px solid $border-color;
 }
 
 .card-header {
@@ -844,13 +881,14 @@ onUnmounted(() => {
 }
 
 .card-title {
-  font-size: 16px;
-  font-weight: $font-weight-semibold;
+  font-family: $font-display;
+  font-size: 17px;
+  font-weight: 600;
   color: $text-primary;
 }
 
 .chart-container {
-  height: 280px;
+  height: 320px;
 }
 
 // 快捷入口
@@ -864,30 +902,32 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 20px;
-  background: $bg-primary;
-  border-radius: $radius-lg;
+  padding: 18px;
+  background: $bg-card;
+  border: 1px solid $border-light;
+  border-radius: $radius-md;
   cursor: pointer;
-  transition: all $transition-fast;
+  transition: border-color $transition-fast;
 
   &:hover {
-    background: $bg-secondary;
-    transform: translateY(-2px);
+    border-color: $primary-color;
   }
 
   .action-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: $radius-lg;
+    width: 40px;
+    height: 40px;
+    border-radius: $radius-md;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    margin-bottom: 10px;
+    background: $bg-secondary !important;
+    border: 1px solid $border-color;
+    box-shadow: none;
 
     .el-icon {
-      font-size: 24px;
-      color: white;
+      font-size: 20px;
+      color: $primary-dark;
     }
   }
 
@@ -918,17 +958,19 @@ onUnmounted(() => {
   }
 
   .activity-avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: $radius-lg;
+    width: 34px;
+    height: 34px;
+    border-radius: $radius-md;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    background: $bg-secondary !important;
+    border: 1px solid $border-color;
 
     .el-icon {
-      font-size: 18px;
-      color: white;
+      font-size: 16px;
+      color: $primary-dark;
     }
   }
 
@@ -970,13 +1012,14 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px;
-  background: $bg-primary;
-  border-radius: $radius-lg;
-  transition: all $transition-fast;
+  padding: 12px;
+  background: $bg-card;
+  border: 1px solid $border-light;
+  border-radius: $radius-md;
+  transition: border-color $transition-fast;
 
   &:hover {
-    background: $bg-secondary;
+    border-color: $border-dark;
   }
 
   .todo-priority {
@@ -1075,7 +1118,8 @@ onUnmounted(() => {
 
       &.none { background: $text-placeholder; }
       &.pending { background: $warning-color; }
-      &.embedded, &.confirmed { background: $success-color; }
+      &.embedded, &.confirmed, &.verified { background: $success-color; }
+      &.failed { background: $error-color; }
     }
   }
 }

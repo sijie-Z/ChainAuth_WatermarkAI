@@ -19,9 +19,31 @@ def user_identity_lookup(user):
 
 @jwt.user_lookup_loader
 def user_lookup_callback(_jwt_header, jwt_data):
-    """用户查找回调"""
+    """用户查找回调：已禁用/封禁用户即使持有未过期 Token 也拒绝访问"""
     identity = jwt_data["sub"]
-    return User.query.get(identity)
+    user = User.query.get(identity)
+    if not user or user.status != 'active':
+        return None
+    return user
+
+
+@jwt.user_lookup_error_loader
+def user_lookup_error_callback(_jwt_header, _jwt_data):
+    """用户不存在或已被禁用"""
+    return {
+        'code': 401,
+        'message': '账号不存在或已被禁用'
+    }, 401
+
+
+@jwt.token_in_blocklist_loader
+def check_if_token_revoked(_jwt_header, jwt_payload):
+    """登出后写入 UserToken 的 jti 立即失效"""
+    from app.models.user import UserToken
+    jti = jwt_payload.get('jti')
+    if not jti:
+        return False
+    return UserToken.query.filter_by(token=jti, is_revoked=True).first() is not None
 
 
 @jwt.expired_token_loader

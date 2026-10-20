@@ -57,6 +57,7 @@ temp/
 # Cache
 .pytest_cache/
 .coverage
+coverage.xml
 htmlcov/
 .tox/
 .nox/
@@ -94,3 +95,4 @@ data/models/*
 
 # Claude Code
 .claude/plans/
+.claude/settings.local.json

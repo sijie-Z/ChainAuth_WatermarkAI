@@ -9,12 +9,23 @@ from app.models.asset import Asset
 from app.services.ai_service import ai_service
 
 
+def ai_unavailable():
+    """AI 未配置时统一返回 503，避免把能力缺失误报成服务器错误"""
+    if not getattr(ai_service, 'enabled', False):
+        return {'code': 503, 'message': 'AI 服务未启用，请配置模型与 API Key'}, 503
+    return None
+
+
 class AIAnalyzeResource(Resource):
     """AI分析"""
 
     @jwt_required()
     def post(self):
         """分析资产"""
+        unavailable = ai_unavailable()
+        if unavailable:
+            return unavailable
+
         user_id = get_jwt_identity()
         data = request.get_json()
         asset_id = data.get('asset_id')
@@ -24,6 +35,12 @@ class AIAnalyzeResource(Resource):
 
         asset = Asset.query.get(asset_id)
         if not asset:
+            return {'code': 404, 'message': '资产不存在'}, 404
+
+        user = User.query.get(user_id)
+        is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
+        is_admin = bool(user) and user.role in ('admin', 'asset_admin')
+        if asset.status != 'published' and not (is_owner or is_admin):
             return {'code': 404, 'message': '资产不存在'}, 404
 
         result = ai_service.process_asset(asset)
@@ -44,6 +61,10 @@ class AISearchResource(Resource):
     @jwt_required()
     def post(self):
         """搜索相似图像"""
+        unavailable = ai_unavailable()
+        if unavailable:
+            return unavailable
+
         if 'file' not in request.files:
             return {'code': 400, 'message': '未上传文件'}, 400
 
@@ -51,17 +72,21 @@ class AISearchResource(Resource):
         if file.filename == '':
             return {'code': 400, 'message': '未选择文件'}, 400
 
-        # 保存临时文件
+        # 保存临时文件（先关闭句柄再处理，Windows 上才能删除）
+        import os
         import tempfile
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
-            file.save(tmp.name)
-
-            # 搜索相似图像
-            results = ai_service.search_similar(tmp.name, top_k=10)
-
-            # 清理临时文件
-            import os
-            os.unlink(tmp.name)
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
+        tmp_path = tmp.name
+        tmp.close()
+        try:
+            file.save(tmp_path)
+            results = ai_service.search_similar(tmp_path, top_k=10)
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                # 临时文件可能已被系统清理，忽略即可
+                pass
 
         return {
             'code': 200,
@@ -78,6 +103,10 @@ class AIInfringementResource(Resource):
     @jwt_required()
     def post(self):
         """检测侵权"""
+        unavailable = ai_unavailable()
+        if unavailable:
+            return unavailable
+
         if 'file' not in request.files:
             return {'code': 400, 'message': '未上传文件'}, 400
 
@@ -85,17 +114,21 @@ class AIInfringementResource(Resource):
         if file.filename == '':
             return {'code': 400, 'message': '未选择文件'}, 400
 
-        # 保存临时文件
+        # 保存临时文件（先关闭句柄再处理，Windows 上才能删除）
+        import os
         import tempfile
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
-            file.save(tmp.name)
-
-            # 检测侵权
-            result = ai_service.check_infringement(tmp.name)
-
-            # 清理临时文件
-            import os
-            os.unlink(tmp.name)
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
+        tmp_path = tmp.name
+        tmp.close()
+        try:
+            file.save(tmp_path)
+            result = ai_service.check_infringement(tmp_path)
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                # 临时文件可能已被系统清理，忽略即可
+                pass
 
         return {
             'code': 200,
@@ -109,6 +142,10 @@ class AIChatResource(Resource):
     @jwt_required()
     def post(self):
         """智能问答"""
+        unavailable = ai_unavailable()
+        if unavailable:
+            return unavailable
+
         data = request.get_json()
         question = data.get('question')
         context = data.get('context', {})

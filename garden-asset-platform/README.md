@@ -1,6 +1,6 @@
 # 苏州园林数字资产安全分发与溯源系统
 
-> 挑战杯 · 从"版权裸奔"到"链上确权"：基于数字水印和AI推理的苏州园林数字资产安全分发与溯源系统
+> 从"版权裸奔"到"链上确权"：基于数字水印和AI推理的苏州园林数字资产安全分发与溯源系统
 
 ## 项目简介
 
@@ -11,7 +11,7 @@
 | 模块 | 功能 | 技术实现 |
 |------|------|----------|
 | 资产管理 | 数字资产上传、浏览、分类、检索、下载 | Vue3 + Flask + MinIO |
-| 数字水印 | DCT频域盲水印嵌入与提取，支持抗压缩/裁剪 | Python OpenCV + NumPy |
+| 数字水印 | DCT + QIM 盲水印嵌入与提取，抗 JPEG 压缩、噪声与 50%–150% 缩放 | Python OpenCV + NumPy |
 | 区块链存证 | 资产+水印双上链，FISCO BCOS智能合约 | FISCO BCOS + Python SDK |
 | AI溯源 | 以图搜图、侵权检测、智能问答 | 智谱GLM-4V + Milvus |
 | 授权分发 | 在线申请→双重审批→合同管理→下载控制 | Flask + JWT |
@@ -24,7 +24,7 @@
                       │
                       ├──→ Flask REST API ──→ PostgreSQL
                       │                    ├──→ Redis (缓存/限流)
-                      │                    ├──→ MinIO (对象存储)
+                      │                    ├──→ MinIO (可选对象存储，当前默认本地磁盘)
                       │                    └──→ Milvus (向量检索)
                       │
                       └──→ FISCO BCOS (区块链存证)
@@ -34,9 +34,9 @@
 
 | 层级 | 技术 |
 |------|------|
-| 前端 | Vue 3.4, Vite 5, Pinia, Element Plus, ECharts, THREE.js |
+| 前端 | Vue 3.4, Vite 5, Pinia, Element Plus, ECharts |
 | 后端 | Flask 3.0, Flask-RESTful, SQLAlchemy, Flask-JWT-Extended |
-| 存储 | PostgreSQL, Redis, MinIO, Milvus |
+| 存储 | PostgreSQL, Redis, Milvus；MinIO 为可选服务（当前默认本地磁盘） |
 | 区块链 | FISCO BCOS 3.x |
 | AI | 智谱GLM-4V, CLIP, DINOv2, 百度OCR |
 | 部署 | Docker Compose, Gunicorn, Nginx |
@@ -45,24 +45,24 @@
 
 ### 环境要求
 
-- Python 3.10+ / Node.js 18+
+- Python 3.11+ / Node.js 22+
 - Docker & Docker Compose（推荐）
 
 ### Docker 一键部署
 
 ```bash
 # 配置环境变量
-cp backend/.env.example backend/.env
-# 编辑 backend/.env，填入必要的 API Key
+cp .env.example .env
+# 编辑 .env，填入数据库密码等 Docker Compose 变量
 
 # 启动所有服务（后端、前端、PostgreSQL、Redis、MinIO）
 docker-compose up -d
 
 # 初始化数据库
-docker exec garden-backend flask init-db
+docker exec garden-backend python scripts/init_db.py
 
 # 填充示例数据（可选）
-docker exec garden-backend flask seed
+docker exec garden-backend python scripts/create_test_data.py
 ```
 
 服务端口：
@@ -93,7 +93,7 @@ npm run dev                  # 启动Vite开发服务器 :5173
 ### 运行测试
 
 ```bash
-# 后端测试（29个用例，覆盖API/模型/安全）
+# 后端测试（87个用例，覆盖API/模型/安全）
 cd backend && python -m pytest tests/ -v
 
 # 前端生产构建
@@ -119,10 +119,10 @@ garden-asset-platform/
 │   │   ├── utils/                 # 工具模块（日志/中间件/错误处理/JWT回调）
 │   │   ├── config.py              # 多环境配置（开发/生产/测试）
 │   │   └── __init__.py            # Flask应用工厂
-│   ├── algorithm/                 # 水印算法库（DCT/LSB/矢量）
+│   ├── algorithm/                 # 水印算法库（DCT+QIM/矢量）
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
-│   ├── tests/                     # pytest测试（29个用例）
+│   ├── tests/                     # pytest测试（87个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -219,11 +219,11 @@ garden-asset-platform/
 - X-Content-Type-Options / X-Frame-Options / X-XSS-Protection
 - SQL注入防护（SQLAlchemy参数化查询）
 - 生产环境堆栈信息不泄露
-- 角色权限控制（admin → adm1/adm2/adm3 → user）
+- 角色权限控制（admin / asset_admin / license_admin / adm1 / adm2 / user）
 
 ## 环境变量
 
-参见 `backend/.env.example`，关键配置项：
+Docker 部署见 `garden-asset-platform/.env.example`；本地开发见 `backend/.env.example`。关键配置项：
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
@@ -235,6 +235,10 @@ garden-asset-platform/
 | `AI_ENABLED` | 启用AI功能 | `true` |
 | `ZHIPU_API_KEY` | 智谱AI密钥 | - |
 | `BAIDU_OCR_API_KEY` | 百度OCR密钥 | - |
+
+> 多 worker 部署（4 个 gunicorn worker）默认关闭任务调度器，避免备份/授权过期任务重复执行。如需启用，设置 `SCHEDULER_ENABLED=true`，并确保只运行一个调度进程（或改用外部 cron）。
+
+> 文件默认保存在 `backend/uploads/`（Docker 中为挂载卷）。`docker-compose.yml` 中的 MinIO 服务为可选组件，当前版本尚未接入对象存储后端。
 
 ## 许可证
 
