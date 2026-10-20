@@ -9,6 +9,10 @@ permissions:
   contents: read
   pull-requests: read
 
+concurrency:
+  group: gitflow-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   branch-policy:
     name: branch-policy

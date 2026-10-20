@@ -171,8 +171,6 @@ garden-asset-platform/
 ├── nginx.conf                        # Nginx配置
 ├── Makefile                          # 管理命令
 ├── start.py                          # 一键启动脚本
-├── start.sh                          # Linux启动脚本
-├── start.bat                         # Windows启动脚本
 ├── install.sh                        # Linux安装脚本
 ├── install.bat                       # Windows安装脚本
 ├── README.md                         # 项目说明

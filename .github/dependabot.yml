@@ -16,7 +16,6 @@ updates:
     labels: ["dependencies", "backend"]
     commit-message:
       prefix: "chore(deps)"
-      include: "scope"
     groups:
       backend-patch:
         patterns: ["*"]
@@ -38,7 +37,6 @@ updates:
     labels: ["dependencies", "frontend"]
     commit-message:
       prefix: "chore(deps)"
-      include: "scope"
     groups:
       frontend-patch:
         patterns: ["*"]
@@ -66,6 +64,18 @@ updates:
 
   # ---------- Docker ----------
   - package-ecosystem: "docker"
+    directory: "/garden-asset-platform"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    labels: ["dependencies", "docker"]
+    commit-message:
+      prefix: "chore(docker)"
+
+  - package-ecosystem: "docker-compose"
     directory: "/garden-asset-platform"
     target-branch: "develop"
     schedule:

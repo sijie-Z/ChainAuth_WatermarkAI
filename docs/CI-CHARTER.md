@@ -34,7 +34,7 @@
 
 | 工作流 | 职责 | 频率 |
 |--------|------|------|
-| `sync-main-into-develop.yml` | main 更新后自动创建回合并 PR | 每次 main push |
+| `sync-main-into-develop.yml` | main 更新后创建回合并提醒 issue（GITHUB_TOKEN 建的 PR 不会触发必需检查） | 每次 main push |
 | `release-drafter.yml` | 维护发布说明草稿 | 每次 main push |
 | `release.yml` | 发布 Release + 推送 GHCR 镜像 | 标签 `v*` |
 | `stale.yml` | 标记/关闭长期无活动 Issue/PR | 每周一 |
@@ -52,7 +52,6 @@
 
 | 不做 | 原因 |
 |------|------|
-| Playwright / 真实浏览器 E2E | 单人项目维护成本高；前端由 ESLint + build 兜底，后续有稳定 UI 再引入 |
 | mypy / 全量类型检查 | 当前代码为纯 JS + 无类型注解 Python，整改成本大于收益 |
 | SonarCloud / Codecov 上传 | 需要额外账号与 Token；覆盖率以 artifact 形式保留，不设外部依赖 |
 | license gate | 暂无许可证合规策略；Dependency Review 只阻断高危漏洞 |
@@ -68,7 +67,7 @@
 
 ## 6. 覆盖率策略
 
-- 当前基线：**45%**（74 个后端用例 + 21 个前端用例 + 5 个 Playwright 用例，2026-10-20 实测）。
+- 当前基线：**49%**（83 个后端用例 + 40 个前端用例 + 5 个 Playwright 用例，2026-10-20 实测）。
 - CI 使用棘轮下限 `--cov-fail-under=43`（留 2 个点余量防环境波动），只拦“继续下滑”，不追高分；下限写在 CI 命令里，不写进全局 pytest 配置。
 - 覆盖率报告以 artifact 形式保存（7 天），不依赖外部 Codecov 账号。
 - 前端已加入 Vitest 单元测试（工具函数与共享组件）；覆盖率暂不作为门禁，后续按棘轮方式引入。

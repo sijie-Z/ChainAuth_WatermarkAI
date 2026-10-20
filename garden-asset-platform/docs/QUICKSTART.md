@@ -11,17 +11,11 @@
 
 ### 方式一：一键启动 (推荐)
 
-**Windows:**
 ```bash
-# 双击运行或在命令行执行
-start.bat
+python start.py
 ```
 
-**Linux/Mac:**
-```bash
-chmod +x start.sh
-./start.sh
-```
+Windows 也可以直接双击 `install.bat` 完成依赖安装后运行 `python start.py`。
 
 ### 方式二：手动启动
 

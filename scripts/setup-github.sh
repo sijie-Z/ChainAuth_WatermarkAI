@@ -125,7 +125,7 @@ JSON
     --add-topic flask \
     --add-topic copyright-protection \
     --add-topic ai-traceability \
-    --add-topic competition >/dev/null 2>&1 \
+    --add-topic digital-heritage >/dev/null 2>&1 \
     || echo "   (跳过：topics 设置失败)"
 
   echo "✅ 仓库设置完成"

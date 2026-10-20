@@ -50,7 +50,7 @@ backend/
 │   │   ├── embed.py             # 坐标扰动嵌入
 │   │   └── extract.py           # 水印提取
 │   ├── raster/                  # 栅格水印
-│   │   ├── embed.py             # DCT/LSB嵌入
+│   │   ├── embed.py             # DCT+QIM 嵌入
 │   │   └── extract.py           # 水印提取
 │   └── utils/                   # 算法工具
 │       ├── get_coor.py          # 坐标提取
@@ -140,7 +140,7 @@ frontend/
 
 ### 2. 数字水印系统
 - **矢量水印**: 基于坐标扰动算法，适用于SHP地理数据
-- **栅格水印**: DCT域嵌入 + LSB算法，适用于影像数据
+- **栅格水印**: DCT + QIM 低频量化（LSB 仅作可选简单回退），适用于影像数据
 - **水印ID生成**: ZY-{园林编码}-{类型编码}-{时间戳}-{随机码}
 - 支持批量处理
 - NC值验证水印完整性
@@ -285,11 +285,10 @@ frontend/
 - [x] DEVELOPMENT.md
 - [x] backend/README.md
 - [x] frontend/README.md
-- [x] PACKAGE.md
 
 ### 🚧 进行中
 
-- [x] 前端单元测试 (Vitest，21 个用例)
+- [x] 前端单元测试 (Vitest，40 个用例)
 - [ ] API文档 (Swagger UI)
 
 ### 📋 待完成
@@ -417,7 +416,7 @@ flask reset-password user1 newpassword
 
 ## 项目亮点
 
-1. **自研水印算法**: 矢量坐标扰动 + DCT/LSB栅格水印，兼顾鲁棒性与不可见性
+1. **自研水印算法**: 矢量坐标扰动 + DCT/QIM栅格水印，兼顾鲁棒性与不可见性
 2. **双重审批机制**: 完善的授权工作流，确保资产安全分发
 3. **区块链存证**: 基于FISCO BCOS联盟链，提供可信存证
 4. **AI智能分析**: 集成GLM-4、CLIP等模型，提供智能分析与检索
@@ -486,13 +485,13 @@ flask reset-password user1 newpassword
 | 授权审批 | ✅ | 95% | 双重审批、合同生成、5种授权类型 |
 | AI分析 | ✅ | 80% | GLM-4/CLIP集成，需配置API Key |
 | 前端界面 | ✅ | 90% | 19页面+骨架屏+设计系统 |
-| 单元测试 | ✅ | 95% | 后端 74 个用例 + 前端 21 个用例 + 5 个 Playwright 用例，CI 全量执行 |
+| 单元测试 | ✅ | 95% | 后端 83 个用例 + 前端 40 个用例 + 5 个 Playwright 用例，CI 全量执行 |
 | Docker部署 | ✅ | 90% | 多服务编排、健康检查、HTTPS待配置 |
-| CI/CD | ✅ | 100% | Git Flow + 13 个工作流 + 机器人体系 |
+| CI/CD | ✅ | 100% | Git Flow + 16 个工作流 + 机器人体系 |
 
 ### 技术亮点
 
-1. **自研水印算法**: 矢量坐标扰动 + DCT/LSB栅格水印
+1. **自研水印算法**: 矢量坐标扰动 + DCT/QIM栅格水印
 2. **双重审批机制**: adm1+adm2完整工作流
 3. **区块链存证**: FISCO BCOS联盟链集成
 4. **AI智能分析**: GLM-4 + CLIP特征提取

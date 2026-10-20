@@ -11,7 +11,7 @@
 | 模块 | 功能 | 技术实现 |
 |------|------|----------|
 | 资产管理 | 数字资产上传、浏览、分类、检索、下载 | Vue3 + Flask + MinIO |
-| 数字水印 | DCT频域盲水印嵌入与提取，支持抗压缩/裁剪 | Python OpenCV + NumPy |
+| 数字水印 | DCT + QIM 盲水印嵌入与提取，抗 JPEG 压缩、噪声与 50%–150% 缩放 | Python OpenCV + NumPy |
 | 区块链存证 | 资产+水印双上链，FISCO BCOS智能合约 | FISCO BCOS + Python SDK |
 | AI溯源 | 以图搜图、侵权检测、智能问答 | 智谱GLM-4V + Milvus |
 | 授权分发 | 在线申请→双重审批→合同管理→下载控制 | Flask + JWT |
@@ -34,7 +34,7 @@
 
 | 层级 | 技术 |
 |------|------|
-| 前端 | Vue 3.4, Vite 5, Pinia, Element Plus, ECharts, THREE.js |
+| 前端 | Vue 3.4, Vite 5, Pinia, Element Plus, ECharts |
 | 后端 | Flask 3.0, Flask-RESTful, SQLAlchemy, Flask-JWT-Extended |
 | 存储 | PostgreSQL, Redis, MinIO, Milvus |
 | 区块链 | FISCO BCOS 3.x |
@@ -52,17 +52,17 @@
 
 ```bash
 # 配置环境变量
-cp backend/.env.example backend/.env
-# 编辑 backend/.env，填入必要的 API Key
+cp .env.example .env
+# 编辑 .env，填入数据库密码等 Docker Compose 变量
 
 # 启动所有服务（后端、前端、PostgreSQL、Redis、MinIO）
 docker-compose up -d
 
 # 初始化数据库
-docker exec garden-backend flask init-db
+docker exec garden-backend python scripts/init_db.py
 
 # 填充示例数据（可选）
-docker exec garden-backend flask seed
+docker exec garden-backend python scripts/create_test_data.py
 ```
 
 服务端口：
@@ -93,7 +93,7 @@ npm run dev                  # 启动Vite开发服务器 :5173
 ### 运行测试
 
 ```bash
-# 后端测试（29个用例，覆盖API/模型/安全）
+# 后端测试（83个用例，覆盖API/模型/安全）
 cd backend && python -m pytest tests/ -v
 
 # 前端生产构建
@@ -119,10 +119,10 @@ garden-asset-platform/
 │   │   ├── utils/                 # 工具模块（日志/中间件/错误处理/JWT回调）
 │   │   ├── config.py              # 多环境配置（开发/生产/测试）
 │   │   └── __init__.py            # Flask应用工厂
-│   ├── algorithm/                 # 水印算法库（DCT/LSB/矢量）
+│   ├── algorithm/                 # 水印算法库（DCT+QIM/矢量）
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
-│   ├── tests/                     # pytest测试（29个用例）
+│   ├── tests/                     # pytest测试（83个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -219,11 +219,11 @@ garden-asset-platform/
 - X-Content-Type-Options / X-Frame-Options / X-XSS-Protection
 - SQL注入防护（SQLAlchemy参数化查询）
 - 生产环境堆栈信息不泄露
-- 角色权限控制（admin → adm1/adm2/adm3 → user）
+- 角色权限控制（admin / asset_admin / license_admin / adm1 / adm2 / user）
 
 ## 环境变量
 
-参见 `backend/.env.example`，关键配置项：
+Docker 部署见 `garden-asset-platform/.env.example`；本地开发见 `backend/.env.example`。关键配置项：
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|

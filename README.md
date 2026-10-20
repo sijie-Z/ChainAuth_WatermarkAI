@@ -33,10 +33,10 @@ ChainAuth_WatermarkAI/
 ```bash
 # Docker 一键部署
 cd garden-asset-platform
-cp backend/.env.example backend/.env   # 填入必要的 API Key
+cp .env.example .env                   # Docker Compose 环境变量模板
 docker compose up -d
-docker exec garden-backend flask init-db
-docker exec garden-backend flask seed
+docker exec garden-backend python scripts/init_db.py
+docker exec garden-backend python scripts/create_test_data.py
 ```
 
 - 前端：http://localhost
@@ -52,7 +52,7 @@ python -m venv venv && source venv/bin/activate
 pip install -r requirements-dev.txt
 python scripts/init_db.py
 python run.py                     # :5000
-python -m pytest                  # 29 个用例（内存 SQLite）
+python -m pytest                  # 83 个用例（内存 SQLite）
 
 # 前端
 cd garden-asset-platform/frontend
@@ -71,9 +71,9 @@ npm run lint:check && npm run build
 | 安全 | CodeQL、Dependency Review、gitleaks、OpenSSF Scorecard、Dependabot |
 | 机器人 | Dependabot 自动合并（patch/minor）、CodeRabbit AI 审查、labeler、stale、welcome、Release Drafter |
 | 发布 | 发布分支 → `main` → 标签 `vX.Y.Z` → GitHub Release + GHCR 镜像 |
-| 自动回合并 | `main` 更新后自动创建 `main → develop` PR |
+| 自动回合并 | `main` 更新后自动创建同步提醒 issue，本地执行 `scripts/gitflow.sh sync` 走正常 PR 流程 |
 | 视觉体系 | 青绿山水 · 档案册（黛青/宣纸/宋体/朱砂），详见 [docs/UI-DESIGN.md](docs/UI-DESIGN.md) |
-| 端到端验证 | `backend/scripts/e2e_flow.py`：完整 API 流程；Playwright 5 个前端点击流用例（`npm run test:e2e`） |
+| 端到端验证 | `garden-asset-platform/backend/scripts/e2e_flow.py`：完整 API 流程；Playwright 5 个前端点击流用例（`npm run test:e2e`） |
 
 - 贡献流程：[CONTRIBUTING.md](CONTRIBUTING.md)
 - Git Flow 详解：[docs/GIT-FLOW.md](docs/GIT-FLOW.md)
@@ -90,7 +90,7 @@ bash scripts/setup-git-hooks.sh
 
 | 层级 | 技术 |
 |------|------|
-| 前端 | Vue 3.4、Vite 5、Pinia、Element Plus、ECharts、THREE.js |
+| 前端 | Vue 3.4、Vite 5、Pinia、Element Plus、ECharts |
 | 后端 | Flask 3.0、Flask-RESTful、SQLAlchemy 2、JWT、Celery |
 | 存储 | PostgreSQL、Redis、MinIO、Milvus |
 | 区块链 | FISCO BCOS 3.x |

@@ -5,6 +5,7 @@ on:
     branches: [main, develop]
   push:
     branches: [main, develop]
+  workflow_dispatch:
 
 # 最小权限：只读仓库内容
 permissions:

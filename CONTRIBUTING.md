@@ -90,7 +90,7 @@ PR 要求：
 
 - 标题符合 Conventional Commits（CI 自动校验）。
 - 描述使用模板，写明变更内容、测试方式、影响范围。
-- 至少 1 名审查者通过；所有必选检查（CI、CodeQL、Dependency Review）通过。
+- 至少 1 名审查者通过（当前单人项目为 0，见 [docs/GIT-FLOW.md](docs/GIT-FLOW.md) §5）；所有必选检查（CI、CodeQL、Dependency Review）通过。
 - 功能类 PR 使用 **Squash and merge**；`release/*`、`hotfix/*` 使用 **Merge commit** 保留历史。
 - 合并后删除分支。
 
@@ -151,7 +151,7 @@ git push -u origin hotfix/1.5.1
 | 工作流校验 | `workflow-lint.yml` | actionlint |
 | Docker | `docker-build.yml` | PR 构建后端/前端镜像 |
 | 发布说明 | `release-drafter.yml` | 自动生成草稿 |
-| 回合并 | `sync-main-into-develop.yml` | main 更新后自动创建 → develop PR |
+| 回合并提醒 | `sync-main-into-develop.yml` | main 更新后创建同步 issue（提醒本地执行 `scripts/gitflow.sh sync`） |
 | 依赖更新 | `dependabot.yml` | 每周自动 PR（目标 `develop`） |
 | 代码审查 | CodeRabbit | 自动 AI 审查（`.coderabbit.yaml`） |
 
