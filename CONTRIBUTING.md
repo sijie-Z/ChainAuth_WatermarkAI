@@ -135,7 +135,7 @@ git push -u origin hotfix/1.5.1
 
 ## 7. CI 会检查什么
 
-| 检查 | 工作流 | 说明 |
+| 检查 | 工作流 / 配置 | 说明 |
 |------|--------|------|
 | 后端测试 | `ci.yml` | Python 3.11 + pytest + 覆盖率 |
 | 前端构建 | `ci.yml` | ESLint（只读）+ Vite 构建 |

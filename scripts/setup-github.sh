@@ -116,16 +116,16 @@ JSON
 }
 JSON
 
-  echo "➜ 设置 topics"
-  gh repo edit "$REPO" \
-    --add-topic digital-watermark \
-    --add-topic blockchain \
-    --add-topic fisco-bcos \
-    --add-topic vue3 \
-    --add-topic flask \
-    --add-topic copyright-protection \
-    --add-topic ai-traceability \
-    --add-topic digital-heritage >/dev/null 2>&1 \
+  echo "➜ 设置 topics（PUT 覆盖，移除旧的 competition 标签）"
+  gh api --method PUT "repos/${REPO}/topics" \
+    -f "names[]=digital-watermark" \
+    -f "names[]=blockchain" \
+    -f "names[]=fisco-bcos" \
+    -f "names[]=vue3" \
+    -f "names[]=flask" \
+    -f "names[]=copyright-protection" \
+    -f "names[]=ai-traceability" \
+    -f "names[]=digital-heritage" >/dev/null 2>&1 \
     || echo "   (跳过：topics 设置失败)"
 
   echo "✅ 仓库设置完成"

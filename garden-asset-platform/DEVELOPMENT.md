@@ -458,21 +458,17 @@ flask reset-password user1 newpassword
 
 ## 最终统计
 
-**项目总文件数: 121个**
+**项目总文件数: 245个**（2026-10-20 统计，git 跟踪文件）
 
 | 类别 | 数量 | 说明 |
 |-----|------|------|
-| Python文件 | 52 | 后端核心代码 |
-| Vue组件 | 23 | 页面+公共组件 |
-| JavaScript文件 | 12 | 工具/配置/Hooks |
-| TypeScript定义 | 1 | 类型定义 |
-| 样式文件 | 1 | 全局样式 |
-| 配置文件 | 15 | Docker/Nginx等 |
-| 文档文件 | 10 | Markdown文档 |
-| YML/YAML | 3 | CI/API配置 |
-| JSON配置 | 2 | package.json |
+| Python文件 | 89 | 后端、算法、测试与脚本 |
+| Vue组件 | 28 | 页面 + 公共组件 |
+| JavaScript/CJS | 25 | 前端工具、配置与 API |
+| Markdown文档 | 24 | 项目与工程文档 |
+| 其他 | 79 | Docker、YAML、JSON、样式与静态资源 |
 
-**预计代码行数: ~15000行**
+**代码行数（Python + Vue + JS）: ~25,600 行**
 
 ### 核心功能完成度
 
@@ -485,7 +481,7 @@ flask reset-password user1 newpassword
 | 授权审批 | ✅ | 95% | 双重审批、合同生成、5种授权类型 |
 | AI分析 | ✅ | 80% | GLM-4/CLIP集成，需配置API Key |
 | 前端界面 | ✅ | 90% | 19页面+骨架屏+设计系统 |
-| 单元测试 | ✅ | 95% | 后端 83 个用例 + 前端 40 个用例 + 5 个 Playwright 用例，CI 全量执行 |
+| 单元测试 | ✅ | 95% | 后端 87 个用例 + 前端 40 个用例 + 5 个 Playwright 用例，CI 全量执行 |
 | Docker部署 | ✅ | 90% | 多服务编排、健康检查、HTTPS待配置 |
 | CI/CD | ✅ | 100% | Git Flow + 16 个工作流 + 机器人体系 |
 
