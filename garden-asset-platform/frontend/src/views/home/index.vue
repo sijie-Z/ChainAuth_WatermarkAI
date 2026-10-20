@@ -1375,7 +1375,7 @@ onUnmounted(() => {
   .workflow-list { grid-template-columns: 1fr; }
   .features-grid { grid-template-columns: 1fr; }
   .gardens-grid { grid-template-columns: 1fr; }
-  .garden-card.featured { grid-column: span 1; }
+  .gardens-grid .garden-card.featured { grid-column: span 1; grid-row: span 1; }
 
   .tech-row {
     grid-template-columns: 1fr;
@@ -1384,7 +1384,7 @@ onUnmounted(() => {
   }
 
   .footer { padding: 40px 20px 24px; }
-  .footer-content { grid-template-columns: 1fr; }
+  .footer .footer-content { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -58,7 +58,7 @@
               </el-select>
             </el-form-item>
             <el-form-item>
-              <el-button type="success" :loading="batchExtract.loading" @click="doBatchExtract">
+              <el-button type="primary" :loading="batchExtract.loading" @click="doBatchExtract">
                 开始提取
               </el-button>
             </el-form-item>

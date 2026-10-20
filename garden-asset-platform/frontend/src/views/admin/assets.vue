@@ -75,48 +75,47 @@
         </template>
         <template #default>
           <el-table :data="assets" stripe>
-            <el-table-column prop="asset_code" label="编码" width="180" class-name="cell-code" />
-            <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
-            <el-table-column prop="asset_type" label="类型" width="80">
+            <el-table-column prop="asset_code" label="编码" width="220" class-name="cell-code" />
+            <el-table-column label="标题" min-width="200">
+              <template #default="{ row }">
+                <div class="asset-title-cell">
+                  <span class="asset-title-text">{{ row.title }}</span>
+                  <span class="asset-title-sub">
+                    {{ row.uploader_name || '-' }} · {{ formatDate(row.created_at) }}
+                  </span>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="asset_type" label="类型" width="70">
               <template #default="{ row }">
                 <el-tag size="small">{{ getTypeName(row.asset_type) }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="status" label="状态" width="90">
+            <el-table-column prop="status" label="状态" width="80">
               <template #default="{ row }">
                 <el-tag size="small" :type="getAssetStatus(row.status).type">
                   {{ getAssetStatus(row.status).label }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="watermark_status" label="水印" width="90">
+            <el-table-column prop="watermark_status" label="水印" width="80">
               <template #default="{ row }">
                 <el-tag size="small" :type="getWatermarkStatus(row.watermark_status).type">
                   {{ getWatermarkStatus(row.watermark_status).label }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="chain_status" label="存证" width="90">
+            <el-table-column prop="chain_status" label="存证" width="80">
               <template #default="{ row }">
                 <el-tag size="small" :type="getChainStatus(row.chain_status).type">
                   {{ getChainStatus(row.chain_status).label }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="uploader" label="上传者" width="100">
-              <template #default="{ row }">
-                {{ row.uploader_name || '-' }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="created_at" label="创建时间" width="140">
-              <template #default="{ row }">
-                {{ formatDate(row.created_at) }}
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="340" fixed="right">
+            <el-table-column label="操作" width="300" fixed="right">
               <template #default="{ row }">
                 <div class="row-actions">
-                  <el-button size="small" @click="viewDetail(row.id)">查看</el-button>
+                  <el-button size="small" link type="primary" @click="viewDetail(row.id)">查看</el-button>
                   <el-button
                     v-if="row.status === 'draft' && isOwner(row)"
                     size="small"
@@ -467,6 +466,22 @@ onMounted(() => {
   font-size: 12px;
   color: $text-secondary;
   font-variant-numeric: tabular-nums;
+}
+
+.asset-title-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.asset-title-text {
+  font-weight: 500;
+  color: $text-primary;
+}
+
+.asset-title-sub {
+  font-size: 12px;
+  color: $text-secondary;
 }
 
 :deep(.el-pagination) {

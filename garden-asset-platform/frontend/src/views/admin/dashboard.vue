@@ -424,12 +424,12 @@ function getTypeTag(type) {
 }
 
 function getWatermarkStatus(status) {
-  const statusMap = { none: '未处理', pending: '处理中', embedded: '已完成', verified: '已校验', failed: '失败' }
+  const statusMap = { none: '未嵌入', pending: '处理中', embedded: '已嵌入', verified: '已验证', failed: '失败' }
   return statusMap[status] || '未知'
 }
 
 function getChainStatus(status) {
-  const statusMap = { none: '未存证', pending: '处理中', confirmed: '已确认', failed: '存证失败' }
+  const statusMap = { none: '未存证', pending: '处理中', confirmed: '已存证', failed: '存证失败' }
   return statusMap[status] || '未知'
 }
 

@@ -61,8 +61,8 @@ def create_test_assets():
                 file_format='jpg' if data['type'] == 'image' else ('shp' if data['type'] == 'vector' else 'pdf'),
                 file_size=1024*1024,
                 status='published',
-                watermark_status='pending',
-                chain_status='pending'
+                watermark_status='none',
+                chain_status='none'
             )
             db.session.add(asset)
 

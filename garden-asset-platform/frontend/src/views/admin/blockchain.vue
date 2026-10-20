@@ -125,8 +125,16 @@ const connectionClass = computed(() => ({
   'is-error': chainStatus.connected === false || chainStatus.statusFailed
 }))
 
+const NODE_STATUS_TEXT = {
+  connected: '已连接',
+  disconnected: '未连接',
+  simulated: '模拟链',
+  unknown: '未知'
+}
+
 const nodeStatusText = computed(() => {
-  return chainStatus.node_status || (chainStatus.statusFailed ? '查询失败' : '未知')
+  if (chainStatus.statusFailed) return '查询失败'
+  return NODE_STATUS_TEXT[chainStatus.node_status] || '未知'
 })
 
 function formatCount(value) {

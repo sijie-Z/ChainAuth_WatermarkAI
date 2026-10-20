@@ -49,6 +49,8 @@
 - **备份/调度**：SQLite 备份按 Flask-SQLAlchemy 的 instance 路径解析；调度器默认关闭，避免多 worker 重复执行
 - **AI**：Milvus 初始化不再依赖应用上下文；临时文件在 Windows 上可正常删除
 - **前端**：上传读取 `asset_id`、证书按嵌套结构解析、溯源读取顶层 `verified`、刷新失败清空 Pinia 登录态、角色枚举统一、后台上传路由、筛选参数、合同鉴权下载、假控件替换
+- **移动端布局**：修复园林卡片被桌面规则覆盖导致的 2px 挤压与大片空白、页脚品牌竖排；后台资产表格重排，编码不再换行、操作列不再遮挡状态
+- **状态文案**：水印/存证状态与节点状态统一为中文并覆盖 none/pending/verified 等全部取值；修正登录页演示账号密码
 - **CI**：`main → develop` 改为提醒 issue（GITHUB_TOKEN 建的 PR 不会触发必需检查）、Dependabot scope 前缀、GHCR 镜像名小写、Docker 构建补充依赖文件触发路径
 
 ### Changed

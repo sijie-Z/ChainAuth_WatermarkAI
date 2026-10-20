@@ -149,7 +149,7 @@ const form = ref({
 
 const demoAccounts = [
   { role: '管理员', username: 'admin', password: 'admin123' },
-  { role: '资产管理员', username: 'adm1', password: 'adm123' }
+  { role: '一级审批员', username: 'adm1', password: '123456' }
 ]
 
 const rules = {
