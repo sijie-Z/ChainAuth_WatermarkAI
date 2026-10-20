@@ -16,18 +16,26 @@
     <!-- 区块链状态 -->
     <div class="chain-stats">
       <div class="stat-tile">
-        <div class="stat-value">{{ chainStatus.totalCertificates }}</div>
+        <div class="stat-value">{{ formatCount(chainStatus.total_certificates) }}</div>
         <div class="stat-label">存证总数</div>
       </div>
       <div class="stat-tile">
-        <div class="stat-value">{{ chainStatus.pendingAssets }}</div>
+        <div class="stat-value">{{ formatCount(chainStatus.pending_assets) }}</div>
         <div class="stat-label">待上链资产</div>
       </div>
       <div class="stat-tile">
-        <div class="stat-value is-text" :class="{ 'is-ok': chainStatus.nodeStatus === '正常' }">
-          {{ chainStatus.nodeStatus }}
+        <div class="stat-value is-text" :class="connectionClass">{{ connectionText }}</div>
+        <div class="stat-label">节点连接</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-value is-text" :class="{ 'is-ok': chainStatus.connected === true && !chainStatus.statusFailed, 'is-error': chainStatus.statusFailed }">
+          {{ nodeStatusText }}
         </div>
         <div class="stat-label">节点状态</div>
+        <div class="stat-sub">
+          {{ chainStatus.rpc_url || 'RPC 地址未知' }}
+          <span v-if="chainStatus.simulated">· 模拟链</span>
+        </div>
       </div>
     </div>
 
@@ -87,7 +95,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
@@ -95,11 +103,35 @@ import { blockchainApi, assetApi } from '@/api/modules'
 
 const router = useRouter()
 
-const chainStatus = ref({
-  totalCertificates: 0,
-  pendingAssets: 0,
-  nodeStatus: '正常'
+// 字段与 /blockchain/status 契约保持一致；未获取到数据时保持 null，界面显示“未知”
+const chainStatus = reactive({
+  connected: null,
+  rpc_url: '',
+  simulated: null,
+  total_certificates: null,
+  pending_assets: null,
+  node_status: '',
+  statusFailed: false
 })
+
+const connectionText = computed(() => {
+  if (chainStatus.connected === true) return '已连接'
+  if (chainStatus.connected === false) return '未连接'
+  return chainStatus.statusFailed ? '查询失败' : '未知'
+})
+
+const connectionClass = computed(() => ({
+  'is-ok': chainStatus.connected === true,
+  'is-error': chainStatus.connected === false || chainStatus.statusFailed
+}))
+
+const nodeStatusText = computed(() => {
+  return chainStatus.node_status || (chainStatus.statusFailed ? '查询失败' : '未知')
+})
+
+function formatCount(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : '未知'
+}
 
 const pendingAssets = ref([])
 const certificates = ref([])
@@ -113,11 +145,27 @@ const batchRegister = ref({
 async function loadStatus() {
   try {
     const response = await blockchainApi.getStatus()
-    if (response.data.code === 200) {
-      chainStatus.value = response.data.data
+    if (response.data?.code !== 200 || !response.data.data) {
+      throw new Error('区块链状态响应异常')
     }
+    const data = response.data.data
+    // 逐字段映射，避免整包覆盖本地默认值
+    chainStatus.connected = typeof data.connected === 'boolean' ? data.connected : null
+    chainStatus.rpc_url = data.rpc_url || ''
+    chainStatus.simulated = typeof data.simulated === 'boolean' ? data.simulated : null
+    chainStatus.total_certificates = typeof data.total_certificates === 'number' ? data.total_certificates : null
+    chainStatus.pending_assets = typeof data.pending_assets === 'number' ? data.pending_assets : null
+    chainStatus.node_status = data.node_status || ''
+    chainStatus.statusFailed = false
   } catch (error) {
     console.error('加载状态失败:', error)
+    chainStatus.connected = null
+    chainStatus.rpc_url = ''
+    chainStatus.simulated = null
+    chainStatus.total_certificates = null
+    chainStatus.pending_assets = null
+    chainStatus.node_status = ''
+    chainStatus.statusFailed = true
   }
 }
 
@@ -125,12 +173,11 @@ async function loadPendingAssets() {
   try {
     const response = await assetApi.getList({
       watermark_status: 'embedded',
-      chain_status: 'pending',
+      chain_status: 'none',
       per_page: 100
     })
-    if (response.data.code === 200) {
-      pendingAssets.value = response.data.data.items
-      chainStatus.value.pendingAssets = pendingAssets.value.length
+    if (response.data?.code === 200) {
+      pendingAssets.value = response.data.data.items || []
     }
   } catch (error) {
     console.error('加载待上链资产失败:', error)
@@ -141,9 +188,8 @@ async function loadCertificates() {
   logsLoading.value = true
   try {
     const response = await blockchainApi.getHistory()
-    if (response.data.code === 200) {
-      certificates.value = response.data.data
-      chainStatus.value.totalCertificates = certificates.value.length
+    if (response.data?.code === 200) {
+      certificates.value = response.data.data || []
     }
   } catch (error) {
     console.error('加载证书失败:', error)
@@ -255,7 +301,7 @@ onMounted(() => {
 // ========== 状态台账 ==========
 .chain-stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: $spacing-xl;
   margin-bottom: $spacing-xl;
 }
@@ -294,12 +340,24 @@ onMounted(() => {
     &.is-ok {
       color: $success-color;
     }
+
+    &.is-error {
+      color: $error-color;
+    }
   }
 
   .stat-label {
     margin-top: $spacing-xs;
     font-size: 13px;
     color: $text-secondary;
+  }
+
+  .stat-sub {
+    margin-top: $spacing-xs;
+    font-family: $font-mono;
+    font-size: 11px;
+    color: $text-placeholder;
+    word-break: break-all;
   }
 }
 
@@ -368,6 +426,13 @@ onMounted(() => {
 }
 
 // ========== 响应式 ==========
+@media (max-width: 1200px) {
+  .chain-stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: $spacing-md;
+  }
+}
+
 @media (max-width: 768px) {
   .admin-blockchain {
     padding: 16px;

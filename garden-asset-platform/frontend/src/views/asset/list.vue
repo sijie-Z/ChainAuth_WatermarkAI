@@ -69,7 +69,7 @@
           <div class="filter-item">
             <el-select v-model="search.garden_id" placeholder="所属园林" clearable size="large" style="width: 160px">
               <el-option label="全部园林" value="" />
-              <el-option v-for="g in gardens" :key="g.id" :label="g.name" :value="g.id" />
+              <el-option v-for="g in gardens" :key="g.id" :label="gardensOffline ? `${g.name}（离线示例）` : g.name" :value="g.id" />
             </el-select>
           </div>
           <div class="filter-item">
@@ -77,6 +77,7 @@
               <el-option label="全部状态" value="" />
               <el-option label="已发布" value="published" />
               <el-option label="待审核" value="pending" />
+              <el-option label="已拒绝" value="rejected" />
               <el-option label="草稿" value="draft" />
             </el-select>
           </div>
@@ -84,6 +85,9 @@
             <el-icon><Search /></el-icon>
             搜索
           </el-button>
+          <el-tag v-if="gardensOffline" type="warning" size="small" effect="plain">
+            园林筛选为离线示例数据
+          </el-tag>
         </div>
       </div>
     </div>
@@ -94,11 +98,11 @@
         <span class="result-count">共 {{ pagination.total }} 项资产</span>
         <div class="view-switch">
           <el-radio-group v-model="viewMode" size="small">
-            <el-radio-button label="grid">
-              <el-icon><Grid /></el-icon>
+            <el-radio-button label="grid" aria-label="网格视图" title="网格视图">
+              <el-icon aria-hidden="true"><Grid /></el-icon>
             </el-radio-button>
-            <el-radio-button label="list">
-              <el-icon><List /></el-icon>
+            <el-radio-button label="list" aria-label="列表视图" title="列表视图">
+              <el-icon aria-hidden="true"><List /></el-icon>
             </el-radio-button>
           </el-radio-group>
         </div>
@@ -122,7 +126,12 @@
           class="asset-card"
           v-for="asset in assets"
           :key="asset.id"
+          role="button"
+          tabindex="0"
+          :aria-label="`查看资产 ${asset.title || asset.asset_code || ''}`"
           @click="viewDetail(asset.id)"
+          @keydown.enter.prevent="viewDetail(asset.id)"
+          @keydown.space.prevent="viewDetail(asset.id)"
         >
           <div class="asset-thumbnail">
             <img :src="getThumbnail(asset)" :alt="asset.title" />
@@ -240,7 +249,7 @@
 import { ref, reactive, onMounted, shallowRef } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { assetApi, gardenApi, publicApi } from '@/api/modules'
-import { Upload, Search, Grid, List, Calendar, Picture, Document, VideoCamera, Collection, Link } from '@element-plus/icons-vue'
+import { Upload, Search, Grid, List, Calendar, Picture, Document, Collection } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -249,13 +258,14 @@ const loading = ref(false)
 const statsLoading = ref(true)
 const assets = ref([])
 const gardens = ref([])
+const gardensOffline = ref(false)
 const viewMode = ref('grid')
 
 const search = reactive({
   keyword: '',
   asset_type: '',
   garden_id: '',
-  status: 'published'
+  status: ''
 })
 
 const pagination = reactive({
@@ -301,7 +311,7 @@ async function loadAssets() {
       keyword: search.keyword || undefined,
       asset_type: search.asset_type || undefined,
       garden_id: search.garden_id || undefined,
-      status: search.status || 'published'
+      status: search.status || undefined
     }
     const response = await assetApi.getList(params)
     if (response.data?.code === 200) {
@@ -322,8 +332,12 @@ async function loadGardens() {
     const response = await gardenApi.getList()
     if (response.data?.code === 200) {
       gardens.value = response.data.data || []
+      gardensOffline.value = false
     }
   } catch (error) {
+    // 接口失败时使用兜底数据，并在界面明确标注为离线示例，避免掩盖故障
+    console.error('加载园林列表失败，使用离线示例数据:', error)
+    gardensOffline.value = true
     gardens.value = [
       { id: 1, name: '拙政园', code: 'ZZY' },
       { id: 2, name: '留园', code: 'LY' },
@@ -368,12 +382,12 @@ function getTypeTag(type) {
 }
 
 function getWatermarkStatus(status) {
-  const map = { none: '未嵌入', pending: '处理中', embedded: '已嵌入' }
+  const map = { none: '未嵌入', pending: '处理中', embedded: '已嵌入', verified: '已校验', failed: '失败' }
   return map[status] || '未知'
 }
 
 function getChainStatus(status) {
-  const map = { none: '未存证', pending: '处理中', confirmed: '已存证' }
+  const map = { none: '未存证', pending: '处理中', confirmed: '已存证', failed: '存证失败' }
   return map[status] || '未知'
 }
 
@@ -570,6 +584,11 @@ onMounted(() => {
       }
     }
 
+    &:focus-visible {
+      outline: 2px solid $primary-color;
+      outline-offset: 2px;
+    }
+
     .asset-thumbnail {
       position: relative;
       height: 180px;
@@ -661,9 +680,14 @@ onMounted(() => {
         background: $bg-secondary;
         color: $text-secondary;
 
-        &.embedded, &.confirmed {
+        &.embedded, &.confirmed, &.verified {
           background: rgba($success-color, 0.1);
           color: $success-color;
+        }
+
+        &.failed {
+          background: rgba($error-color, 0.1);
+          color: $error-color;
         }
       }
     }
@@ -716,7 +740,8 @@ onMounted(() => {
 
     &.none { background: $text-placeholder; }
     &.pending { background: $warning-color; }
-    &.embedded, &.confirmed { background: $success-color; }
+    &.embedded, &.confirmed, &.verified { background: $success-color; }
+    &.failed { background: $error-color; }
   }
 
   .action-buttons {

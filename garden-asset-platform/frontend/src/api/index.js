@@ -1,12 +1,24 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import router from '@/router'
+import { useUserStore } from '@/stores/user'
+
+// 生产环境为 /api；开发环境可通过 VITE_API_BASE_URL 覆盖（默认走 vite proxy）
+const baseURL = import.meta.env.VITE_API_BASE_URL || '/api'
+
+// 登录、注册、刷新接口自身返回 401 时不应触发 token 刷新
+const AUTH_ENDPOINTS = ['/login', '/register', '/refresh']
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL,
   timeout: 30000,
   headers: { 'Content-Type': 'application/json' }
 })
+
+function isAuthEndpoint(config) {
+  const url = (config?.url || '').split('?')[0]
+  return AUTH_ENDPOINTS.some(endpoint => url === endpoint || url.endsWith(endpoint))
+}
 
 // 请求拦截器
 api.interceptors.request.use(
@@ -51,18 +63,32 @@ function processQueue(error, token = null) {
   failedQueue = []
 }
 
+// 刷新失败时同步清空 Pinia 与 localStorage，避免路由守卫仍认为已登录
+function clearAuthState() {
+  try {
+    useUserStore().clearAuth()
+  } catch {
+    localStorage.removeItem('token')
+    localStorage.removeItem('refreshToken')
+    localStorage.removeItem('user')
+  }
+}
+
 // 响应拦截器
 api.interceptors.response.use(
   response => response,
   async error => {
-    const originalRequest = error.config
+    const originalRequest = error.config || {}
 
     // Token过期，尝试刷新（带队列防止并发刷新）
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint(originalRequest)) {
       if (isRefreshing) {
+        // 排队请求同样标记为已重试，避免重试再次 401 时无限刷新
+        originalRequest._retry = true
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject })
         }).then(token => {
+          originalRequest.headers = originalRequest.headers || {}
           originalRequest.headers.Authorization = `Bearer ${token}`
           return api(originalRequest)
         })
@@ -75,23 +101,26 @@ api.interceptors.response.use(
         const refreshToken = localStorage.getItem('refreshToken')
         if (!refreshToken) throw new Error('no refresh token')
 
-        const response = await axios.post('/api/refresh', {}, {
+        const response = await axios.post(`${baseURL}/refresh`, {}, {
           headers: { Authorization: `Bearer ${refreshToken}` }
         })
 
-        if (response.data.code === 200) {
-          const newToken = response.data.data.access_token
-          localStorage.setItem('token', newToken)
-          processQueue(null, newToken)
-          originalRequest.headers.Authorization = `Bearer ${newToken}`
-          return api(originalRequest)
+        if (response.data.code !== 200) {
+          throw new Error(response.data.message || 'refresh failed')
         }
+
+        const newToken = response.data.data.access_token
+        localStorage.setItem('token', newToken)
+        processQueue(null, newToken)
+        originalRequest.headers = originalRequest.headers || {}
+        originalRequest.headers.Authorization = `Bearer ${newToken}`
+        return api(originalRequest)
       } catch (refreshError) {
         processQueue(refreshError)
-        localStorage.removeItem('token')
-        localStorage.removeItem('refreshToken')
-        localStorage.removeItem('user')
-        router.push('/login')
+        clearAuthState()
+        if (router.currentRoute.value.path !== '/login') {
+          router.push('/login')
+        }
         ElMessage.error('登录已过期，请重新登录')
         return Promise.reject(refreshError)
       } finally {
@@ -100,8 +129,8 @@ api.interceptors.response.use(
     }
 
     // 其他错误（不重复显示刷新失败的错误；静默请求不弹提示）
-    if (!error.config?._retry || error.response?.status !== 401) {
-      if (!originalRequest?.silent) {
+    if (!originalRequest._retry || error.response?.status !== 401) {
+      if (!originalRequest.silent) {
         notifyError(resolveErrorMessage(error))
       }
     }

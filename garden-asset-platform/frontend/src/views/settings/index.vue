@@ -92,6 +92,7 @@
             <div class="card-header">
               <el-icon class="card-icon"><Bell /></el-icon>
               <span>通知设置</span>
+              <el-tag size="small" type="info" effect="plain" class="local-pref-tag">本地偏好</el-tag>
             </div>
           </template>
           <div class="setting-list">
@@ -124,7 +125,7 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, watch } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { userApi } from '@/api/modules'
 import { ElMessage } from 'element-plus'
@@ -135,9 +136,10 @@ const userStore = useUserStore()
 const roleLabel = computed(() => {
   const labels = {
     admin: '超级管理员',
-    adm1: '资产管理员',
-    adm2: '授权管理员',
-    adm3: '审核员',
+    asset_admin: '资产管理员',
+    license_admin: '授权管理员',
+    adm1: '一级审批员',
+    adm2: '二级审批员',
     user: '普通用户'
   }
   return labels[userStore.userRole] || '用户'
@@ -181,11 +183,31 @@ const passwordRules = {
   ]
 }
 
-const notifications = reactive({
-  license: true,
-  asset: true,
-  system: false
-})
+// 通知开关为本地偏好，持久化在 localStorage
+const NOTIFICATION_PREF_KEY = 'notification-preferences'
+
+function loadNotificationPreferences() {
+  const defaults = { license: true, asset: true, system: false }
+  try {
+    const saved = JSON.parse(localStorage.getItem(NOTIFICATION_PREF_KEY) || 'null')
+    if (saved && typeof saved === 'object') {
+      return {
+        license: typeof saved.license === 'boolean' ? saved.license : defaults.license,
+        asset: typeof saved.asset === 'boolean' ? saved.asset : defaults.asset,
+        system: typeof saved.system === 'boolean' ? saved.system : defaults.system
+      }
+    }
+  } catch {
+    // 忽略损坏的本地数据，回退默认值
+  }
+  return defaults
+}
+
+const notifications = reactive(loadNotificationPreferences())
+
+watch(notifications, value => {
+  localStorage.setItem(NOTIFICATION_PREF_KEY, JSON.stringify(value))
+}, { deep: true })
 
 async function saveProfile() {
   saving.value = true
@@ -310,6 +332,10 @@ function changePassword() {
   .card-icon {
     font-size: 20px;
     color: $primary-color;
+  }
+
+  .local-pref-tag {
+    margin-left: auto;
   }
 }
 

@@ -60,7 +60,9 @@
             </div>
             <div class="info-item">
               <span class="info-label">水印状态</span>
-              <el-tag type="success" size="small">已嵌入</el-tag>
+              <el-tag :type="certificate.watermark_id ? 'success' : 'info'" size="small">
+                {{ certificate.watermark_id ? '已嵌入' : '未嵌入' }}
+              </el-tag>
             </div>
           </div>
         </div>
@@ -117,23 +119,20 @@
           </div>
         </div>
 
-        <!-- 验证结果 -->
-        <div class="verify-section" :class="{ verified: certificate.verified, failed: !certificate.verified }">
+        <!-- 链上存证状态 -->
+        <div class="verify-section" :class="certificate.tx_hash ? 'verified' : 'failed'">
           <el-icon class="verify-icon">
-            <CircleCheck v-if="certificate.verified" />
+            <CircleCheck v-if="certificate.tx_hash" />
             <CircleClose v-else />
           </el-icon>
           <div class="verify-text">
-            <div class="verify-title">{{ certificate.verified ? '存证验证通过' : '存证验证失败' }}</div>
+            <div class="verify-title">{{ certificate.tx_hash ? '链上存证已确认' : '尚未生成链上存证交易' }}</div>
             <div class="verify-desc">
-              {{ certificate.verified
-                ? '区块链存证数据完整，未被篡改。该证书可作为数字资产权属的区块链证据。'
-                : '区块链存证数据验证失败，数据可能被篡改。请核实数据来源。' }}
+              {{ certificate.tx_hash
+                ? '该证书对应的存证信息已写入区块链，可通过交易哈希与区块高度在链上核验。'
+                : '该资产尚未完成上链存证，请先完成水印嵌入与上链操作后再查看证书。' }}
             </div>
           </div>
-          <el-button v-if="!certificate.verified" size="small" @click="verifyAgain" class="no-print">
-            重新验证
-          </el-button>
         </div>
 
         <!-- 平台签章 -->
@@ -176,7 +175,20 @@ async function loadCertificate() {
   try {
     const response = await blockchainApi.getCertificate(route.params.id)
     if (response.data.code === 200) {
-      certificate.value = response.data.data
+      // 后端返回 { data: { certificate: {...}, asset: {...} } }
+      const payload = response.data.data || {}
+      const certificateData = payload.certificate || {}
+      const assetData = payload.asset || {}
+      certificate.value = {
+        ...assetData,
+        ...certificateData,
+        asset_title: assetData.title || certificateData.asset_title || '',
+        owner_name: certificateData.creator_name || assetData.owner_name || '',
+        confirmed_at: certificateData.confirmed_at || certificateData.created_at,
+        right_type: getOwnershipName(certificateData.ownership_type)
+      }
+    } else {
+      certificate.value = {}
     }
   } catch {
     ElMessage.error('加载证书失败')
@@ -189,18 +201,6 @@ function copyHash(hash) {
   if (!hash) return
   navigator.clipboard.writeText(hash)
   ElMessage.success('已复制到剪贴板')
-}
-
-async function verifyAgain() {
-  try {
-    const response = await blockchainApi.verify(certificate.value.asset_id)
-    if (response.data.code === 200) {
-      certificate.value.verified = response.data.data.verified
-      ElMessage.success(certificate.value.verified ? '验证通过' : '验证失败')
-    }
-  } catch {
-    ElMessage.error('验证失败')
-  }
 }
 
 function printCertificate() {
@@ -219,8 +219,14 @@ function shareCertificate() {
 }
 
 function getTypeName(type) {
+  if (!type) return '-'
   const map = { image: '影像', model: '模型', vector: '矢量', document: '文献', video: '视频' }
   return map[type] || type
+}
+
+function getOwnershipName(type) {
+  const map = { original: '原创', authorized: '授权使用', derived: '衍生作品' }
+  return map[type] || '著作权'
 }
 
 function formatDate(dateStr) {

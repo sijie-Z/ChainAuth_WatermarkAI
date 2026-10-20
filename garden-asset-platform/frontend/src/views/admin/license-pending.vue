@@ -17,14 +17,31 @@
     <div class="content-card">
       <el-table :data="applications" v-loading="loading" stripe>
         <el-table-column prop="application_code" label="申请编码" width="180" class-name="cell-code" />
-        <el-table-column prop="asset_title" label="资产标题" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="asset_code" label="资产编码" width="180" class-name="cell-code">
+          <template #default="{ row }">
+            {{ row.asset_code || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="asset_title" label="资产标题" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.asset_title || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="license_type" label="授权类型" width="120">
           <template #default="{ row }">
             <el-tag size="small">{{ getLicenseType(row.license_type) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="applicant_name" label="申请人" width="100" />
-        <el-table-column prop="purpose" label="用途" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="applicant_name" label="申请人" width="100">
+          <template #default="{ row }">
+            {{ row.applicant_name || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="purpose" label="用途" min-width="150" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.purpose || row.usage_scope || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="created_at" label="申请时间" width="140">
           <template #default="{ row }">
             {{ formatDate(row.created_at) }}
@@ -111,8 +128,9 @@ async function loadApplications() {
   loading.value = true
   try {
     const response = await licenseApi.getPending()
-    if (response.data.code === 200) {
-      applications.value = response.data.data
+    if (response.data?.code === 200) {
+      const data = response.data.data
+      applications.value = Array.isArray(data) ? data : (data?.items || [])
     }
   } catch (error) {
     ElMessage.error('加载申请失败')
@@ -127,10 +145,10 @@ function openApproveDialog(row, action) {
     title: action === 'approve' ? '审批通过' : '审批拒绝',
     action,
     applicationId: row.id,
-    assetTitle: row.asset_title,
-    applicantName: row.applicant_name,
+    assetTitle: row.asset_title || '-',
+    applicantName: row.applicant_name || '-',
     licenseType: row.license_type,
-    purpose: row.purpose,
+    purpose: row.purpose || row.usage_scope || '-',
     form: {
       comment: '',
       valid_until: null
@@ -170,7 +188,7 @@ function getLicenseType(type) {
     display: '展览展示',
     derivative: '衍生创作'
   }
-  return map[type] || type
+  return map[type] || type || '-'
 }
 
 function formatDate(dateStr) {

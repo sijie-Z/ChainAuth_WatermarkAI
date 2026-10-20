@@ -29,15 +29,27 @@
           </el-select>
         </el-form-item>
         <el-form-item>
+          <el-select v-model="search.status" placeholder="资产状态" clearable>
+            <el-option label="草稿" value="draft" />
+            <el-option label="待审核" value="pending" />
+            <el-option label="已发布" value="published" />
+            <el-option label="已驳回" value="rejected" />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
           <el-select v-model="search.watermark_status" placeholder="水印状态" clearable>
+            <el-option label="未嵌入" value="none" />
             <el-option label="已嵌入" value="embedded" />
-            <el-option label="未嵌入" value="pending" />
+            <el-option label="已验证" value="verified" />
+            <el-option label="失败" value="failed" />
           </el-select>
         </el-form-item>
         <el-form-item>
           <el-select v-model="search.chain_status" placeholder="存证状态" clearable>
+            <el-option label="未存证" value="none" />
+            <el-option label="存证中" value="pending" />
             <el-option label="已存证" value="confirmed" />
-            <el-option label="未存证" value="pending" />
+            <el-option label="失败" value="failed" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -70,17 +82,24 @@
                 <el-tag size="small">{{ getTypeName(row.asset_type) }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="watermark_status" label="水印" width="80">
+            <el-table-column prop="status" label="状态" width="90">
               <template #default="{ row }">
-                <el-tag size="small" :type="row.watermark_status === 'embedded' ? 'success' : 'info'">
-                  {{ row.watermark_status === 'embedded' ? '已嵌入' : '未嵌入' }}
+                <el-tag size="small" :type="getAssetStatus(row.status).type">
+                  {{ getAssetStatus(row.status).label }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="chain_status" label="存证" width="80">
+            <el-table-column prop="watermark_status" label="水印" width="90">
               <template #default="{ row }">
-                <el-tag size="small" :type="row.chain_status === 'confirmed' ? 'success' : 'info'">
-                  {{ row.chain_status === 'confirmed' ? '已存证' : '未存证' }}
+                <el-tag size="small" :type="getWatermarkStatus(row.watermark_status).type">
+                  {{ getWatermarkStatus(row.watermark_status).label }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="chain_status" label="存证" width="90">
+              <template #default="{ row }">
+                <el-tag size="small" :type="getChainStatus(row.chain_status).type">
+                  {{ getChainStatus(row.chain_status).label }}
                 </el-tag>
               </template>
             </el-table-column>
@@ -94,17 +113,41 @@
                 {{ formatDate(row.created_at) }}
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="240" fixed="right">
+            <el-table-column label="操作" width="340" fixed="right">
               <template #default="{ row }">
-                <el-button-group>
+                <div class="row-actions">
                   <el-button size="small" @click="viewDetail(row.id)">查看</el-button>
-                  <el-button size="small" type="primary" @click="batchWatermark(row)" :disabled="row.watermark_status === 'embedded'">
+                  <el-button
+                    v-if="row.status === 'draft' && isOwner(row)"
+                    size="small"
+                    type="primary"
+                    @click="submitPublish(row)"
+                  >
+                    提交发布
+                  </el-button>
+                  <template v-if="row.status === 'pending' && canApprove">
+                    <el-button size="small" type="success" @click="approveAsset(row)">通过</el-button>
+                    <el-button size="small" type="danger" @click="rejectAsset(row)">驳回</el-button>
+                  </template>
+                  <el-button
+                    size="small"
+                    type="primary"
+                    plain
+                    :disabled="['embedded', 'verified'].includes(row.watermark_status)"
+                    @click="batchWatermark(row)"
+                  >
                     嵌水印
                   </el-button>
-                  <el-button size="small" type="success" @click="batchChain(row)" :disabled="row.chain_status === 'confirmed' || row.watermark_status !== 'embedded'">
+                  <el-button
+                    size="small"
+                    type="success"
+                    plain
+                    :disabled="row.chain_status === 'confirmed' || !['embedded', 'verified'].includes(row.watermark_status)"
+                    @click="batchChain(row)"
+                  >
                     上链
                   </el-button>
-                </el-button-group>
+                </div>
               </template>
             </el-table-column>
           </el-table>
@@ -126,13 +169,44 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Search } from '@element-plus/icons-vue'
 import { assetApi, watermarkApi, blockchainApi } from '@/api/modules'
+import { useUserStore } from '@/stores/user'
+
+// 可审核资产的管理员角色（与后端角色枚举保持一致）
+const ASSET_APPROVER_ROLES = ['admin', 'asset_admin', 'license_admin', 'adm1', 'adm2']
+
+const WATERMARK_STATUS = {
+  none: { label: '未嵌入', type: 'info' },
+  pending: { label: '处理中', type: 'warning' },
+  embedded: { label: '已嵌入', type: 'success' },
+  verified: { label: '已验证', type: 'success' },
+  failed: { label: '失败', type: 'danger' }
+}
+
+const CHAIN_STATUS = {
+  none: { label: '未存证', type: 'info' },
+  pending: { label: '存证中', type: 'warning' },
+  confirmed: { label: '已存证', type: 'success' },
+  failed: { label: '失败', type: 'danger' }
+}
+
+const ASSET_STATUS = {
+  draft: { label: '草稿', type: 'info' },
+  pending: { label: '待审核', type: 'warning' },
+  published: { label: '已发布', type: 'success' },
+  rejected: { label: '已驳回', type: 'danger' },
+  archived: { label: '已归档', type: 'info' },
+  deleted: { label: '已删除', type: 'danger' }
+}
 
 const router = useRouter()
+const userStore = useUserStore()
+
+const canApprove = computed(() => ASSET_APPROVER_ROLES.includes(userStore.userRole))
 
 const loading = ref(false)
 const assets = ref([])
@@ -143,6 +217,7 @@ const total = ref(0)
 const search = ref({
   keyword: '',
   asset_type: '',
+  status: '',
   watermark_status: '',
   chain_status: ''
 })
@@ -173,7 +248,71 @@ function handleSearch() {
 }
 
 function goToUpload() {
-  router.push('/admin/assets/upload')
+  router.push('/assets/upload')
+}
+
+function isOwner(row) {
+  const userId = userStore.user?.id
+  if (userId === undefined || userId === null) return false
+  return [row.uploader_id, row.creator_id, row.owner_id].includes(userId)
+}
+
+async function submitPublish(row) {
+  try {
+    const response = await assetApi.publish(row.id)
+    if (response.data.code === 200) {
+      ElMessage.success('已提交发布，等待管理员审核')
+      loadAssets()
+    } else {
+      ElMessage.error(response.data.message || '提交发布失败')
+    }
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '提交发布失败')
+  }
+}
+
+async function approveAsset(row) {
+  try {
+    await ElMessageBox.confirm(`确认通过资产「${row.title}」的发布申请？`, '审核确认', {
+      confirmButtonText: '通过',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+  } catch {
+    return
+  }
+  await handleApprove(row, 'approve')
+}
+
+async function rejectAsset(row) {
+  let reason = ''
+  try {
+    const result = await ElMessageBox.prompt('请输入驳回原因（可选）', '驳回资产', {
+      confirmButtonText: '确认驳回',
+      cancelButtonText: '取消',
+      inputPlaceholder: '驳回原因'
+    })
+    reason = result.value || ''
+  } catch {
+    return
+  }
+  await handleApprove(row, 'reject', reason)
+}
+
+async function handleApprove(row, action, reason = '') {
+  try {
+    const payload = { action }
+    if (reason) payload.reason = reason
+    const response = await assetApi.approve(row.id, payload)
+    if (response.data.code === 200) {
+      ElMessage.success(action === 'approve' ? '已通过审核' : '已驳回')
+      loadAssets()
+    } else {
+      ElMessage.error(response.data.message || '审核失败')
+    }
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '审核失败')
+  }
 }
 
 function viewDetail(id) {
@@ -207,6 +346,18 @@ async function batchChain(row) {
 function getTypeName(type) {
   const map = { image: '影像', model: '模型', vector: '矢量', document: '文献', video: '视频' }
   return map[type] || type
+}
+
+function getWatermarkStatus(status) {
+  return WATERMARK_STATUS[status] || { label: status || '-', type: 'info' }
+}
+
+function getChainStatus(status) {
+  return CHAIN_STATUS[status] || { label: status || '-', type: 'info' }
+}
+
+function getAssetStatus(status) {
+  return ASSET_STATUS[status] || { label: status || '-', type: 'info' }
 }
 
 function formatDate(dateStr) {
@@ -298,6 +449,16 @@ onMounted(() => {
   gap: $spacing-lg;
   padding: 14px 0;
   border-bottom: 1px solid $border-light;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+
+  :deep(.el-button + .el-button) {
+    margin-left: 0;
+  }
 }
 
 // 台账编码使用等宽字体

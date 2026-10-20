@@ -84,7 +84,7 @@
           </el-form-item>
 
           <div class="form-row">
-            <el-checkbox v-model="rememberMe">保持登录</el-checkbox>
+            <el-checkbox v-model="rememberMe">记住用户名</el-checkbox>
             <span class="form-hint">忘记密码请联系管理员</span>
           </div>
 
@@ -124,11 +124,15 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
+
+// 管理员角色集合，与后端角色枚举保持一致
+const ADMIN_ROLES = ['admin', 'asset_admin', 'license_admin', 'adm1', 'adm2']
+const REMEMBERED_USERNAME_KEY = 'rememberedUsername'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -175,8 +179,13 @@ async function handleLogin() {
       })
 
       const role = userStore.userRole
+      if (rememberMe.value) {
+        localStorage.setItem(REMEMBERED_USERNAME_KEY, form.value.username)
+      } else {
+        localStorage.removeItem(REMEMBERED_USERNAME_KEY)
+      }
       setTimeout(() => {
-        if (['admin', 'adm1', 'adm2', 'adm3'].includes(role)) {
+        if (ADMIN_ROLES.includes(role)) {
           router.push('/admin')
         } else {
           router.push('/assets')
@@ -194,6 +203,14 @@ function fillDemo(username, password) {
   form.value.username = username
   form.value.password = password
 }
+
+onMounted(() => {
+  const remembered = localStorage.getItem(REMEMBERED_USERNAME_KEY)
+  if (remembered) {
+    form.value.username = remembered
+    rememberMe.value = true
+  }
+})
 </script>
 
 <style lang="scss" scoped>

@@ -65,13 +65,15 @@
             <el-option label="普通用户" value="user" />
             <el-option label="资产管理员" value="asset_admin" />
             <el-option label="授权管理员" value="license_admin" />
-            <el-option label="超级管理员" value="super_admin" />
+            <el-option label="一级审批员" value="adm1" />
+            <el-option label="二级审批员" value="adm2" />
+            <el-option label="超级管理员" value="admin" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
           <el-radio-group v-model="dialog.form.status">
             <el-radio label="active">正常</el-radio>
-            <el-radio label="disabled">禁用</el-radio>
+            <el-radio label="inactive">禁用</el-radio>
           </el-radio-group>
         </el-form-item>
       </el-form>
@@ -90,7 +92,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { authApi } from '@/api/modules'
+import { userApi } from '@/api/modules'
 
 const loading = ref(false)
 const users = ref([])
@@ -120,7 +122,7 @@ const dialog = ref({
 async function loadUsers() {
   loading.value = true
   try {
-    const response = await authApi.getUsers()
+    const response = await userApi.getUsers()
     if (response.data.code === 200) {
       users.value = response.data.data
     }
@@ -176,21 +178,42 @@ async function doSubmit() {
 
   dialog.value.loading = true
   try {
+    const form = dialog.value.form
     if (dialog.value.isEdit) {
-      const response = await authApi.updateUser(dialog.value.userId, dialog.value.form)
-      if (response.data.code === 200) {
-        ElMessage.success('用户更新成功')
+      // 编辑时不提交空密码
+      const payload = {
+        email: form.email,
+        role: form.role,
+        status: form.status
       }
+      if (form.password) {
+        payload.password = form.password
+      }
+      const response = await userApi.updateUser(dialog.value.userId, payload)
+      if (response.data?.code !== 200) {
+        ElMessage.error(response.data?.message || '用户更新失败')
+        return
+      }
+      ElMessage.success('用户更新成功')
     } else {
-      const response = await authApi.register(dialog.value.form)
-      if (response.data.code === 200) {
-        ElMessage.success('用户创建成功')
+      // 管理员创建用户：POST /api/users，角色/状态随请求提交
+      const response = await userApi.create({
+        username: form.username,
+        password: form.password,
+        email: form.email,
+        role: form.role,
+        status: form.status
+      })
+      if (response.data?.code !== 200) {
+        ElMessage.error(response.data?.message || '用户创建失败')
+        return
       }
+      ElMessage.success('用户创建成功')
     }
     dialog.value.visible = false
     loadUsers()
   } catch (error) {
-    ElMessage.error('操作失败')
+    ElMessage.error(error.response?.data?.message || '操作失败')
   } finally {
     dialog.value.loading = false
   }
@@ -200,8 +223,8 @@ async function toggleStatus(row) {
   const action = row.status === 'active' ? '禁用' : '启用'
   try {
     await ElMessageBox.confirm(`确定${action}该用户？`, '提示', { type: 'warning' })
-    const newStatus = row.status === 'active' ? 'disabled' : 'active'
-    const response = await authApi.updateUser(row.id, { status: newStatus })
+    const newStatus = row.status === 'active' ? 'inactive' : 'active'
+    const response = await userApi.updateUser(row.id, { status: newStatus })
     if (response.data.code === 200) {
       ElMessage.success(`${action}成功`)
       loadUsers()
@@ -216,9 +239,11 @@ function getRoleName(role) {
     user: '普通用户',
     asset_admin: '资产管理员',
     license_admin: '授权管理员',
-    super_admin: '超级管理员'
+    adm1: '一级审批员',
+    adm2: '二级审批员',
+    admin: '超级管理员'
   }
-  return map[role] || role
+  return map[role] || role || '-'
 }
 
 function getRoleType(role) {
@@ -226,7 +251,9 @@ function getRoleType(role) {
     user: 'info',
     asset_admin: 'warning',
     license_admin: 'success',
-    super_admin: 'danger'
+    adm1: 'warning',
+    adm2: 'warning',
+    admin: 'danger'
   }
   return map[role] || ''
 }

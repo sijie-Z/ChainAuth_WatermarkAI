@@ -20,7 +20,7 @@
         <el-descriptions-item label="资产编码">{{ asset.asset_code }}</el-descriptions-item>
         <el-descriptions-item label="标题">{{ asset.title }}</el-descriptions-item>
         <el-descriptions-item label="类型">{{ getTypeName(asset.asset_type) }}</el-descriptions-item>
-        <el-descriptions-item label="所属园林">{{ asset.garden_name }}</el-descriptions-item>
+        <el-descriptions-item label="所属园林">{{ asset.garden_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="水印状态">
           <StatusTag :status="asset.watermark_status || 'pending'" />
         </el-descriptions-item>
@@ -178,16 +178,19 @@ async function doSubmit() {
   submitting.value = true
   try {
     const data = {
-      asset_id: asset.value.id,
+      asset_id: asset.value.id || route.query.asset_id,
       ...form.value
     }
     const response = await licenseApi.apply(data)
-    if (response.data.code === 200) {
+    if (response.data?.code === 200) {
       ElMessage.success('申请提交成功，请等待审批')
-      router.push('/license/my')
+      // 跳转到“我的授权”，审批中的申请会出现在对应页签
+      await router.push('/license/my')
+    } else {
+      ElMessage.error(response.data?.message || '申请提交失败')
     }
   } catch (error) {
-    ElMessage.error('申请提交失败')
+    ElMessage.error(error.response?.data?.message || '申请提交失败')
   } finally {
     submitting.value = false
   }

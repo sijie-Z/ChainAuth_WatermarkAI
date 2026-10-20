@@ -20,7 +20,7 @@
       <nav class="sidebar-nav" aria-label="后台导航">
         <span v-if="!isCollapsed" class="nav-section-title">档案目录</span>
         <ul class="nav-list">
-          <li v-for="item in menuItems" :key="item.path">
+          <li v-for="item in visibleMenuItems" :key="item.path">
             <router-link
               v-if="!item.children"
               :to="item.path"
@@ -90,8 +90,10 @@
             <el-icon><Menu /></el-icon>
           </button>
           <el-breadcrumb separator="/" class="breadcrumb">
-            <el-breadcrumb-item :to="{ path: '/admin' }">
-              <el-icon><HomeFilled /></el-icon>
+            <el-breadcrumb-item>
+              <router-link to="/admin" class="breadcrumb-home" aria-label="后台首页" title="后台首页">
+                <el-icon aria-hidden="true"><HomeFilled /></el-icon>
+              </router-link>
             </el-breadcrumb-item>
             <el-breadcrumb-item v-for="item in breadcrumbs" :key="item.path">
               {{ item.title }}
@@ -102,7 +104,14 @@
         <div class="topbar-right">
           <router-link to="/home" class="topbar-link">返回前台</router-link>
 
-          <el-button :icon="isFullscreen ? Close : FullScreen" circle class="icon-btn" @click="toggleFullscreen" />
+          <el-button
+            :icon="isFullscreen ? Close : FullScreen"
+            circle
+            class="icon-btn"
+            :aria-label="isFullscreen ? '退出全屏' : '进入全屏'"
+            :title="isFullscreen ? '退出全屏' : '进入全屏'"
+            @click="toggleFullscreen"
+          />
 
           <el-dropdown trigger="click" @command="handleCommand">
             <button class="user-dropdown" type="button">
@@ -165,30 +174,43 @@ const userRole = computed(() => userStore.userRole)
 const roleLabel = computed(() => {
   const labels = {
     admin: '超级管理员',
-    adm1: '资产管理员',
-    adm2: '授权管理员',
-    adm3: '审核员',
+    asset_admin: '资产管理员',
+    license_admin: '授权管理员',
+    adm1: '一级审批员',
+    adm2: '二级审批员',
     user: '普通用户'
   }
   return labels[userRole.value] || '用户'
 })
 
+// 与后端角色枚举一致：user/asset_admin/license_admin/adm1/adm2/admin
+const ASSET_ROLES = ['admin', 'asset_admin', 'adm1', 'adm2']
+// 后端审批角色：adm1/asset_admin 参与一级审批，adm2/license_admin 参与二级审批
+const LICENSE_ROLES = ['admin', 'asset_admin', 'license_admin', 'adm1', 'adm2']
+const ADMIN_ROLES = ['admin', 'asset_admin', 'license_admin', 'adm1', 'adm2']
+
 const menuItems = shallowRef([
-  { path: '/admin', label: '仪表盘', icon: DataLine },
-  { path: '/admin/assets', label: '资产管理', icon: Picture },
-  { path: '/admin/watermark', label: '水印管理', icon: Stamp },
-  { path: '/admin/blockchain', label: '存证管理', icon: Link },
+  { path: '/admin', label: '仪表盘', icon: DataLine, roles: ADMIN_ROLES },
+  { path: '/admin/assets', label: '资产管理', icon: Picture, roles: ASSET_ROLES },
+  { path: '/admin/watermark', label: '水印管理', icon: Stamp, roles: ASSET_ROLES },
+  { path: '/admin/blockchain', label: '存证管理', icon: Link, roles: ASSET_ROLES },
   {
     path: 'license',
     label: '授权审批',
     icon: Document,
+    roles: LICENSE_ROLES,
     children: [
       { path: '/admin/license/pending', label: '待审批' },
       { path: '/admin/license/approved', label: '已审批' }
     ]
   },
-  { path: '/admin/users', label: '用户管理', icon: User }
+  { path: '/admin/users', label: '用户管理', icon: User, roles: ['admin'] }
 ])
+
+// 菜单按当前角色过滤；移动端抽屉行为保持不变
+const visibleMenuItems = computed(() => {
+  return menuItems.value.filter(item => !item.roles || item.roles.includes(userRole.value))
+})
 
 const breadcrumbs = computed(() => {
   const matched = route.matched.filter(item => item.meta.title)
@@ -590,6 +612,14 @@ onUnmounted(() => {
     font-weight: 400;
 
     &.is-link:hover { color: $primary-color; }
+  }
+
+  .breadcrumb-home {
+    display: inline-flex;
+    align-items: center;
+    color: $text-secondary;
+
+    &:hover { color: $primary-color; }
   }
 
   :deep(.el-breadcrumb__item:last-child .el-breadcrumb__inner) {

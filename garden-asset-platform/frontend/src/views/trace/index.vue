@@ -68,7 +68,9 @@
           <!-- 区块链存证 -->
           <el-descriptions title="区块链存证" :column="2" border class="result-block">
             <el-descriptions-item label="存证状态">
-              <el-tag type="success">已存证</el-tag>
+              <el-tag :type="traceResult.certificate_id ? 'success' : 'info'">
+                {{ traceResult.certificate_id ? '已存证' : '未存证' }}
+              </el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="证书ID">
               <el-link type="primary" @click="viewCertificate">{{ traceResult.certificate_id }}</el-link>
@@ -87,11 +89,7 @@
         </template>
 
         <template v-else>
-          <EmptyState description="未找到对应的资产记录，可能为未授权使用">
-            <template #action>
-              <el-button type="primary">举报侵权</el-button>
-            </template>
-          </EmptyState>
+          <EmptyState :description="traceResult.message || '未找到对应的资产记录，可能为未授权使用'" />
         </template>
       </section>
     </div>
@@ -136,10 +134,28 @@ async function doTrace() {
     }
 
     if (response.data.code === 200) {
-      traceResult.value = response.data.data
+      // verified / message 在响应顶层，资产信息在 data 内
+      const payload = response.data
+      traceResult.value = {
+        ...(payload.data || {}),
+        verified: payload.verified === true,
+        message: payload.message || ''
+      }
+    } else {
+      ElMessage.error(response.data.message || '溯源查询失败')
     }
   } catch (error) {
-    ElMessage.error('溯源查询失败')
+    // 未找到资产时后端可能返回 404 且 verified=false，同样展示为溯源失败
+    const payload = error.response?.data
+    if (payload && payload.verified === false) {
+      traceResult.value = {
+        ...(payload.data || {}),
+        verified: false,
+        message: payload.message || '未找到对应的资产记录'
+      }
+    } else {
+      ElMessage.error(payload?.message || '溯源查询失败')
+    }
   } finally {
     loading.value = false
   }

@@ -267,7 +267,7 @@
         </div>
 
         <div v-else class="garden-empty">
-          <p>暂无园林数据。启动后端并执行 <code>flask seed</code> 后即可看到档案。</p>
+          <p>暂无园林数据。启动后端并执行 <code>python scripts/create_test_data.py</code> 后即可看到档案。</p>
         </div>
       </div>
     </section>
@@ -380,8 +380,11 @@ const techStack = [
   { name: 'Docker Compose', description: '一键部署与健康检查', role: '运行层' }
 ]
 
+// 管理员角色集合，与后端角色枚举保持一致
+const ADMIN_ROLES = ['admin', 'asset_admin', 'license_admin', 'adm1', 'adm2']
+
 const isLoggedIn = computed(() => userStore.isLoggedIn)
-const isAdmin = computed(() => ['admin', 'adm1', 'adm2', 'adm3'].includes(userStore.userRole))
+const isAdmin = computed(() => ADMIN_ROLES.includes(userStore.userRole))
 const username = computed(() => userStore.username)
 
 const statsTargets = ref({ assets: 0, watermarked: 0, chained: 0, licenses: 0 })

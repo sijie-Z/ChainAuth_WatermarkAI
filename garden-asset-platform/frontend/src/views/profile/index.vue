@@ -51,7 +51,7 @@
               <el-icon class="info-icon"><Clock /></el-icon>
               <div class="info-content">
                 <span class="info-label">最近活跃</span>
-                <span class="info-value">{{ formatDate(user?.last_login) || '刚刚' }}</span>
+                <span class="info-value">{{ formatDate(user?.last_login_at) || '-' }}</span>
               </div>
             </div>
           </div>
@@ -60,24 +60,15 @@
 
       <!-- 右侧：内容区 -->
       <div class="profile-main">
-        <!-- 统计卡片 -->
+        <!-- 统计卡片（仅展示有真实接口的统计） -->
         <div class="stats-grid">
           <div class="stat-card">
             <div class="stat-icon">
               <el-icon><Picture /></el-icon>
             </div>
             <div class="stat-info">
-              <span class="stat-value">{{ stats.assets }}</span>
-              <span class="stat-label">拥有资产</span>
-            </div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon">
-              <el-icon><Stamp /></el-icon>
-            </div>
-            <div class="stat-info">
-              <span class="stat-value">{{ stats.watermarks }}</span>
-              <span class="stat-label">水印记录</span>
+              <span class="stat-value">{{ stats.assets ?? '-' }}</span>
+              <span class="stat-label">我的资产</span>
             </div>
           </div>
           <div class="stat-card">
@@ -85,17 +76,8 @@
               <el-icon><Document /></el-icon>
             </div>
             <div class="stat-info">
-              <span class="stat-value">{{ stats.licenses }}</span>
-              <span class="stat-label">授权申请</span>
-            </div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon">
-              <el-icon><Link /></el-icon>
-            </div>
-            <div class="stat-info">
-              <span class="stat-value">{{ stats.blockchain }}</span>
-              <span class="stat-label">链上存证</span>
+              <span class="stat-value">{{ stats.licenses ?? '-' }}</span>
+              <span class="stat-label">我的授权</span>
             </div>
           </div>
         </div>
@@ -134,10 +116,10 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useUserStore } from '@/stores/user'
+import api from '@/api'
 import { licenseApi } from '@/api/modules'
-import { ElMessage } from 'element-plus'
 import {
-  User, Stamp, Calendar, Clock, Picture, Document, Link, Check, ArrowLeft
+  User, Stamp, Calendar, Clock, Picture, Document, Check, ArrowLeft
 } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
@@ -146,9 +128,10 @@ const username = computed(() => userStore.username)
 const roleLabel = computed(() => {
   const labels = {
     admin: '超级管理员',
-    adm1: '资产管理员',
-    adm2: '授权管理员',
-    adm3: '审核员',
+    asset_admin: '资产管理员',
+    license_admin: '授权管理员',
+    adm1: '一级审批员',
+    adm2: '二级审批员',
     user: '普通用户'
   }
   return labels[userStore.userRole] || '用户'
@@ -157,11 +140,28 @@ const roleLabel = computed(() => {
 const loading = ref(false)
 const activities = ref([])
 const stats = ref({
-  assets: 0,
-  watermarks: 0,
-  licenses: 0,
-  blockchain: 0
+  assets: null,
+  licenses: null
 })
+
+async function loadStats() {
+  const [assetsResult, licensesResult] = await Promise.allSettled([
+    api.get('/assets/my', { params: { page: 1, per_page: 1 } }),
+    licenseApi.getMyLicenses({ page: 1, per_page: 1 })
+  ])
+
+  if (assetsResult.status === 'fulfilled' && assetsResult.value.data?.code === 200) {
+    stats.value.assets = assetsResult.value.data.data?.total ?? 0
+  } else if (assetsResult.status === 'rejected') {
+    console.error('加载资产统计失败:', assetsResult.reason)
+  }
+
+  if (licensesResult.status === 'fulfilled' && licensesResult.value.data?.code === 200) {
+    stats.value.licenses = licensesResult.value.data.data?.total ?? 0
+  } else if (licensesResult.status === 'rejected') {
+    console.error('加载授权统计失败:', licensesResult.reason)
+  }
+}
 
 async function loadActivities() {
   loading.value = true
@@ -204,6 +204,7 @@ function formatDate(dateStr) {
 }
 
 onMounted(() => {
+  loadStats()
   loadActivities()
 })
 </script>
@@ -377,7 +378,7 @@ onMounted(() => {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: $spacing-lg;
   margin-bottom: $spacing-2xl;
 }

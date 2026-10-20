@@ -23,7 +23,10 @@ export const assetApi = {
   create: (formData) => api.post('/assets/upload', formData),
   update: (id, data) => api.put(`/assets/${id}`, data),
   delete: (id) => api.delete(`/assets/${id}`),
-  download: (id) => api.get(`/assets/${id}/download`, { responseType: 'blob' })
+  download: (id) => api.get(`/assets/${id}/download`, { responseType: 'blob' }),
+  my: (params) => api.get('/assets/my', { params }),
+  publish: (id) => api.post(`/assets/${id}/publish`),
+  approve: (id, data) => api.post(`/assets/${id}/approve`, data)
 }
 
 // 园林相关API
@@ -71,12 +74,14 @@ export const licenseApi = {
   getPending: () => api.get('/license/pending'),
   getApproved: (params) => api.get('/license/approved', { params }),
   approve: (applicationId, data) => api.post(`/license/approve/${applicationId}`, data),
-  getMyLicenses: (params) => api.get('/license/my', { params })
+  getMyLicenses: (params) => api.get('/license/my', { params }),
+  myApplications: (params) => api.get('/license/my-applications', { params })
 }
 
 // 用户管理API
 export const userApi = {
   getUsers: () => api.get('/users'),
+  create: (data) => api.post('/users', data),
   updateUser: (userId, data) => api.put(`/users/${userId}`, data),
   getCurrentUser: () => api.get('/user/current'),
   updateProfile: (data) => api.put('/user/current', data),

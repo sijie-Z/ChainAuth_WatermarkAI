@@ -85,8 +85,35 @@ describe('user store', () => {
     expect(localStorage.getItem('user')).toBeNull()
   })
 
+  it('clearAuth resets token, refresh token and user together', async () => {
+    api.post.mockResolvedValue({
+      data: {
+        code: 200,
+        data: {
+          access_token: 'access-2',
+          refresh_token: 'refresh-2',
+          user: { id: 3, username: 'carol', role: 'asset_admin' }
+        }
+      }
+    })
+
+    const store = useUserStore()
+    await store.login({ username: 'carol', password: 'secret' })
+
+    store.clearAuth()
+
+    expect(store.token).toBe('')
+    expect(store.refreshToken).toBe('')
+    expect(store.user).toBeNull()
+    expect(store.isLoggedIn).toBe(false)
+    expect(localStorage.getItem('token')).toBeNull()
+    expect(localStorage.getItem('refreshToken')).toBeNull()
+    expect(localStorage.getItem('user')).toBeNull()
+  })
+
   it('initStore restores a saved session', () => {
     localStorage.setItem('token', 'saved-token')
+    localStorage.setItem('refreshToken', 'saved-refresh')
     localStorage.setItem('user', JSON.stringify({ id: 2, username: 'bob', role: 'adm1' }))
 
     const store = useUserStore()
@@ -95,6 +122,7 @@ describe('user store', () => {
     expect(store.isLoggedIn).toBe(true)
     expect(store.username).toBe('bob')
     expect(store.userRole).toBe('adm1')
+    expect(store.refreshToken).toBe('saved-refresh')
   })
 
   it('register reports success and failure without logging in', async () => {

@@ -108,6 +108,19 @@
       <h2 class="progress-title">上传进度</h2>
       <el-progress :percentage="uploadProgress" :status="uploadStatus" />
       <p class="progress-message" aria-live="polite">{{ uploadMessage }}</p>
+
+      <!-- 上传成功：明确草稿状态并提供提交发布入口 -->
+      <div v-if="createdAssetId" class="draft-panel">
+        <el-alert type="info" :closable="false" show-icon title="资产已保存为草稿">
+          草稿不会出现在公开的资产档案中。点击「提交发布」后进入管理员审核，审核通过后才会公开展示。
+        </el-alert>
+        <div class="progress-actions">
+          <el-button type="primary" :loading="publishing" @click="submitPublish">
+            提交发布
+          </el-button>
+          <el-button @click="goToDetail">查看资产详情</el-button>
+        </div>
+      </div>
     </section>
   </div>
 </template>
@@ -128,6 +141,8 @@ const uploading = ref(false)
 const uploadProgress = ref(0)
 const uploadStatus = ref('')
 const uploadMessage = ref('')
+const createdAssetId = ref('')
+const publishing = ref(false)
 
 const form = ref({
   file: null,
@@ -193,6 +208,7 @@ async function submitUpload() {
   }
 
   uploading.value = true
+  createdAssetId.value = ''
   uploadProgress.value = 10
   uploadMessage.value = '正在上传文件…'
   uploadStatus.value = ''
@@ -211,44 +227,82 @@ async function submitUpload() {
 
     const response = await assetApi.create(formData)
     if (response.data.code !== 200) {
-      throw new Error(response.data.message)
+      throw new Error(response.data.message || '创建资产失败')
     }
 
-    const assetId = response.data.data.id
-    uploadProgress.value = 50
-    uploadMessage.value = '资产创建成功'
+    const assetId = response.data.data?.asset_id
+    if (!assetId) {
+      throw new Error('上传响应缺少资产ID')
+    }
 
+    createdAssetId.value = assetId
+    uploadProgress.value = 50
+    uploadMessage.value = '资产创建成功，当前为草稿状态'
+
+    // 文件已入库，后续水印/存证失败不应把整个上传判定为失败
+    let watermarkEmbedded = false
     if (form.value.auto_watermark) {
       uploadMessage.value = '正在嵌入水印…'
       uploadProgress.value = 60
-      await watermarkApi.embed(assetId)
-      uploadProgress.value = 75
-      uploadMessage.value = '水印嵌入成功'
+      try {
+        await watermarkApi.embed(assetId)
+        watermarkEmbedded = true
+        uploadProgress.value = 75
+        uploadMessage.value = '水印嵌入成功'
+      } catch (error) {
+        uploadMessage.value = '水印嵌入失败，资产已保存为草稿'
+        ElMessage.warning(error.response?.data?.message || '水印嵌入失败，可稍后在资产详情页重试')
+      }
     }
 
-    if (form.value.auto_chain && form.value.auto_watermark) {
+    if (form.value.auto_chain && form.value.auto_watermark && watermarkEmbedded) {
       uploadMessage.value = '正在上链存证…'
       uploadProgress.value = 85
-      await blockchainApi.register(assetId)
-      uploadProgress.value = 95
-      uploadMessage.value = '存证完成'
+      try {
+        await blockchainApi.register(assetId)
+        uploadProgress.value = 95
+        uploadMessage.value = '存证完成'
+      } catch (error) {
+        ElMessage.warning(error.response?.data?.message || '上链存证失败，可稍后在资产详情页重试')
+      }
     }
 
     uploadProgress.value = 100
     uploadStatus.value = 'success'
-    uploadMessage.value = '上传完成'
+    uploadMessage.value = '上传完成，资产已保存为草稿'
 
-    ElMessage.success('资产上传成功')
-
-    setTimeout(() => {
-      router.push(`/assets/${assetId}`)
-    }, 1500)
+    ElMessage.success('资产上传成功，当前为草稿状态')
   } catch (error) {
     uploadStatus.value = 'exception'
-    uploadMessage.value = '上传失败：' + (error.message || '未知错误')
+    uploadMessage.value = '上传失败：' + (error.response?.data?.message || error.message || '未知错误')
     ElMessage.error('上传失败')
   } finally {
     uploading.value = false
+  }
+}
+
+async function submitPublish() {
+  if (!createdAssetId.value || publishing.value) return
+
+  publishing.value = true
+  try {
+    const response = await assetApi.publish(createdAssetId.value)
+    if (response.data.code === 200) {
+      ElMessage.success('已提交发布，请等待管理员审核')
+      router.push(`/assets/${createdAssetId.value}`)
+    } else {
+      ElMessage.error(response.data.message || '提交发布失败')
+    }
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '提交发布失败')
+  } finally {
+    publishing.value = false
+  }
+}
+
+function goToDetail() {
+  if (createdAssetId.value) {
+    router.push(`/assets/${createdAssetId.value}`)
   }
 }
 
@@ -258,6 +312,8 @@ function resetForm() {
   form.value.file = null
   uploadProgress.value = 0
   uploadMessage.value = ''
+  uploadStatus.value = ''
+  createdAssetId.value = ''
 }
 
 onMounted(() => {
@@ -395,6 +451,16 @@ onMounted(() => {
   margin-top: 10px;
   font-size: 13px;
   color: $text-secondary;
+}
+
+.draft-panel {
+  margin-top: 18px;
+
+  .progress-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+  }
 }
 
 @media (max-width: 768px) {

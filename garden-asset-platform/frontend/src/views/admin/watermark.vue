@@ -123,18 +123,33 @@ const batchExtract = ref({
 
 async function loadAssets() {
   try {
-    const [pendingRes, embeddedRes] = await Promise.all([
-      assetApi.getList({ watermark_status: 'pending', per_page: 100 }),
-      assetApi.getList({ watermark_status: 'embedded', per_page: 100 })
+    // 后端 watermark_status 枚举：none / embedded / verified / failed
+    // 待嵌入只取 none；可提取的资产包括 embedded 与 verified
+    const [pendingRes, embeddedRes, verifiedRes] = await Promise.all([
+      assetApi.getList({ watermark_status: 'none', per_page: 100 }),
+      assetApi.getList({ watermark_status: 'embedded', per_page: 100 }),
+      assetApi.getList({ watermark_status: 'verified', per_page: 100 })
     ])
 
-    if (pendingRes.data.code === 200) {
-      pendingAssets.value = pendingRes.data.data.items
+    if (pendingRes.data?.code === 200) {
+      pendingAssets.value = pendingRes.data.data.items || []
     }
-    if (embeddedRes.data.code === 200) {
-      embeddedAssets.value = embeddedRes.data.data.items
+
+    const embeddedItems = []
+    for (const res of [embeddedRes, verifiedRes]) {
+      if (res.data?.code === 200) {
+        embeddedItems.push(...(res.data.data.items || []))
+      }
     }
+    // 两个下拉的数据源不同，且合并时去重
+    const seen = new Set()
+    embeddedAssets.value = embeddedItems.filter(asset => {
+      if (seen.has(asset.id)) return false
+      seen.add(asset.id)
+      return true
+    })
   } catch (error) {
+    console.error('加载资产失败:', error)
     ElMessage.error('加载资产失败')
   }
 }

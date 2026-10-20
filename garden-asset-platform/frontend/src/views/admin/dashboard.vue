@@ -10,7 +10,7 @@
           </h1>
           <p class="welcome-subtitle">欢迎回到苏州园林数字资产平台管理后台</p>
         </div>
-        <div class="welcome-actions">
+        <div v-if="canManageAssets" class="welcome-actions">
           <el-button type="primary" class="btn-action" @click="$router.push('/admin/assets')">
             <el-icon><Upload /></el-icon>
             管理资产
@@ -118,7 +118,6 @@
         <div class="activity-card">
           <div class="card-header">
             <h3 class="card-title">最近活动</h3>
-            <el-button type="primary" link size="small">查看全部</el-button>
           </div>
           <el-skeleton v-if="loading" animated :rows="4" style="padding: 16px" />
           <div v-else class="activity-list">
@@ -162,7 +161,7 @@
                   </span>
                 </div>
               </div>
-              <el-button type="primary" size="small" round>处理</el-button>
+              <el-button type="primary" size="small" round @click="goToPendingLicenses">处理</el-button>
             </div>
           </div>
         </div>
@@ -174,7 +173,7 @@
       <div class="table-card">
         <div class="card-header">
           <h3 class="card-title">最近上传资产</h3>
-          <el-button type="primary" link>查看全部 →</el-button>
+          <el-button type="primary" link @click="$router.push('/admin/assets')">查看全部 →</el-button>
         </div>
         <el-skeleton v-if="loading" animated :rows="4" style="padding: 16px" />
         <el-table v-else :data="recentAssets" style="width: 100%" class="modern-table">
@@ -216,8 +215,8 @@
           </el-table-column>
           <el-table-column prop="created_at" label="上传时间" width="160" />
           <el-table-column label="操作" width="100" fixed="right">
-            <template #default>
-              <el-button type="primary" link size="small">查看</el-button>
+            <template #default="{ row }">
+              <el-button type="primary" link size="small" @click="viewAsset(row)">查看</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -227,14 +226,14 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick, shallowRef } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick, shallowRef } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { useRouter } from 'vue-router'
-import { assetApi, licenseApi, blockchainApi } from '@/api/modules'
+import { assetApi, licenseApi } from '@/api/modules'
 import {
   Picture, Stamp, Link, Document, Upload, Clock,
-  ArrowUp, ArrowDown, User, Setting, Files, Grid,
-  CircleCheck, Timer, WarningFilled
+  ArrowUp, ArrowDown, User,
+  CircleCheck, Timer
 } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 
@@ -273,17 +272,29 @@ const animatedValues = reactive({
   pendingLicenses: 0
 })
 
-// API 数据缓存
-let pieData = []
-let trendData = []
+// API 数据缓存（用于图表切换时重新绘制）
+let rawStats = null
 
-// 快捷操作
-const quickActions = shallowRef([
-  { label: '资产管理', icon: Picture, path: '/admin/assets', gradient: 'linear-gradient(135deg, #2f6b5a, #1c5145)' },
-  { label: '水印处理', icon: Stamp, path: '/admin/watermark', gradient: 'linear-gradient(135deg, #4c6e8a, #34506a)' },
-  { label: '存证管理', icon: Link, path: '/admin/blockchain', gradient: 'linear-gradient(135deg, #6d5b7a, #584765)' },
-  { label: '用户管理', icon: User, path: '/admin/users', gradient: 'linear-gradient(135deg, #b07a2a, #8f6322)' }
-])
+// 管理后台角色集合（与后端角色枚举一致）
+const ASSET_ROLES = ['admin', 'asset_admin', 'adm1', 'adm2']
+// 后端审批角色：adm1/asset_admin 参与一级审批，adm2/license_admin 参与二级审批
+const LICENSE_ROLES = ['admin', 'asset_admin', 'license_admin', 'adm1', 'adm2']
+
+const currentRole = computed(() => userStore.userRole)
+const canManageAssets = computed(() => ASSET_ROLES.includes(currentRole.value))
+
+// 快捷操作（按角色过滤）
+const quickActionDefs = [
+  { label: '资产管理', icon: Picture, path: '/admin/assets', gradient: 'linear-gradient(135deg, #2f6b5a, #1c5145)', roles: ASSET_ROLES },
+  { label: '水印处理', icon: Stamp, path: '/admin/watermark', gradient: 'linear-gradient(135deg, #4c6e8a, #34506a)', roles: ASSET_ROLES },
+  { label: '存证管理', icon: Link, path: '/admin/blockchain', gradient: 'linear-gradient(135deg, #6d5b7a, #584765)', roles: ASSET_ROLES },
+  { label: '授权审批', icon: Document, path: '/admin/license/pending', gradient: 'linear-gradient(135deg, #b07a2a, #8f6322)', roles: LICENSE_ROLES },
+  { label: '用户管理', icon: User, path: '/admin/users', gradient: 'linear-gradient(135deg, #5b675f, #414b43)', roles: ['admin'] }
+]
+
+const quickActions = computed(() => {
+  return quickActionDefs.filter(action => action.roles.includes(currentRole.value))
+})
 
 // 最近活动
 const recentActivities = shallowRef([])
@@ -300,15 +311,19 @@ const recentAssets = ref([])
 async function loadDashboardData() {
   loading.value = true
   try {
-    const [statsRes, pendingLicensesRes] = await Promise.all([
+    // 使用 allSettled：单个接口失败（如权限不足返回 403）不影响其余模块渲染
+    const [statsSettled, pendingLicensesSettled] = await Promise.allSettled([
       assetApi.getDetail('stats'),
       licenseApi.getPending()
     ])
 
     let stats = null
-    if (statsRes.data?.code === 200) {
-      stats = statsRes.data.data
+    if (statsSettled.status === 'fulfilled' && statsSettled.value.data?.code === 200) {
+      stats = statsSettled.value.data.data
+    } else if (statsSettled.status === 'rejected') {
+      console.error('加载统计数据失败:', statsSettled.reason)
     }
+    rawStats = stats
 
     // 统计卡片
     if (stats) {
@@ -328,20 +343,6 @@ async function loadDashboardData() {
       })
     }
 
-    // 饼图数据
-    if (stats?.by_type) {
-      const typeColors = { image: '#2f6b5a', vector: '#7397ab', model: '#c1925b', document: '#789262', video: '#a6402f' }
-      const typeNames = { image: '图片', vector: '矢量', model: '模型', document: '文档', video: '视频' }
-      pieData = Object.entries(stats.by_type)
-        .filter(([, v]) => v > 0)
-        .map(([k, v]) => ({ value: v, name: typeNames[k] || k, itemStyle: { color: typeColors[k] || '#5b675f' } }))
-    }
-
-    // 趋势数据
-    if (stats?.watermark_trends?.length) {
-      trendData = stats.watermark_trends
-    }
-
     // 最近活动
     if (stats?.recent_activities?.length) {
       const actionIcons = { upload: Picture, embed: Stamp, extract: Stamp, register: Link, approve: Document, login: User }
@@ -357,9 +358,13 @@ async function loadDashboardData() {
     }
 
     // 待办事项（来自待审批授权）
-    const pendingApps = pendingLicensesRes.data?.code === 200
-      ? (pendingLicensesRes.data.data?.items || pendingLicensesRes.data.data || [])
-      : []
+    let pendingApps = []
+    if (pendingLicensesSettled.status === 'fulfilled' && pendingLicensesSettled.value.data?.code === 200) {
+      const data = pendingLicensesSettled.value.data.data
+      pendingApps = data?.items || data || []
+    } else if (pendingLicensesSettled.status === 'rejected') {
+      console.error('加载待审批授权失败:', pendingLicensesSettled.reason)
+    }
     if (Array.isArray(pendingApps) && pendingApps.length > 0) {
       todoList.value = pendingApps.slice(0, 5).map(app => ({
         id: app.id,
@@ -419,12 +424,12 @@ function getTypeTag(type) {
 }
 
 function getWatermarkStatus(status) {
-  const statusMap = { none: '未处理', pending: '处理中', embedded: '已完成' }
+  const statusMap = { none: '未处理', pending: '处理中', embedded: '已完成', verified: '已校验', failed: '失败' }
   return statusMap[status] || '未知'
 }
 
 function getChainStatus(status) {
-  const statusMap = { none: '未存证', pending: '处理中', confirmed: '已确认' }
+  const statusMap = { none: '未存证', pending: '处理中', confirmed: '已确认', failed: '存证失败' }
   return statusMap[status] || '未知'
 }
 
@@ -469,12 +474,34 @@ function animateNumbers() {
   })
 }
 
+// 按本周/本月构建资产类型分布数据
+function buildPieData() {
+  const byType = (chartType.value === 'month'
+    ? (rawStats?.by_type_month || rawStats?.by_type)
+    : (rawStats?.by_type_week || rawStats?.by_type))
+  if (!byType) return []
+
+  const typeColors = { image: '#2f6b5a', vector: '#7397ab', model: '#c1925b', document: '#789262', video: '#a6402f' }
+  const typeNames = { image: '图片', vector: '矢量', model: '模型', document: '文档', video: '视频' }
+  return Object.entries(byType)
+    .filter(([, v]) => v > 0)
+    .map(([k, v]) => ({ value: v, name: typeNames[k] || k, itemStyle: { color: typeColors[k] || '#5b675f' } }))
+}
+
+// 本周取最近 7 条趋势，本月取最近 30 条
+function buildTrendData() {
+  const trends = rawStats?.watermark_trends || []
+  if (!Array.isArray(trends) || trends.length === 0) return []
+  return trends.slice(chartType.value === 'week' ? -7 : -30)
+}
+
 // 初始化图表
 function initCharts() {
   // 资产类型分布图
   if (assetChartRef.value) {
     if (assetChart) assetChart.dispose()
     assetChart = echarts.init(assetChartRef.value)
+    const pieData = buildPieData()
     const defaultPieData = [
       { value: 0, name: '暂无数据', itemStyle: { color: '#d8e1da' } }
     ]
@@ -517,6 +544,7 @@ function initCharts() {
 
     let dates = []
     let counts = []
+    const trendData = buildTrendData()
     if (trendData.length > 0) {
       dates = trendData.map(d => d.date?.substring(5) || d.date) // MM-DD
       counts = trendData.map(d => d.count)
@@ -576,10 +604,24 @@ function initCharts() {
   }
 }
 
+// 本周/本月切换时真正重绘图表
+watch(chartType, () => {
+  nextTick(() => initCharts())
+})
+
 // 窗口大小变化时重绘图表
 function handleResize() {
   assetChart?.resize()
   watermarkChart?.resize()
+}
+
+function viewAsset(row) {
+  if (!row?.id) return
+  router.push(`/assets/${row.id}`)
+}
+
+function goToPendingLicenses() {
+  router.push('/admin/license/pending')
 }
 
 onMounted(() => {
@@ -1076,7 +1118,8 @@ onUnmounted(() => {
 
       &.none { background: $text-placeholder; }
       &.pending { background: $warning-color; }
-      &.embedded, &.confirmed { background: $success-color; }
+      &.embedded, &.confirmed, &.verified { background: $success-color; }
+      &.failed { background: $error-color; }
     }
   }
 }
