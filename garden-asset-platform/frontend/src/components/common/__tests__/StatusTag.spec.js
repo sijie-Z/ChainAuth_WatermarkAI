@@ -15,6 +15,14 @@ describe('StatusTag', () => {
     expect(wrapper.classes()).toContain('error')
   })
 
+  it('uses domain-specific text for none status', () => {
+    const watermark = mount(StatusTag, { props: { status: 'none', kind: 'watermark' } })
+    expect(watermark.text()).toContain('未嵌入')
+
+    const chain = mount(StatusTag, { props: { status: 'none', kind: 'chain' } })
+    expect(chain.text()).toContain('未存证')
+  })
+
   it('falls back to the raw status with neutral tone', () => {
     const wrapper = mount(StatusTag, { props: { status: 'mystery' } })
     expect(wrapper.text()).toContain('mystery')

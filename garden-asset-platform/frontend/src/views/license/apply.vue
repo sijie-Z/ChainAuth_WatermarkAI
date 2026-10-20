@@ -22,10 +22,10 @@
         <el-descriptions-item label="类型">{{ getTypeName(asset.asset_type) }}</el-descriptions-item>
         <el-descriptions-item label="所属园林">{{ asset.garden_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="水印状态">
-          <StatusTag :status="asset.watermark_status || 'pending'" />
+          <StatusTag :status="asset.watermark_status || 'none'" kind="watermark" />
         </el-descriptions-item>
         <el-descriptions-item label="存证状态">
-          <StatusTag :status="asset.chain_status || 'pending'" />
+          <StatusTag :status="asset.chain_status || 'none'" kind="chain" />
         </el-descriptions-item>
       </el-descriptions>
     </el-card>

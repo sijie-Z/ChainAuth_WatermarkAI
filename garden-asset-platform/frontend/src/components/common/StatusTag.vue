@@ -10,6 +10,7 @@ import { computed } from 'vue'
 
 const props = defineProps({
   status: { type: String, default: 'pending' },
+  kind: { type: String, default: 'default' },
   type: { type: String, default: 'default' },
   size: { type: String, default: 'small' },
   effect: { type: String, default: 'light' }
@@ -31,8 +32,20 @@ const statusConfig = {
   none: { text: '未处理', tone: 'neutral' }
 }
 
+const NONE_TEXT = {
+  watermark: '未嵌入',
+  chain: '未存证',
+  license: '未生效',
+  default: '未处理'
+}
+
 const tone = computed(() => statusConfig[props.status]?.tone || 'neutral')
-const statusText = computed(() => statusConfig[props.status]?.text || props.status)
+const statusText = computed(() => {
+  if (props.status === 'none') {
+    return NONE_TEXT[props.kind] || NONE_TEXT.default
+  }
+  return statusConfig[props.status]?.text || props.status
+})
 </script>
 
 <style lang="scss" scoped>

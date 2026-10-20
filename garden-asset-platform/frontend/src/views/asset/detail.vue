@@ -87,7 +87,7 @@
                 <template #header>
                   <div class="card-header">
                     <span>水印状态</span>
-                    <StatusTag :status="asset.watermark_status || 'pending'" />
+                    <StatusTag :status="asset.watermark_status || 'none'" kind="watermark" />
                   </div>
                 </template>
                 <div v-if="asset.watermark_id" class="status-item">
@@ -109,7 +109,7 @@
                 </el-button>
                 <el-button
                   v-else
-                  type="success"
+                  type="primary"
                   style="width: 100%; margin-top: 12px"
                   :loading="extracting"
                   @click="extractWatermark"
@@ -123,7 +123,7 @@
                 <template #header>
                   <div class="card-header">
                     <span>区块链存证</span>
-                    <StatusTag :status="asset.chain_status || 'pending'" />
+                    <StatusTag :status="asset.chain_status || 'none'" kind="chain" />
                   </div>
                 </template>
                 <div v-if="asset.chain_tx_hash" class="status-item">
@@ -146,7 +146,7 @@
                 </el-button>
                 <el-button
                   v-else
-                  type="success"
+                  type="primary"
                   style="width: 100%; margin-top: 12px"
                   @click="viewCertificate"
                 >

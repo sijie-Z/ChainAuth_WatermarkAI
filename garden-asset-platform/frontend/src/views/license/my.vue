@@ -38,44 +38,44 @@
         </template>
         <template #default>
           <el-table :data="licenses" stripe>
-            <el-table-column label="编码" width="180">
+            <el-table-column label="编码" width="170">
               <template #default="{ row }">
                 <span class="mono">{{ row.license_code || row.application_code || '-' }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="资产标题" min-width="200" show-overflow-tooltip>
+            <el-table-column label="资产标题" min-width="170" show-overflow-tooltip>
               <template #default="{ row }">
                 {{ row.asset_title || '-' }}
               </template>
             </el-table-column>
-            <el-table-column label="资产编码" width="180">
+            <el-table-column label="资产编码" width="160">
               <template #default="{ row }">
                 <span class="mono">{{ row.asset_code || '-' }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="license_type" label="类型" width="100">
+            <el-table-column prop="license_type" label="类型" width="85">
               <template #default="{ row }">
                 <el-tag size="small">{{ getLicenseType(row.license_type) }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="status" label="状态" width="90">
+            <el-table-column prop="status" label="状态" width="80">
               <template #default="{ row }">
                 <el-tag :type="getStatusMeta(row.status).type" size="small">
                   {{ getStatusMeta(row.status).label }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="end_time" label="有效期" width="140">
+            <el-table-column prop="end_time" label="有效期" width="110">
               <template #default="{ row }">
                 {{ row.end_time ? formatDate(row.end_time) : '-' }}
               </template>
             </el-table-column>
-            <el-table-column prop="created_at" label="申请时间" width="140">
+            <el-table-column prop="created_at" label="申请时间" width="110">
               <template #default="{ row }">
                 {{ formatDate(row.created_at) || '-' }}
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="160" fixed="right">
+            <el-table-column label="操作" width="130" fixed="right">
               <template #default="{ row }">
                 <el-button size="small" @click="viewDetail(row)">详情</el-button>
                 <el-button

@@ -110,7 +110,7 @@
       <p class="progress-message" aria-live="polite">{{ uploadMessage }}</p>
 
       <!-- 上传成功：明确草稿状态并提供提交发布入口 -->
-      <div v-if="createdAssetId" class="draft-panel">
+      <div v-if="createdAssetId && !uploading" class="draft-panel">
         <el-alert type="info" :closable="false" show-icon title="资产已保存为草稿">
           草稿不会出现在公开的资产档案中。点击「提交发布」后进入管理员审核，审核通过后才会公开展示。
         </el-alert>

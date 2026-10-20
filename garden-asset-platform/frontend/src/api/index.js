@@ -23,6 +23,16 @@ function isAuthEndpoint(config) {
 // 请求拦截器
 api.interceptors.request.use(
   config => {
+    // FormData 必须让浏览器自行设置 multipart 边界；沿用实例默认的
+    // application/json 会让后端完全收不到文件字段。
+    if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+      if (typeof config.headers?.delete === 'function') {
+        config.headers.delete('Content-Type')
+      } else if (config.headers) {
+        delete config.headers['Content-Type']
+      }
+    }
+
     const token = localStorage.getItem('token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
