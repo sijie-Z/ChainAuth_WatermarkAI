@@ -18,8 +18,8 @@ from app.models.log import OperationLog
 
 logger = logging.getLogger(__name__)
 
-# 记录本进程创建的矢量临时解压目录，清理时只允许删除这些目录
-_VECTOR_TEMP_DIRS = set()
+# 记录本进程创建的矢量临时解压目录：shp 路径 -> 临时目录
+_VECTOR_TEMP_DIRS = {}
 
 
 class WatermarkService:
@@ -81,7 +81,6 @@ class WatermarkService:
         os.makedirs(base_dir, exist_ok=True)
         extract_dir = tempfile.mkdtemp(prefix='vector_', dir=base_dir)
         root_real = os.path.realpath(extract_dir)
-        _VECTOR_TEMP_DIRS.add(root_real)
         max_total = current_app.config.get('VECTOR_EXTRACT_MAX_BYTES', 200 * 1024 * 1024)
 
         try:
@@ -100,12 +99,13 @@ class WatermarkService:
             for root, _, files in os.walk(extract_dir):
                 for name in files:
                     if name.lower().endswith('.shp'):
-                        return os.path.join(root, name)
+                        shp_path = os.path.join(root, name)
+                        _VECTOR_TEMP_DIRS[shp_path] = root_real
+                        return shp_path
 
             raise ValueError('矢量压缩包中未找到 .shp 文件')
         except Exception:
             shutil.rmtree(extract_dir, ignore_errors=True)
-            _VECTOR_TEMP_DIRS.discard(root_real)
             raise
 
     @staticmethod
@@ -114,20 +114,13 @@ class WatermarkService:
         if not path:
             return
 
-        parent = os.path.realpath(os.path.dirname(path))
-        base_dir = os.path.realpath(current_app.config.get('UPLOAD_FOLDER', './uploads'))
-        try:
-            inside_uploads = os.path.commonpath([base_dir, parent]) == base_dir
-        except ValueError:
-            inside_uploads = False
-
-        # 只删除本进程创建、且位于 uploads 目录内的临时目录
-        if not inside_uploads or parent not in _VECTOR_TEMP_DIRS:
+        # 只删除本进程创建时登记的目录；rmtree 的目标不来自调用方路径
+        extract_dir = _VECTOR_TEMP_DIRS.pop(path, None)
+        if not extract_dir:
             return
 
         import shutil
-        shutil.rmtree(parent, ignore_errors=True)
-        _VECTOR_TEMP_DIRS.discard(parent)
+        shutil.rmtree(extract_dir, ignore_errors=True)
 
     @staticmethod
     def embed_watermark(asset, user=None, watermark_path=None):

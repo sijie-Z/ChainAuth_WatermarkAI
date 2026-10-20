@@ -40,8 +40,9 @@ APScheduler==3.10.4
 
 # Watermark algorithm
 opencv-python-headless==4.8.1.78
-geopandas==0.14.4
+geopandas==1.1.2
 shapely==2.0.6
-# GeoPandas 0.14.4 适配 Fiona 1.10；1.9.6 的 wheel 含 GDAL 3.6.4（CVE-2023-45853）
+# GeoPandas 1.1 使用 pyogrio 做 I/O；fiona 1.10 修复了内置 GDAL 的 CVE-2023-45853
+pyogrio==0.13.0
 fiona==1.10.1
 pandas==2.2.3
