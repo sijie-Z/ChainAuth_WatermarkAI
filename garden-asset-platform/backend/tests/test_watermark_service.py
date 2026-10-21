@@ -4,7 +4,6 @@
 覆盖 WatermarkService 的正常分支、错误分支与资源清理逻辑；
 算法调用一律用假实现替代，不产生大图/大文件。
 """
-import ast
 import os
 import uuid
 import zipfile
