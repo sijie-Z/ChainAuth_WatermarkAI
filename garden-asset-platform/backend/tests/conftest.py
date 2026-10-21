@@ -1,6 +1,12 @@
 """
 测试配置
 """
+import os
+
+# 测试不依赖外部 Redis。不关闭时每次 create_app 都会等待 localhost:6379
+# 连接超时（约 4 秒），整套用例的耗时会被显著放大；限流会自动降级到内存实现。
+os.environ.setdefault('REDIS_URL', '')
+
 import pytest
 from app import create_app
 from app.extensions import db
