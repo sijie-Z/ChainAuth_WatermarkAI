@@ -1,6 +1,6 @@
 {
   "name": "garden-asset-frontend",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "苏州园林数字资产安全分发与溯源系统前端",
   "author": "苏州园林数字资产平台团队",
   "license": "MIT",
@@ -21,7 +21,7 @@
     "@element-plus/icons-vue": "^2.3.1",
     "axios": "^1.6.2",
     "dayjs": "^1.11.10",
-    "echarts": "^5.4.3",
+    "echarts": "^6.1.0",
     "element-plus": "^2.4.4",
     "lodash-es": "^4.17.21",
     "nprogress": "^0.2.0",
@@ -42,16 +42,15 @@
     "prettier": "^3.1.1",
     "sass": "^1.70.0",
     "terser": "^5.24.0",
-    "unplugin-auto-import": "^0.17.3",
-    "unplugin-vue-components": "^0.26.0",
+    "unplugin-auto-import": "^21.1.0",
+    "unplugin-vue-components": "^32.1.0",
     "vite": "^8.3.5",
     "vitest": "^5.0.5"
   },
   "overrides": {
     "test-exclude": {
       "glob": "10.5.0"
-    },
-    "unimport": "3.14.4"
+    }
   },
   "engines": {
     "node": ">=22.0.0"
