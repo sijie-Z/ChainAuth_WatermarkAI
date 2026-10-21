@@ -43,8 +43,10 @@ def _extract_bits(image_array, watermark_length, method='dct', alpha=DEFAULT_ALP
         else:
             channel_bits.append(lsb_extract(channel_array, watermark_length))
 
+    # 小尺寸候选图的 DCT 容量可能不足，按实际可用比特数表决
+    length = min((len(bits) for bits in channel_bits), default=0)
     voted = []
-    for index in range(watermark_length):
+    for index in range(length):
         ones = sum(bits[index] for bits in channel_bits)
         voted.append(1 if ones * 2 >= len(channel_bits) else 0)
     return voted
@@ -53,6 +55,8 @@ def _extract_bits(image_array, watermark_length, method='dct', alpha=DEFAULT_ALP
 def _decode_valid_id(image_array, alpha=DEFAULT_ALPHA):
     """只解码 ID 位并用格式校验，避免把随机比特误判为水印 ID"""
     bits = _extract_bits(image_array, ID_TOTAL_BITS, 'dct', alpha)
+    if len(bits) < ID_TOTAL_BITS:
+        return None
     watermark_id = bits_to_id(bits)
     if watermark_id and ID_PATTERN.match(watermark_id):
         return watermark_id

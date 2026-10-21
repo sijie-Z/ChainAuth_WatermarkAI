@@ -93,7 +93,7 @@ npm run dev                  # 启动Vite开发服务器 :5173
 ### 运行测试
 
 ```bash
-# 后端测试（88个用例，覆盖API/模型/安全）
+# 后端测试（90个用例，覆盖API/模型/安全）
 cd backend && python -m pytest tests/ -v
 
 # 前端生产构建
@@ -122,7 +122,7 @@ garden-asset-platform/
 │   ├── algorithm/                 # 水印算法库（DCT+QIM/矢量）
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
-│   ├── tests/                     # pytest测试（88个用例）
+│   ├── tests/                     # pytest测试（90个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
