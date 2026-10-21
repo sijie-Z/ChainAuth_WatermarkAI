@@ -1,6 +1,6 @@
 {
   "name": "garden-asset-frontend",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "苏州园林数字资产安全分发与溯源系统前端",
   "author": "苏州园林数字资产平台团队",
   "license": "MIT",
@@ -27,31 +27,31 @@
     "nprogress": "^0.2.0",
     "pinia": "^2.1.7",
     "qs": "^6.11.2",
-    "vue": "^3.4.0",
+    "vue": "^3.5.42",
     "vue-router": "^4.2.5"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",
-    "@vitejs/plugin-vue": "^4.5.2",
-    "@vitest/coverage-v8": "^3.2.6",
+    "@vitejs/plugin-vue": "^6.0.10",
+    "@vitest/coverage-v8": "^5.0.5",
     "@vue/eslint-config-prettier": "^9.0.0",
     "@vue/test-utils": "^2.5.1",
     "eslint": "^8.56.0",
     "eslint-plugin-vue": "^9.19.2",
-    "jsdom": "^25.0.1",
+    "jsdom": "^29.1.1",
     "prettier": "^3.1.1",
-    "sass": "^1.69.5",
+    "sass": "^1.70.0",
     "terser": "^5.24.0",
     "unplugin-auto-import": "^0.17.3",
     "unplugin-vue-components": "^0.26.0",
-    "vite": "^5.0.10",
-    "vitest": "^3.2.6"
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
   },
   "overrides": {
-    "tinypool": "2.1.2",
     "test-exclude": {
       "glob": "10.5.0"
-    }
+    },
+    "unimport": "3.14.4"
   },
   "engines": {
     "node": ">=22.0.0"

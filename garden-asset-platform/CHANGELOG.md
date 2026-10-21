@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## [1.6.0] - 2026-10-21
+
+### Changed
+- 前端工具链：Vite 8.3（Rolldown）、@vitejs/plugin-vue 6、Vitest 5、@vitest/coverage-v8 5、jsdom 29、sass 1.99；分包配置改为函数形式
+- 后端依赖：Flask 3.1.3、Flask-JWT-Extended 4.7.4、Flask-Cors 6.0.5、gunicorn 26.2、cryptography 50.0.2、Pillow 13、geopandas 1.1.2、fiona 1.10.1、pyogrio 0.13、requests 2.34.2、python-dotenv 1.2.4
+- 安全：显式 pin PyJWT 2.15.1；`zhipuai` 因与安全版 PyJWT 的元数据冲突改为可选安装（需 GLM 对话时另行安装）
+- 前端 npm audit 告警 17 → 9（0 critical）；后端 requirements 的 OSV 扫描无 high/critical
+
+### Fixed
+- 水印缩放恢复遇到容量不足的小尺寸候选图时不再抛 `IndexError`
+- 注册日志写入失败不再把已创建用户判为注册失败
+- 溯源接口正式支持 `.webp`
+- 园林列表返回实时已发布资产数
+
+### Tests
+- 后端 194 个用例，覆盖率 57%（auth 98%、license 100%、watermark 100%）；CI 覆盖率门槛提升到 55%
+- 前端 41 个 Vitest、5 个 Playwright 点击流
+
 ## [1.5.0] - 2026-10-19
 
 ### Added
@@ -8,7 +26,7 @@
 - **机器人**：Dependabot（目标 `develop`，patch/minor 自动合并）、CodeRabbit、labeler、stale、welcome、Release Drafter、`main → develop` 回合并提醒
 - **视觉体系 v2「青绿山水 · 档案册」**：黛青/宣纸/墨/印章朱砂令牌，宋体标题 + 等宽数据字体；重做首页、登录、注册、后台壳、仪表盘、资产目录、证书、溯源与错误页
 - **前端测试基座**：Vitest + @vue/test-utils + jsdom，覆盖工具函数、状态组件与用户 store，并接入 CI
-- **后端安全回归**：新增限流 429、安全响应头、健康检查用例（后端共 88 个用例）
+- **后端安全回归**：新增限流 429、安全响应头、健康检查用例（后端共 90 个用例）
 - **鲁棒性测试**：JPEG q50、噪声、50%–150% 缩放、非 8 倍数尺寸的回归覆盖
 - **前端 E2E**：Playwright 5 个点击流用例，覆盖首页、移动端导航、溯源页、管理员登录、普通用户浏览资产，并接入 `e2e.yml`
 - **矢量水印**：新增 SHP/ZIP 上传、嵌入、提取的算法与 API 回归，包含无 vr 的溯源场景
@@ -57,6 +75,8 @@
 - **授权列表**：重排列宽，固定操作列不再遮挡申请时间
 - **CI**：`main → develop` 改为提醒 issue（GITHUB_TOKEN 建的 PR 不会触发必需检查）、Dependabot scope 前缀、GHCR 镜像名小写、Docker 构建补充依赖文件触发路径
 - **前端依赖安全**：升级 `vitest==3.2.6`，并通过 npm overrides 将 `tinypool` 固定到 2.1.2、将 `test-exclude` 的 `glob` 固定到 10.5.0，修复 GHSA-5xrq-8626-4rwp、GHSA-85c8-ppgw-ccpr、GHSA-5gmw-xhrv-c9v3、GHSA-5j98-mcp5-4vw2（critical/high）；41 个前端测试与构建保持通过
+- **注册/溯源契约**：注册日志写入失败不再把已创建用户判为注册失败；溯源接口正式支持 `.webp` 并补回归测试
+- **水印缩放恢复**：小尺寸候选图容量不足时安全跳过，不再抛 `IndexError`（issue #31）
 - **园林统计**：`Garden.to_dict` 改为实时统计已发布资产数，首页园林卡片不再恒显示 0 件资产
 - **CI 修复**：actionlint 的未使用循环变量、PR 标题检查补充 `statuses: write`、welcome action 输入改为下划线命名；CodeQL 路径检查改用临时目录登记表 + `commonpath` 校验；Scorecard 增加手动触发
 - **Dependabot 策略**：安全更新固定指向默认分支 `main`，因此 main 接受 `dependabot/*` 并跳过其标题/commit 检查；自动合并按目标分支选择 merge commit 或 squash
