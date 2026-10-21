@@ -208,7 +208,8 @@ class TestApproveBranches:
         record = client.get('/api/license/my', headers=auth_header).get_json()['data']['items'][0]
         start = datetime.fromisoformat(record['start_time'])
         end = datetime.fromisoformat(record['end_time'])
-        assert (end - start).days == 90
+        # 允许毫秒级时间差，避免 CI 上因微秒抖动得到 89 天
+        assert abs((end - start).total_seconds() - 90 * 86400) < 60
 
     def test_second_level_rejection_creates_no_license(
         self, client, auth_header, adm1_header, adm2_header, sample_asset, app
