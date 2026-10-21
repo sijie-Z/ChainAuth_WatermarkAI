@@ -417,6 +417,17 @@ class AssetUploadResource(Resource):
         )
 
         db.session.add(asset)
+        db.session.flush()
+
+        # 缩略图失败不应影响上传本身，前端会在缺图时回退到占位图
+        if asset_type == 'image':
+            try:
+                from app.utils.thumbnails import generate_thumbnail_set
+                detail_path, _ = generate_thumbnail_set(file_path, asset.id)
+                asset.thumbnail_path = detail_path
+            except Exception as e:
+                current_app.logger.warning(f'缩略图生成失败: {e}', exc_info=True)
+
         db.session.commit()
 
         # 记录日志
@@ -439,6 +450,42 @@ class AssetUploadResource(Resource):
                 'file_hash': file_hash
             }
         }, 200
+
+
+class AssetThumbnailResource(Resource):
+    """资产缩略图（公开只读，URL 使用不可枚举的资产 UUID）"""
+
+    def get(self, asset_id):
+        asset = Asset.query.get(asset_id)
+        if not asset or asset.status == 'deleted':
+            return {'code': 404, 'message': '缩略图不存在'}, 404
+
+        try:
+            safe_id = str(uuid.UUID(str(asset_id)))
+        except (ValueError, TypeError, AttributeError):
+            return {'code': 404, 'message': '缩略图不存在'}, 404
+
+        from flask import send_from_directory
+        from app.utils.thumbnails import thumbnail_dir
+
+        # 列表用 640px 卡片图，详情用 1600px 大图；旧数据缺少卡片图时回退到大图
+        size = (request.args.get('size') or '').strip()
+        filename = f'{safe_id}-card.jpg' if size == 'card' else f'{safe_id}.jpg'
+        full_path = os.path.join(thumbnail_dir(), filename)
+        if not os.path.isfile(full_path):
+            if size != 'card':
+                return {'code': 404, 'message': '缩略图不存在'}, 404
+            filename = f'{safe_id}.jpg'
+            if not os.path.isfile(os.path.join(thumbnail_dir(), filename)):
+                return {'code': 404, 'message': '缩略图不存在'}, 404
+
+        return send_from_directory(
+            thumbnail_dir(),
+            filename,
+            mimetype='image/jpeg',
+            conditional=True,
+            max_age=86400
+        )
 
 
 class AssetDownloadResource(Resource):

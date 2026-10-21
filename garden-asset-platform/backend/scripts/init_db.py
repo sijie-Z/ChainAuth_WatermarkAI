@@ -47,109 +47,25 @@ def create_admin_user():
 
 
 def create_gardens():
-    """创建苏州园林数据"""
+    """创建或刷新苏州园林档案数据"""
     print("Creating gardens data...")
 
-    gardens_data = [
-        {
-            'name': '拙政园',
-            'code': 'ZZY',
-            'description': '拙政园位于江苏省苏州市姑苏区，是江南古典园林的代表作品。',
-            'location': '苏州市姑苏区东北街178号',
-            'build_year': 1509,
-            'area_size': 5.2,
-            'heritage_level': '世界文化遗产'
-        },
-        {
-            'name': '留园',
-            'code': 'LY',
-            'description': '留园是中国大型古典私家园林，以园内建筑布置精巧、奇石众多而著称。',
-            'location': '苏州市姑苏区留园路338号',
-            'build_year': 1593,
-            'area_size': 2.3,
-            'heritage_level': '世界文化遗产'
-        },
-        {
-            'name': '狮子林',
-            'code': 'SZL',
-            'description': '狮子林是苏州四大名园之一，以湖山奇石、洞壑深邃而享誉盛名。',
-            'location': '苏州市姑苏区园林路23号',
-            'build_year': 1342,
-            'area_size': 1.1,
-            'heritage_level': '世界文化遗产'
-        },
-        {
-            'name': '网师园',
-            'code': 'WSY',
-            'description': '网师园是苏州园林中型古典山水宅园代表作品，以小巧精致著称。',
-            'location': '苏州市姑苏区带城桥路阔家头巷11号',
-            'build_year': 1174,
-            'area_size': 0.6,
-            'heritage_level': '世界文化遗产'
-        },
-        {
-            'name': '沧浪亭',
-            'code': 'CLT',
-            'description': '沧浪亭是苏州最古老的园林，是苏州四大名园之一。',
-            'location': '苏州市姑苏区人民路沧浪亭街3号',
-            'build_year': 1044,
-            'area_size': 1.1,
-            'heritage_level': '世界文化遗产'
-        },
-        {
-            'name': '耦园',
-            'code': 'OY',
-            'description': '耦园三面临水，一面临街，前后设有河埠。',
-            'location': '苏州市姑苏区小新桥巷6号',
-            'build_year': 1874,
-            'area_size': 0.8,
-            'heritage_level': '世界文化遗产'
-        },
-        {
-            'name': '艺圃',
-            'code': 'YP',
-            'description': '艺圃是一座建于明代嘉靖年间的古典园林。',
-            'location': '苏州市姑苏区文衙弄5号',
-            'build_year': 1541,
-            'area_size': 0.4,
-            'heritage_level': '世界文化遗产'
-        },
-        {
-            'name': '环秀山庄',
-            'code': 'HXSZ',
-            'description': '环秀山庄以假山堆叠奇巧著称，是研究中国园林假山艺术的典范。',
-            'location': '苏州市姑苏区景德路272号',
-            'build_year': 1847,
-            'area_size': 0.2,
-            'heritage_level': '世界文化遗产'
-        },
-        {
-            'name': '怡园',
-            'code': 'YY',
-            'description': '怡园是苏州园林中建造较晚的一座，集苏州各园林之大成。',
-            'location': '苏州市姑苏区人民路343号',
-            'build_year': 1874,
-            'area_size': 0.6,
-            'heritage_level': '市级文保单位'
-        },
-        {
-            'name': '可园',
-            'code': 'KY',
-            'description': '可园与沧浪亭隔水相望，是苏州现存唯一的书院园林。',
-            'location': '苏州市姑苏区人民路708号',
-            'build_year': 1723,
-            'area_size': 0.5,
-            'heritage_level': '市级文保单位'
-        }
-    ]
+    from app.seed_data import GARDENS as gardens_data
 
+    created = 0
     for garden_data in gardens_data:
-        if not Garden.query.filter_by(code=garden_data['code']).first():
+        garden = Garden.query.filter_by(code=garden_data['code']).first()
+        if not garden:
             garden = Garden(**garden_data)
             db.session.add(garden)
+            created += 1
+        else:
+            # 重复执行时刷新资料，保证本地库与种子数据一致
+            for key, value in garden_data.items():
+                setattr(garden, key, value)
 
     db.session.commit()
-    print(f"Created {len(gardens_data)} gardens!")
+    print(f"Gardens ready: {len(gardens_data)} (created {created})")
 
 
 def create_test_users():

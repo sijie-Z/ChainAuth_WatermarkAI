@@ -130,11 +130,12 @@ def register_api_resources(app):
         AssetListResource, AssetResource, AssetUploadResource,
         AssetDownloadResource, AssetFavoriteResource, AssetStatsResource,
         MyAssetsResource, AssetTagsResource, AssetPublishResource, AssetApproveResource,
-        PublicStatsResource
+        AssetThumbnailResource, PublicStatsResource
     )
     api.add_resource(PublicStatsResource, '/stats')
     api.add_resource(AssetListResource, '/assets')
     api.add_resource(AssetResource, '/assets/<string:asset_id>')
+    api.add_resource(AssetThumbnailResource, '/assets/<string:asset_id>/thumbnail')
     api.add_resource(AssetUploadResource, '/assets/upload')
     api.add_resource(AssetDownloadResource, '/assets/<string:asset_id>/download')
     api.add_resource(AssetFavoriteResource, '/assets/<string:asset_id>/favorite')
