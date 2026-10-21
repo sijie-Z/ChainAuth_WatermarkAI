@@ -64,7 +64,7 @@
           <div class="filter-item search-input">
             <el-input
               v-model="search.keyword"
-              placeholder="搜索资产名称或编码..."
+              placeholder="搜索标题、编码或描述..."
               prefix-icon="Search"
               clearable
               size="large"
@@ -72,7 +72,7 @@
             />
           </div>
           <div class="filter-item">
-            <el-select v-model="search.asset_type" placeholder="资产类型" clearable size="large" style="width: 140px">
+            <el-select v-model="search.asset_type" placeholder="资产类型" clearable size="large" style="width: 140px" @change="handleSearch">
               <el-option label="全部类型" value="" />
               <el-option label="影像" value="image" />
               <el-option label="三维模型" value="model" />
@@ -82,18 +82,26 @@
             </el-select>
           </div>
           <div class="filter-item">
-            <el-select v-model="search.garden_id" placeholder="所属园林" clearable size="large" style="width: 160px">
+            <el-select v-model="search.garden_id" placeholder="所属园林" clearable size="large" style="width: 160px" @change="handleSearch">
               <el-option label="全部园林" value="" />
               <el-option v-for="g in gardens" :key="g.id" :label="gardensOffline ? `${g.name}（离线示例）` : g.name" :value="g.id" />
             </el-select>
           </div>
           <div class="filter-item">
-            <el-select v-model="search.status" placeholder="状态" clearable size="large" style="width: 120px">
+            <el-select v-model="search.status" placeholder="状态" clearable size="large" style="width: 120px" @change="handleSearch">
               <el-option label="全部状态" value="" />
               <el-option label="已发布" value="published" />
-              <el-option label="待审核" value="pending" />
-              <el-option label="已拒绝" value="rejected" />
-              <el-option label="草稿" value="draft" />
+              <el-option v-if="canSeeAllStatuses" label="待审核" value="pending" />
+              <el-option v-if="canSeeAllStatuses" label="已拒绝" value="rejected" />
+              <el-option v-if="canSeeAllStatuses" label="草稿" value="draft" />
+            </el-select>
+          </div>
+          <div class="filter-item">
+            <el-select v-model="search.sort" size="large" style="width: 130px" aria-label="排序方式" @change="handleSearch">
+              <el-option label="最新上传" value="newest" />
+              <el-option label="最多浏览" value="popular" />
+              <el-option label="最多下载" value="downloads" />
+              <el-option label="最早上传" value="oldest" />
             </el-select>
           </div>
           <el-button type="primary" size="large" @click="handleSearch">
@@ -255,7 +263,7 @@
           layout="total, sizes, prev, pager, next, jumper"
           background
           @size-change="loadAssets"
-          @current-change="loadAssets"
+          @current-change="handlePageChange"
         />
       </div>
 
@@ -274,10 +282,14 @@
 import { ref, reactive, computed, onMounted, watch, shallowRef } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { assetApi, gardenApi, publicApi } from '@/api/modules'
+import { useUserStore } from '@/stores/user'
 import { Upload, Search, Grid, List, Calendar, Picture, Document, Collection } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const route = useRoute()
+const userStore = useUserStore()
+const ADMIN_ROLES = ['admin', 'asset_admin', 'license_admin', 'adm1', 'adm2']
+const canSeeAllStatuses = computed(() => ADMIN_ROLES.includes(userStore.userRole))
 
 const loading = ref(false)
 const statsLoading = ref(true)
@@ -293,7 +305,8 @@ const search = reactive({
   keyword: '',
   asset_type: '',
   garden_id: '',
-  status: ''
+  status: '',
+  sort: 'newest'
 })
 
 const hasFilters = computed(() =>
@@ -347,7 +360,8 @@ async function loadAssets() {
       keyword: search.keyword || undefined,
       asset_type: search.asset_type || undefined,
       garden_id: search.garden_id || undefined,
-      status: search.status || undefined
+      status: search.status || undefined,
+      sort: search.sort || undefined
     }
     const response = await assetApi.getList(params)
     if (response.data?.code === 200) {
@@ -390,11 +404,17 @@ function handleSearch() {
   loadAssets()
 }
 
+async function handlePageChange() {
+  await loadAssets()
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
 function clearFilters() {
   search.keyword = ''
   search.asset_type = ''
   search.garden_id = ''
   search.status = ''
+  search.sort = 'newest'
   pagination.page = 1
   loadAssets()
 }

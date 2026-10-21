@@ -120,6 +120,14 @@
         <div class="topbar-right">
           <router-link to="/home" class="topbar-link">返回前台</router-link>
 
+          <el-tooltip content="待办提醒" placement="bottom">
+            <button class="topbar-bell" type="button" aria-label="待办提醒" @click="goPending">
+              <el-badge :value="pendingNotifications" :hidden="pendingNotifications === 0" :max="99">
+                <el-icon><Bell /></el-icon>
+              </el-badge>
+            </button>
+          </el-tooltip>
+
           <el-button
             :icon="isFullscreen ? Close : FullScreen"
             circle
@@ -171,8 +179,9 @@ import { useUserStore } from '@/stores/user'
 import {
   DataLine, Picture, Stamp, Document, Link, User, Setting,
   Menu, HomeFilled, ArrowDown, Expand, SwitchButton,
-  FullScreen, Close, Reading
+  FullScreen, Close, Reading, Bell
 } from '@element-plus/icons-vue'
+import { notificationApi } from '@/api/modules'
 
 const route = useRoute()
 const router = useRouter()
@@ -182,6 +191,7 @@ const isCollapsed = ref(false)
 const mobileOpen = ref(false)
 const isFullscreen = ref(false)
 const expandedMenus = ref(['license'])
+const pendingNotifications = ref(0)
 
 const username = computed(() => userStore.username)
 const userRole = computed(() => userStore.userRole)
@@ -218,7 +228,8 @@ const menuItems = shallowRef([
       { path: '/admin/license/approved', label: '已审批' }
     ]
   },
-  { path: '/admin/users', label: '用户管理', icon: User, roles: ['admin'] }
+  { path: '/admin/users', label: '用户管理', icon: User, roles: ['admin'] },
+  { path: '/admin/logs', label: '操作日志', icon: Document, roles: ADMIN_ROLES }
 ])
 
 // 菜单按当前角色过滤；移动端抽屉行为保持不变
@@ -241,10 +252,26 @@ function toggleCollapse() {
 // 切换后台子页面时收起移动端抽屉，避免遮住新页面
 watch(() => route.path, () => {
   mobileOpen.value = false
+  loadPendingNotifications()
 })
 
 function toggleMobileMenu() {
   mobileOpen.value = !mobileOpen.value
+}
+
+function goPending() {
+  router.push('/admin/license/pending')
+}
+
+async function loadPendingNotifications() {
+  try {
+    const response = await notificationApi.get()
+    if (response.data?.code === 200) {
+      pendingNotifications.value = response.data.data?.count || 0
+    }
+  } catch {
+    // 待办数量失败不影响后台使用
+  }
 }
 
 function toggleSubMenu(path) {
@@ -285,6 +312,7 @@ function handleFullscreenChange() {
 
 onMounted(() => {
   document.addEventListener('fullscreenchange', handleFullscreenChange)
+  loadPendingNotifications()
 })
 
 onUnmounted(() => {
@@ -621,8 +649,7 @@ onUnmounted(() => {
 .topbar {
   height: $header-height;
   background: rgba(252, 253, 251, 0.98);
-  border-bottom: 1px solid $border-light;
-  display: flex;
+  border-bottom: 1px solid $border-light;  display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
@@ -678,6 +705,31 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.topbar-bell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid $border-color;
+  border-radius: $radius-sm;
+  color: $text-secondary;
+  cursor: pointer;
+
+  &:hover {
+    border-color: $primary-color;
+    color: $primary-dark;
+  }
+
+  :deep(.el-badge__content) {
+    border: none;
+    background: $accent-color;
+    font-size: 10px;
+  }
 }
 
 .topbar-link {

@@ -23,6 +23,38 @@
           <span>新手指南</span>
         </router-link>
 
+        <el-popover
+          v-if="isLoggedIn"
+          v-model:visible="notificationVisible"
+          placement="bottom-end"
+          :width="360"
+          trigger="click"
+          popper-class="notification-popover"
+        >
+          <template #reference>
+            <button class="site-icon-btn" type="button" aria-label="待办提醒">
+              <el-badge :value="notificationCount" :hidden="notificationCount === 0" :max="99">
+                <el-icon><Bell /></el-icon>
+              </el-badge>
+            </button>
+          </template>
+          <div class="notification-panel">
+            <header class="notification-head">
+              <strong>待办提醒</strong>
+              <span>{{ notificationCount }} 项</span>
+            </header>
+            <el-empty v-if="notifications.length === 0" description="暂无待办" :image-size="56" />
+            <ul v-else class="notification-list">
+              <li v-for="item in notifications" :key="item.id">
+                <router-link :to="item.link" @click="notificationVisible = false">
+                  <span class="notification-title">{{ item.title }}</span>
+                  <span class="notification-desc">{{ item.description }}</span>
+                </router-link>
+              </li>
+            </ul>
+          </div>
+        </el-popover>
+
         <template v-if="isLoggedIn">
           <el-dropdown trigger="click" @command="handleCommand">
             <button class="site-user" type="button">
@@ -32,6 +64,14 @@
             </button>
             <template #dropdown>
               <el-dropdown-menu>
+                <el-dropdown-item command="my-assets">
+                  <el-icon><Picture /></el-icon>
+                  我的资产
+                </el-dropdown-item>
+                <el-dropdown-item command="favorites">
+                  <el-icon><Star /></el-icon>
+                  我的收藏
+                </el-dropdown-item>
                 <el-dropdown-item command="profile">
                   <el-icon><User /></el-icon>
                   个人中心
@@ -75,6 +115,8 @@
       <router-link to="/trace" @click="mobileOpen = false">溯源查询</router-link>
       <router-link to="/guide" @click="mobileOpen = false">使用指南</router-link>
       <router-link v-if="isLoggedIn" to="/license/my" @click="mobileOpen = false">我的授权</router-link>
+      <router-link v-if="isLoggedIn" to="/my-assets" @click="mobileOpen = false">我的资产</router-link>
+      <router-link v-if="isLoggedIn" to="/favorites" @click="mobileOpen = false">我的收藏</router-link>
       <router-link v-if="isAdmin" to="/admin" @click="mobileOpen = false">管理后台</router-link>
       <router-link v-if="!isLoggedIn" to="/login" @click="mobileOpen = false">登录</router-link>
     </nav>
@@ -82,17 +124,21 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { notificationApi, userApi } from '@/api/modules'
 import {
-  ArrowDown, DataLine, Menu, Reading, Setting, SwitchButton, User
+  ArrowDown, Bell, DataLine, Menu, Picture, Reading, Setting, Star, SwitchButton, User
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const mobileOpen = ref(false)
+const notificationVisible = ref(false)
+const notifications = ref([])
+const notificationCount = ref(0)
 
 const ADMIN_ROLES = ['admin', 'asset_admin', 'license_admin', 'adm1', 'adm2']
 const isLoggedIn = computed(() => userStore.isLoggedIn)
@@ -101,12 +147,51 @@ const username = computed(() => userStore.username)
 
 watch(() => route.fullPath, () => {
   mobileOpen.value = false
+  loadNotifications()
+})
+
+async function loadNotifications() {
+  if (!userStore.isLoggedIn) {
+    notifications.value = []
+    notificationCount.value = 0
+    return
+  }
+  try {
+    const response = await notificationApi.get()
+    if (response.data?.code === 200) {
+      notifications.value = response.data.data?.items || []
+      notificationCount.value = response.data.data?.count || 0
+    }
+  } catch {
+    // 待办提醒失败不阻断页面
+  }
+}
+
+async function refreshCurrentUser() {
+  if (!userStore.isLoggedIn) return
+  try {
+    const response = await userApi.getCurrentUser()
+    if (response.data?.code === 200 && response.data.data) {
+      userStore.setUser(response.data.data)
+    }
+  } catch {
+    // 过期 Token 由全局拦截器处理
+  }
+}
+
+onMounted(() => {
+  refreshCurrentUser()
+  loadNotifications()
 })
 
 function handleCommand(command) {
   if (command === 'logout') {
     userStore.logout()
     router.push('/home')
+  } else if (command === 'my-assets') {
+    router.push('/my-assets')
+  } else if (command === 'favorites') {
+    router.push('/favorites')
   } else if (command === 'profile') {
     router.push('/profile')
   } else if (command === 'settings') {
@@ -233,6 +318,88 @@ function handleCommand(command) {
   &:hover {
     border-color: $primary-color;
     color: $primary-dark;
+  }
+}
+
+.site-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid $border-color;
+  border-radius: $radius-sm;
+  color: $text-secondary;
+  cursor: pointer;
+
+  &:hover {
+    border-color: $primary-color;
+    color: $primary-dark;
+  }
+
+  :deep(.el-badge__content) {
+    border: none;
+    background: $accent-color;
+    font-size: 10px;
+  }
+}
+
+.notification-panel {
+  .notification-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding-bottom: 10px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid $border-light;
+
+    strong {
+      font-family: $font-display;
+      font-size: 15px;
+      color: $text-primary;
+    }
+
+    span {
+      font-size: 11px;
+      color: $text-placeholder;
+    }
+  }
+}
+
+.notification-list {
+  list-style: none;
+  max-height: 360px;
+  overflow-y: auto;
+
+  li + li {
+    border-top: 1px solid $border-light;
+  }
+
+  a {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 10px 6px;
+    border-radius: $radius-xs;
+    color: $text-primary;
+
+    &:hover {
+      background: $bg-hover;
+      color: $text-primary;
+    }
+  }
+
+  .notification-title {
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .notification-desc {
+    font-size: 12px;
+    line-height: 1.6;
+    color: $text-secondary;
   }
 }
 

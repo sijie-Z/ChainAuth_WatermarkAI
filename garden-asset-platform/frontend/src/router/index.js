@@ -57,6 +57,18 @@ const routes = [
     meta: { title: '上传资产', requiresAuth: true, siteHeader: true }
   },
   {
+    path: '/favorites',
+    name: 'Favorites',
+    component: page(() => import('@/views/asset/favorites.vue')),
+    meta: { title: '我的收藏', requiresAuth: true, siteHeader: true }
+  },
+  {
+    path: '/my-assets',
+    name: 'MyAssets',
+    component: page(() => import('@/views/asset/my-assets.vue')),
+    meta: { title: '我的资产', requiresAuth: true, siteHeader: true }
+  },
+  {
     path: '/trace',
     name: 'Trace',
     component: page(() => import('@/views/trace/index.vue')),
@@ -158,6 +170,12 @@ const routes = [
         name: 'AdminUsers',
         component: page(() => import('@/views/admin/users.vue'), false),
         meta: { title: '用户管理' }
+      },
+      {
+        path: 'logs',
+        name: 'AdminLogs',
+        component: page(() => import('@/views/admin/logs.vue'), false),
+        meta: { title: '操作日志' }
       }
     ]
   }

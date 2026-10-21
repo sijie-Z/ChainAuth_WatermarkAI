@@ -89,4 +89,24 @@ test.describe('登录与业务流程', () => {
     const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor)
     expect(background).not.toBe('rgb(255, 255, 255)')
   })
+
+  test('个人资产、收藏与申请记录入口可用', async ({ page }) => {
+    await page.goto('/login')
+    await page.getByPlaceholder('请输入用户名').fill('user1')
+    await page.getByPlaceholder('请输入密码').fill('123456')
+    await page.locator('.login-btn').click()
+    await page.waitForURL('**/assets', { timeout: 15000 })
+
+    await page.goto('/my-assets')
+    await expect(page.getByRole('heading', { name: '我的资产' })).toBeVisible()
+
+    await page.goto('/favorites')
+    await expect(page.getByRole('heading', { name: '我的收藏' })).toBeVisible()
+
+    await page.goto('/license/my')
+    const applicationTab = page.locator('.header-filters').getByText('申请记录', { exact: true })
+    await expect(applicationTab).toBeVisible()
+    await applicationTab.click()
+    await expect(page.locator('.card-title')).toHaveText('我的申请')
+  })
 })

@@ -126,12 +126,14 @@
 
 <script setup>
 import { ref, computed, reactive, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { userApi } from '@/api/modules'
 import { ElMessage } from 'element-plus'
 import { User, Lock, Bell, ArrowLeft } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
+const router = useRouter()
 
 const roleLabel = computed(() => {
   const labels = {
@@ -150,8 +152,8 @@ const changingPassword = ref(false)
 
 const profileForm = reactive({
   username: userStore.username || '',
-  email: '',
-  phone: ''
+  email: userStore.user?.email || '',
+  phone: userStore.user?.phone || ''
 })
 
 const passwordFormRef = ref(null)
@@ -212,11 +214,13 @@ watch(notifications, value => {
 async function saveProfile() {
   saving.value = true
   try {
-    const data = {}
-    if (profileForm.email) data.email = profileForm.email
-    if (profileForm.phone) data.phone = profileForm.phone
+    const data = {
+      email: profileForm.email || '',
+      phone: profileForm.phone || ''
+    }
     const res = await userApi.updateProfile(data)
     if (res.data?.code === 200) {
+      userStore.setUser({ ...userStore.user, ...data })
       ElMessage.success('个人信息已更新')
     } else {
       ElMessage.error(res.data?.message || '更新失败')
@@ -243,6 +247,8 @@ function changePassword() {
         passwordForm.currentPassword = ''
         passwordForm.newPassword = ''
         passwordForm.confirmPassword = ''
+        userStore.clearAuth()
+        router.push('/login')
       } else {
         ElMessage.error(res.data?.message || '修改失败')
       }

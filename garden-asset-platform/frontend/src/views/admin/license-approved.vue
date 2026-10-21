@@ -118,7 +118,6 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
-import api from '@/api'
 import { licenseApi } from '@/api/modules'
 
 const loading = ref(false)
@@ -166,37 +165,29 @@ function viewDetail(row) {
   }
 }
 
-// 构造带鉴权的下载请求：/api 路径走默认 baseURL，站点根路径保持原样，绝对 URL 直接请求
-function buildDownloadRequest(path) {
-  const config = { responseType: 'blob', silent: true }
-  if (/^https?:\/\//i.test(path)) {
-    return { url: path, config }
-  }
-  if (path.startsWith('/api/')) {
-    return { url: path.slice(4), config }
-  }
-  if (path.startsWith('/')) {
-    return { url: path, config: { ...config, baseURL: '' } }
-  }
-  return { url: path, config }
-}
-
+// 合同按服务端生成的正文下载为文本，不再回退到资产文件
 async function downloadContract(row) {
-  const rawPath = row.contract_file || (row.asset_id ? `/api/assets/${row.asset_id}/download` : '')
-  if (!rawPath) {
-    ElMessage.warning('暂无合同文件')
+  if (!row?.id) {
+    ElMessage.warning('授权记录不存在')
     return
   }
 
   try {
-    // 通过 axios 实例下载，自动携带 Authorization 头
-    const { url: requestUrl, config } = buildDownloadRequest(rawPath)
-    const response = await api.get(requestUrl, config)
-    const blob = new Blob([response.data])
+    const response = await licenseApi.getContract(row.id)
+    if (response.data?.code !== 200) {
+      ElMessage.warning(response.data?.message || '合同暂不可用')
+      return
+    }
+    const content = response.data.data?.contract_content || ''
+    if (!content) {
+      ElMessage.warning('合同内容为空')
+      return
+    }
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
     const objectUrl = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = objectUrl
-    link.download = `${row.license_code || row.asset_code || 'license'}-contract`
+    link.download = `${row.license_code || row.asset_code || 'license'}-contract.txt`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -204,17 +195,22 @@ async function downloadContract(row) {
     ElMessage.success('合同下载开始')
   } catch (error) {
     console.error('下载合同失败:', error)
-    ElMessage.error('合同下载失败，请稍后重试')
+    ElMessage.error(error.response?.data?.message || '合同下载失败，请稍后重试')
   }
 }
 
 function getLicenseType(type) {
   const map = {
     personal: '个人使用',
+    non_commercial: '非商业使用',
     commercial: '商业使用',
+    commercial_ad: '商业-广告',
+    commercial_product: '商业-产品',
+    commercial_publish: '商业-出版',
     academic: '学术研究',
     display: '展览展示',
-    derivative: '衍生创作'
+    derivative: '衍生创作',
+    exclusive: '独家授权'
   }
   return map[type] || type || '-'
 }

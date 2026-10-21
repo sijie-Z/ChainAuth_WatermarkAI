@@ -142,9 +142,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { assetApi, licenseApi } from '@/api/modules'
+import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 
 const formRef = ref()
 const submitting = ref(false)
@@ -207,15 +209,29 @@ async function doSubmit() {
 
   submitting.value = true
   try {
+    const scopeLabels = {
+      online: '网络发布',
+      print: '印刷出版',
+      exhibition: '公开展览',
+      broadcast: '广播传播'
+    }
+    const scopeText = form.value.scope.map(item => scopeLabels[item] || item).join('、')
+    const purpose = [
+      form.value.purpose,
+      scopeText ? `使用范围：${scopeText}` : '',
+      form.value.remarks ? `附加说明：${form.value.remarks}` : ''
+    ].filter(Boolean).join('\n')
+
     const data = {
       asset_id: asset.value.id,
-      ...form.value
+      ...form.value,
+      purpose
     }
     const response = await licenseApi.apply(data)
     if (response.data?.code === 200) {
       ElMessage.success('申请提交成功，请等待审批')
-      // 跳转到“我的授权”，审批中的申请会出现在对应页签
-      await router.push('/license/my')
+      // 直接落到“申请记录”，用户能立刻看到刚提交的申请
+      await router.push('/license/my?tab=pending')
     } else {
       ElMessage.error(response.data?.message || '申请提交失败')
     }
@@ -242,6 +258,10 @@ function getTypeName(type) {
 onMounted(() => {
   loadAsset()
   window.addEventListener('resize', handleResize)
+  const currentUser = userStore.user
+  if (currentUser) {
+    form.value.contact = currentUser.phone || currentUser.email || ''
+  }
 })
 
 onUnmounted(() => {

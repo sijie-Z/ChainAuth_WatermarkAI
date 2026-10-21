@@ -117,17 +117,18 @@
                 <div class="row-actions">
                   <el-button size="small" link type="primary" @click="viewDetail(row.id)">查看</el-button>
                   <el-button
-                    v-if="row.status === 'draft' && isOwner(row)"
+                    v-if="['draft', 'rejected'].includes(row.status) && isOwner(row)"
                     size="small"
                     type="primary"
                     @click="submitPublish(row)"
                   >
-                    提交发布
+                    {{ row.status === 'rejected' ? '重新提交' : '提交发布' }}
                   </el-button>
-                  <template v-if="row.status === 'pending' && canApprove">
+                  <template v-if="row.status === 'pending' && canApproveRow(row)">
                     <el-button size="small" type="success" @click="approveAsset(row)">通过</el-button>
                     <el-button size="small" type="danger" @click="rejectAsset(row)">驳回</el-button>
                   </template>
+                  <span v-else-if="row.status === 'pending' && isOwner(row)" class="owner-hint">不能审核自己上传的资产</span>
                   <el-button
                     size="small"
                     type="primary"
@@ -171,14 +172,14 @@
 
 <script setup>
 import { ref, computed, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Search } from '@element-plus/icons-vue'
 import { assetApi, watermarkApi, blockchainApi } from '@/api/modules'
 import { useUserStore } from '@/stores/user'
 
 // 可审核资产的管理员角色（与后端角色枚举保持一致）
-const ASSET_APPROVER_ROLES = ['admin', 'asset_admin', 'license_admin', 'adm1', 'adm2']
+const ASSET_APPROVER_ROLES = ['admin', 'asset_admin', 'adm1', 'adm2']
 
 const WATERMARK_STATUS = {
   none: { label: '未嵌入', type: 'info' },
@@ -205,9 +206,14 @@ const ASSET_STATUS = {
 }
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 
 const canApprove = computed(() => ASSET_APPROVER_ROLES.includes(userStore.userRole))
+
+function canApproveRow(row) {
+  return canApprove.value && !isOwner(row)
+}
 
 const loading = ref(false)
 const actionState = reactive({})
@@ -380,6 +386,9 @@ function formatDate(dateStr) {
 }
 
 onMounted(() => {
+  if (route.query.status && ['draft', 'pending', 'published', 'rejected'].includes(route.query.status)) {
+    search.value.status = route.query.status
+  }
   loadAssets()
 })
 </script>
@@ -468,11 +477,17 @@ onMounted(() => {
 .row-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
 
   :deep(.el-button + .el-button) {
     margin-left: 0;
   }
+}
+
+.owner-hint {
+  font-size: 11px;
+  color: $text-placeholder;
 }
 
 // 台账编码使用等宽字体

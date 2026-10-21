@@ -57,6 +57,14 @@
         <el-form-item v-if="!dialog.isEdit" label="密码" prop="password">
           <el-input v-model="dialog.form.password" type="password" show-password />
         </el-form-item>
+        <el-form-item v-else label="重置密码">
+          <el-input
+            v-model="dialog.form.password"
+            type="password"
+            show-password
+            placeholder="留空则不修改，至少 6 位"
+          />
+        </el-form-item>
         <el-form-item label="邮箱" prop="email">
           <el-input v-model="dialog.form.email" />
         </el-form-item>
@@ -187,6 +195,10 @@ async function doSubmit() {
         status: form.status
       }
       if (form.password) {
+        if (form.password.length < 6) {
+          ElMessage.warning('重置密码至少 6 位')
+          return
+        }
         payload.password = form.password
       }
       const response = await userApi.updateUser(dialog.value.userId, payload)
@@ -228,9 +240,13 @@ async function toggleStatus(row) {
     if (response.data.code === 200) {
       ElMessage.success(`${action}成功`)
       loadUsers()
+    } else {
+      ElMessage.error(response.data.message || `${action}失败`)
     }
-  } catch {
-    // cancelled
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(error.response?.data?.message || `${action}失败`)
+    }
   }
 }
 

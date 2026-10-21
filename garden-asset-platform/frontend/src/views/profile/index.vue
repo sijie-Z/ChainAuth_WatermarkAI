@@ -62,7 +62,7 @@
       <div class="profile-main">
         <!-- 统计卡片（仅展示有真实接口的统计） -->
         <div class="stats-grid">
-          <div class="stat-card">
+          <div class="stat-card" role="button" tabindex="0" @click="$router.push('/my-assets')" @keydown.enter="$router.push('/my-assets')">
             <div class="stat-icon">
               <el-icon><Picture /></el-icon>
             </div>
@@ -71,7 +71,7 @@
               <span class="stat-label">我的资产</span>
             </div>
           </div>
-          <div class="stat-card">
+          <div class="stat-card" role="button" tabindex="0" @click="$router.push('/license/my')" @keydown.enter="$router.push('/license/my')">
             <div class="stat-icon accent">
               <el-icon><Document /></el-icon>
             </div>

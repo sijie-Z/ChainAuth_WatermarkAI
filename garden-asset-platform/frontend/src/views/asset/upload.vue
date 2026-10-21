@@ -26,7 +26,7 @@
             :on-change="handleFileChange"
             :on-exceed="handleExceed"
             :before-remove="beforeRemove"
-            accept="image/*,.shp,.zip,.pdf,.mp4"
+            accept="image/*,.shp,.geojson,.kml,.kmz,.zip,.pdf,.doc,.docx,.dwg,.dxf,.mp4,.mov,.avi,.mkv,.obj,.fbx,.gltf,.glb,.stl"
             class="asset-uploader"
           >
             <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
@@ -35,10 +35,14 @@
             </div>
             <template #tip>
               <div class="el-upload__tip">
-                支持影像（.jpg/.png）、矢量（.shp/.zip）、文献（.pdf）、视频（.mp4）
+                支持影像、SHP/GeoJSON/KML/ZIP 矢量、PDF/Word/CAD 文献、MP4/MOV 视频与 OBJ/GLB 等三维模型
               </div>
             </template>
           </el-upload>
+          <div v-if="previewUrl" class="upload-preview">
+            <img :src="previewUrl" alt="待上传文件预览" />
+            <span>本地预览，上传后由平台生成正式缩略图</span>
+          </div>
         </el-form-item>
 
         <el-form-item label="标题" prop="title">
@@ -112,11 +116,14 @@
       <!-- 上传成功：明确草稿状态并提供提交发布入口 -->
       <div v-if="createdAssetId && !uploading" class="draft-panel">
         <el-alert type="info" :closable="false" show-icon title="资产已保存为草稿">
-          草稿不会出现在公开的资产档案中。点击「提交发布」后进入管理员审核，审核通过后才会公开展示。
+          草稿不会出现在公开的资产档案中。完成水印嵌入后点击「提交发布」，审核通过后才会公开展示。
         </el-alert>
         <div class="progress-actions">
-          <el-button type="primary" :loading="publishing" @click="submitPublish">
+          <el-button v-if="watermarkReadyForPublish" type="primary" :loading="publishing" @click="submitPublish">
             提交发布
+          </el-button>
+          <el-button v-else type="primary" @click="goToDetail">
+            去详情嵌入水印
           </el-button>
           <el-button @click="goToDetail">查看资产详情</el-button>
         </div>
@@ -126,7 +133,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { UploadFilled, ArrowLeft } from '@element-plus/icons-vue'
@@ -143,6 +150,17 @@ const uploadStatus = ref('')
 const uploadMessage = ref('')
 const createdAssetId = ref('')
 const publishing = ref(false)
+const previewUrl = ref('')
+const titleAutoFilled = ref(false)
+const watermarkReadyForPublish = ref(false)
+
+const TYPE_BY_EXT = {
+  jpg: 'image', jpeg: 'image', png: 'image', gif: 'image', bmp: 'image', tiff: 'image', webp: 'image',
+  shp: 'vector', geojson: 'vector', kml: 'vector', kmz: 'vector', zip: 'vector',
+  pdf: 'document', doc: 'document', docx: 'document', dwg: 'document', dxf: 'document',
+  mp4: 'video', mov: 'video', avi: 'video', mkv: 'video',
+  obj: 'model', fbx: 'model', gltf: 'model', glb: 'model', stl: 'model'
+}
 
 const form = ref({
   file: null,
@@ -182,8 +200,24 @@ async function loadGardens() {
 
 function handleFileChange(file) {
   form.value.file = file.raw
-  if (!form.value.title) {
+
+  const ext = (file.name.split('.').pop() || '').toLowerCase()
+  const detectedType = TYPE_BY_EXT[ext]
+  if (detectedType) {
+    form.value.asset_type = detectedType
+  }
+
+  if (!form.value.title || titleAutoFilled.value) {
     form.value.title = file.name.replace(/\.[^/.]+$/, '')
+    titleAutoFilled.value = true
+  }
+
+  if (previewUrl.value) {
+    URL.revokeObjectURL(previewUrl.value)
+    previewUrl.value = ''
+  }
+  if (detectedType === 'image' && file.raw) {
+    previewUrl.value = URL.createObjectURL(file.raw)
   }
 }
 
@@ -192,7 +226,18 @@ function handleExceed() {
 }
 
 function beforeRemove(file) {
-  return ElMessageBox.confirm('确定移除该文件？')
+  return ElMessageBox.confirm('确定移除该文件？').then(() => {
+    if (previewUrl.value) {
+      URL.revokeObjectURL(previewUrl.value)
+      previewUrl.value = ''
+    }
+    form.value.file = null
+    if (titleAutoFilled.value) {
+      form.value.title = ''
+      form.value.asset_type = ''
+      titleAutoFilled.value = false
+    }
+  })
 }
 
 async function submitUpload() {
@@ -209,7 +254,8 @@ async function submitUpload() {
 
   uploading.value = true
   createdAssetId.value = ''
-  uploadProgress.value = 10
+  watermarkReadyForPublish.value = false
+  uploadProgress.value = 0
   uploadMessage.value = '正在上传文件…'
   uploadStatus.value = ''
 
@@ -222,10 +268,13 @@ async function submitUpload() {
     formData.append('description', form.value.description)
     formData.append('tags', JSON.stringify(form.value.tags))
 
-    uploadProgress.value = 30
-    uploadMessage.value = '正在创建资产记录…'
-
-    const response = await assetApi.create(formData)
+    const response = await assetApi.create(formData, {
+      onUploadProgress: (event) => {
+        if (!event.total) return
+        // 文件传输占前 60%，剩余进度用于水印/存证阶段
+        uploadProgress.value = Math.min(60, Math.max(1, Math.round((event.loaded / event.total) * 60)))
+      }
+    })
     if (response.data.code !== 200) {
       throw new Error(response.data.message || '创建资产失败')
     }
@@ -236,7 +285,11 @@ async function submitUpload() {
     }
 
     createdAssetId.value = assetId
-    uploadProgress.value = 50
+    if (!['image', 'vector'].includes(form.value.asset_type)) {
+      // 文档/视频/模型不支持水印，可以直接进入发布审核
+      watermarkReadyForPublish.value = true
+    }
+    uploadProgress.value = 65
     uploadMessage.value = '资产创建成功，当前为草稿状态'
 
     // 文件已入库，后续水印/存证失败不应把整个上传判定为失败
@@ -247,6 +300,7 @@ async function submitUpload() {
       try {
         await watermarkApi.embed(assetId)
         watermarkEmbedded = true
+        watermarkReadyForPublish.value = true
         uploadProgress.value = 75
         uploadMessage.value = '水印嵌入成功'
       } catch (error) {
@@ -314,10 +368,22 @@ function resetForm() {
   uploadMessage.value = ''
   uploadStatus.value = ''
   createdAssetId.value = ''
+  titleAutoFilled.value = false
+  watermarkReadyForPublish.value = false
+  if (previewUrl.value) {
+    URL.revokeObjectURL(previewUrl.value)
+    previewUrl.value = ''
+  }
 }
 
 onMounted(() => {
   loadGardens()
+})
+
+onUnmounted(() => {
+  if (previewUrl.value) {
+    URL.revokeObjectURL(previewUrl.value)
+  }
 })
 </script>
 
@@ -328,6 +394,31 @@ onMounted(() => {
   min-height: 100vh;
   background: $bg-primary;
   padding: 28px 32px 48px;
+}
+
+.upload-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid $border-light;
+  border-radius: $radius-sm;
+  background: $bg-secondary;
+
+  img {
+    width: 88px;
+    height: 64px;
+    object-fit: cover;
+    border-radius: $radius-xs;
+    border: 1px solid $border-color;
+  }
+
+  span {
+    font-size: 12px;
+    line-height: 1.6;
+    color: $text-secondary;
+  }
 }
 
 .page-head {

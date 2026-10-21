@@ -41,6 +41,14 @@
               </button>
               <template #dropdown>
                 <el-dropdown-menu>
+                  <el-dropdown-item command="my-assets">
+                    <el-icon><Picture /></el-icon>
+                    我的资产
+                  </el-dropdown-item>
+                  <el-dropdown-item command="favorites">
+                    <el-icon><Star /></el-icon>
+                    我的收藏
+                  </el-dropdown-item>
                   <el-dropdown-item command="profile">
                     <el-icon><User /></el-icon>
                     个人中心
@@ -337,7 +345,7 @@ import { useUserStore } from '@/stores/user'
 import { gardenApi, publicApi } from '@/api/modules'
 import {
   ArrowDown, ArrowRight, Search, User, Setting, SwitchButton,
-  Location, Menu
+  Location, Menu, Star, Picture
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -492,6 +500,10 @@ function handleCommand(command) {
   if (command === 'logout') {
     userStore.logout()
     router.push('/home')
+  } else if (command === 'my-assets') {
+    router.push('/my-assets')
+  } else if (command === 'favorites') {
+    router.push('/favorites')
   } else if (command === 'profile') {
     router.push('/profile')
   } else if (command === 'settings') {

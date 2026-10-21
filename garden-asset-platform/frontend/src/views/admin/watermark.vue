@@ -29,12 +29,8 @@
                 />
               </el-select>
             </el-form-item>
-            <el-form-item label="水印算法">
-              <el-select v-model="batchEmbed.algorithm">
-                <el-option label="DCT域水印" value="dct" />
-                <el-option label="LSB水印" value="lsb" />
-                <el-option label="矢量水印" value="vector" />
-              </el-select>
+            <el-form-item>
+              <span class="algorithm-hint">算法由后端按资产类型自动选择：影像使用 DCT/QIM，矢量使用坐标扰动。</span>
             </el-form-item>
             <el-form-item>
               <el-button type="primary" :loading="batchEmbed.loading" @click="doBatchEmbed">
@@ -132,7 +128,11 @@ async function loadAssets() {
     ])
 
     if (pendingRes.data?.code === 200) {
-      pendingAssets.value = pendingRes.data.data.items || []
+      const items = pendingRes.data.data.items || []
+      // 只展示支持水印的影像与矢量资产，避免批量操作必然失败
+      pendingAssets.value = items.filter(asset =>
+        ['image', 'vector'].includes(asset.asset_type)
+      )
     }
 
     const embeddedItems = []
@@ -185,7 +185,7 @@ async function doBatchEmbed() {
 
   for (const assetId of batchEmbed.value.assets) {
     try {
-      const response = await watermarkApi.embed(assetId, { algorithm: batchEmbed.value.algorithm })
+      const response = await watermarkApi.embed(assetId)
       if (response.data?.code === 200) {
         successCount++
       } else {
@@ -358,6 +358,12 @@ onMounted(() => {
   font-size: 12px;
   color: $text-secondary;
   font-variant-numeric: tabular-nums;
+}
+
+.algorithm-hint {
+  font-size: 12px;
+  line-height: 1.7;
+  color: $text-placeholder;
 }
 
 // ========== 响应式 ==========

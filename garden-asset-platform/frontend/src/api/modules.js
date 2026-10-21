@@ -20,13 +20,21 @@ export const authApi = {
 export const assetApi = {
   getList: (params) => api.get('/assets', { params }),
   getDetail: (id) => api.get(`/assets/${id}`),
-  create: (formData) => api.post('/assets/upload', formData),
+  getRelated: (id) => api.get(`/assets/${id}/related`),
+  getTags: (id) => api.get(`/assets/${id}/tags`),
+  create: (formData, config) => config
+    ? api.post('/assets/upload', formData, config)
+    : api.post('/assets/upload', formData),
   update: (id, data) => api.put(`/assets/${id}`, data),
   delete: (id) => api.delete(`/assets/${id}`),
   download: (id) => api.get(`/assets/${id}/download`, { responseType: 'blob' }),
   my: (params) => api.get('/assets/my', { params }),
   publish: (id) => api.post(`/assets/${id}/publish`),
-  approve: (id, data) => api.post(`/assets/${id}/approve`, data)
+  approve: (id, data) => api.post(`/assets/${id}/approve`, data),
+  getFavorite: (id) => api.get(`/assets/${id}/favorite`),
+  addFavorite: (id) => api.post(`/assets/${id}/favorite`),
+  removeFavorite: (id) => api.delete(`/assets/${id}/favorite`),
+  getFavorites: (params) => api.get('/favorites', { params })
 }
 
 // 园林相关API
@@ -74,8 +82,20 @@ export const licenseApi = {
   getPending: () => api.get('/license/pending'),
   getApproved: (params) => api.get('/license/approved', { params }),
   approve: (applicationId, data) => api.post(`/license/approve/${applicationId}`, data),
+  cancelApplication: (applicationId) => api.post(`/license/applications/${applicationId}/cancel`),
+  getContract: (licenseId) => api.get(`/license/${licenseId}/contract`),
   getMyLicenses: (params) => api.get('/license/my', { params }),
   myApplications: (params) => api.get('/license/my-applications', { params })
+}
+
+// 站内待办提醒
+export const notificationApi = {
+  get: () => api.get('/notifications', { silent: true })
+}
+
+// 操作日志
+export const logApi = {
+  getList: (params) => api.get('/logs', { params })
 }
 
 // 用户管理API

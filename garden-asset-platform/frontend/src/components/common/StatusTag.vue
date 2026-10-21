@@ -34,7 +34,7 @@ const statusConfig = {
   draft: { text: '草稿', tone: 'neutral' },
   archived: { text: '已归档', tone: 'neutral' },
   deleted: { text: '已删除', tone: 'error' },
-  cancelled: { text: '已取消', tone: 'neutral' },
+  cancelled: { text: '已撤回', tone: 'neutral' },
   revoked: { text: '已撤销', tone: 'error' },
   none: { text: '未处理', tone: 'neutral' }
 }
@@ -46,12 +46,22 @@ const NONE_TEXT = {
   default: '未处理'
 }
 
+// 同一个状态在不同业务域下含义不同，避免“待处理”一把梭
+const KIND_STATUS_TEXT = {
+  asset: { pending: '待审核', rejected: '已驳回' },
+  watermark: { pending: '处理中', verified: '已校验' },
+  chain: { pending: '存证中' },
+  license: { pending: '审批中', approved: '已通过', active: '已生效' }
+}
+
 const tone = computed(() => statusConfig[props.status]?.tone || 'neutral')
 const statusText = computed(() => {
   if (props.status === 'none') {
     return NONE_TEXT[props.kind] || NONE_TEXT.default
   }
-  return statusConfig[props.status]?.text || props.status
+  return KIND_STATUS_TEXT[props.kind]?.[props.status]
+    || statusConfig[props.status]?.text
+    || props.status
 })
 </script>
 
