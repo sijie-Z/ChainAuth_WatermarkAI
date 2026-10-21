@@ -16,7 +16,9 @@ test.describe('公开分享核验', () => {
 
     const assetsResponse = await request.get(`${API}/assets?per_page=100`, { headers })
     const assets = (await assetsResponse.json()).data.items
-    const asset = assets.find(item => item.chain_status === 'confirmed') || assets[0]
+    const asset = assets.find(
+      item => item.status === 'published' && item.chain_status === 'confirmed'
+    ) || assets.find(item => item.status === 'published')
     expect(asset).toBeTruthy()
 
     const shareResponse = await request.post(
