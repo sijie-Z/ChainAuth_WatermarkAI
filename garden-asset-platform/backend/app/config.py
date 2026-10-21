@@ -58,6 +58,9 @@ class Config:
         raise RuntimeError(f'{key} 未配置，且无法在 {path} 生成持久化密钥')
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=24)
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
+    # Flask-JWT-Extended 4.7+ 默认按 RFC 7519 校验 sub 必须是字符串；
+    # 本项目历史 Token 以整数 user.id 作为 identity，关闭该校验以保持兼容。
+    JWT_VERIFY_SUB = False
 
     # 数据库配置
     SQLALCHEMY_DATABASE_URI = os.environ.get(
