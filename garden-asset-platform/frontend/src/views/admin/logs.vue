@@ -91,6 +91,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { parseBackendDate } from '@/utils'
 import { ElMessage } from 'element-plus'
 import { logApi } from '@/api/modules'
 
@@ -156,8 +157,8 @@ function roleName(value) {
 }
 
 function formatTime(value) {
-  if (!value) return '-'
-  return new Date(value).toLocaleString('zh-CN')
+  const date = parseBackendDate(value)
+  return date ? date.toLocaleString('zh-CN') : '-'
 }
 
 function handleSearch() {

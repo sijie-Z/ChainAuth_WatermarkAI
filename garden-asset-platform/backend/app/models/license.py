@@ -159,7 +159,10 @@ class LicenseContract(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     contract_code = db.Column(db.String(32), unique=True, nullable=False)
 
-    application_id = db.Column(db.Integer, db.ForeignKey('license_applications.id'))
+    # 一个申请只能生成一份合同，防止并发审批重复发证
+    application_id = db.Column(
+        db.Integer, db.ForeignKey('license_applications.id'), unique=True
+    )
     license_id = db.Column(db.Integer, db.ForeignKey('licenses.id'))
 
     # 合同内容

@@ -81,6 +81,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, StarFilled } from '@element-plus/icons-vue'
 import { assetApi } from '@/api/modules'
+import { parseBackendDate } from '@/utils'
 
 const router = useRouter()
 const favorites = ref([])
@@ -146,8 +147,8 @@ async function handlePageChange() {
 }
 
 function formatDate(value) {
-  if (!value) return ''
-  return new Date(value).toLocaleDateString('zh-CN')
+  const date = parseBackendDate(value)
+  return date ? date.toLocaleDateString('zh-CN') : ''
 }
 
 onMounted(loadFavorites)

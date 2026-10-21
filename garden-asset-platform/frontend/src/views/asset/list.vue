@@ -82,9 +82,17 @@
             </el-select>
           </div>
           <div class="filter-item">
-            <el-select v-model="search.garden_id" placeholder="所属园林" clearable size="large" style="width: 160px" @change="handleSearch">
+            <el-select
+              v-model="search.garden_id"
+              placeholder="所属园林"
+              clearable
+              size="large"
+              style="width: 160px"
+              :disabled="gardensOffline"
+              @change="handleSearch"
+            >
               <el-option label="全部园林" value="" />
-              <el-option v-for="g in gardens" :key="g.id" :label="gardensOffline ? `${g.name}（离线示例）` : g.name" :value="g.id" />
+              <el-option v-for="g in gardens" :key="g.id" :label="g.name" :value="g.id" />
             </el-select>
           </div>
           <div class="filter-item">
@@ -108,9 +116,10 @@
             <el-icon><Search /></el-icon>
             搜索
           </el-button>
-          <el-tag v-if="gardensOffline" type="warning" size="small" effect="plain">
-            园林筛选为离线示例数据
-          </el-tag>
+          <div v-if="gardensOffline" class="garden-offline">
+            <el-tag type="warning" size="small" effect="plain">园林筛选暂不可用</el-tag>
+            <el-button link type="primary" size="small" @click="loadGardens">重试</el-button>
+          </div>
         </div>
       </div>
     </div>
@@ -280,6 +289,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, watch, shallowRef } from 'vue'
+import { parseBackendDate } from '@/utils'
 import { useRouter, useRoute } from 'vue-router'
 import { assetApi, gardenApi, publicApi } from '@/api/modules'
 import { useUserStore } from '@/stores/user'
@@ -295,6 +305,7 @@ const loading = ref(false)
 const statsLoading = ref(true)
 const statsError = ref(false)
 const loadError = ref(false)
+let assetRequestId = 0
 const showGuideTip = ref(localStorage.getItem('hideAssetGuideTip') !== '1')
 const assets = ref([])
 const gardens = ref([])
@@ -351,6 +362,7 @@ async function loadStats() {
 }
 
 async function loadAssets() {
+  const requestId = ++assetRequestId
   loading.value = true
   loadError.value = false
   try {
@@ -364,6 +376,8 @@ async function loadAssets() {
       sort: search.sort || undefined
     }
     const response = await assetApi.getList(params)
+    // 快速切换筛选时只应用最后一次请求的结果
+    if (requestId !== assetRequestId) return
     if (response.data?.code === 200) {
       const data = response.data.data
       assets.value = data.items || []
@@ -372,11 +386,14 @@ async function loadAssets() {
       loadError.value = true
     }
   } catch {
+    if (requestId !== assetRequestId) return
     loadError.value = true
     assets.value = []
     pagination.total = 0
   } finally {
-    loading.value = false
+    if (requestId === assetRequestId) {
+      loading.value = false
+    }
   }
 }
 
@@ -386,16 +403,13 @@ async function loadGardens() {
     if (response.data?.code === 200) {
       gardens.value = response.data.data || []
       gardensOffline.value = false
+    } else {
+      gardensOffline.value = true
     }
   } catch (error) {
-    // 接口失败时使用兜底数据，并在界面明确标注为离线示例，避免掩盖故障
-    console.error('加载园林列表失败，使用离线示例数据:', error)
+    console.error('加载园林列表失败:', error)
     gardensOffline.value = true
-    gardens.value = [
-      { id: 1, name: '拙政园', code: 'ZZY' },
-      { id: 2, name: '留园', code: 'LY' },
-      { id: 3, name: '狮子林', code: 'SZL' }
-    ]
+    gardens.value = []
   }
 }
 
@@ -477,9 +491,8 @@ function getChainStatus(status) {
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+  const date = parseBackendDate(dateStr)
+  return date ? date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }) : ''
 }
 
 onMounted(() => {
@@ -693,6 +706,12 @@ watch(() => route.query.garden_id, (gardenId) => {
       }
     }
   }
+}
+
+.garden-offline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 // 资产区域

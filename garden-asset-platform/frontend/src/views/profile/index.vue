@@ -115,6 +115,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { parseBackendDate } from '@/utils'
 import { useUserStore } from '@/stores/user'
 import api from '@/api'
 import { licenseApi } from '@/api/modules'
@@ -199,8 +200,8 @@ function getActivityTypeLabel(type) {
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString('zh-CN')
+  const date = parseBackendDate(dateStr)
+  return date ? date.toLocaleDateString('zh-CN') : ''
 }
 
 onMounted(() => {

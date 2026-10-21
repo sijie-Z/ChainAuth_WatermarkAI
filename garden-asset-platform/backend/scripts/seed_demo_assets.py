@@ -208,6 +208,66 @@ def seed_licenses(assets, users):
     return 5
 
 
+def seed_download_records(assets, users):
+    """补充下载台账样例，便于演示“下载记录/下载台账”。"""
+    if len(assets) < 5:
+        return 0
+
+    licenses = License.query.filter_by(status='active').order_by(License.id).all()
+    now = datetime.utcnow()
+    combos = [
+        (users['user1'], assets[0], licenses[0] if licenses else None, 3),
+        (users['user1'], assets[1], None, 2),
+        (users['user2'], assets[1], licenses[1] if len(licenses) > 1 else None, 5),
+        (users['user2'], assets[2], None, 1),
+        (users['user1'], assets[3], None, 8),
+        (users['user2'], assets[4], None, 0),
+    ]
+    for user, asset, license_row, days_ago in combos:
+        db.session.add(DownloadRecord(
+            user_id=user.id,
+            asset_id=asset.id,
+            license_id=license_row.id if license_row else None,
+            ip_address='127.0.0.1',
+            user_agent='Demo Seeder',
+            created_at=now - timedelta(days=days_ago, hours=days_ago)
+        ))
+    db.session.commit()
+    return len(combos)
+
+
+def seed_collections(assets, users):
+    """给演示用户准备两个合集，便于体验策展与公开合集。"""
+    from app.models import Collection, CollectionAsset
+
+    if len(assets) < 4:
+        return 0
+
+    user1 = users['user1']
+    definitions = [
+        ('拙政园水景', '以水院、荷池与倒影为主的拙政园影像。', True, assets[:3]),
+        ('古建细节', '斗拱、花窗、铺地与假山细节，用于设计参考。', False, assets[3:5]),
+    ]
+    created = 0
+    for name, description, is_public, members in definitions:
+        collection = Collection(
+            name=name,
+            description=description,
+            owner_id=user1.id,
+            is_public=is_public
+        )
+        db.session.add(collection)
+        db.session.flush()
+        for asset in members:
+            db.session.add(CollectionAsset(
+                collection_id=collection.id,
+                asset_id=asset.id
+            ))
+        created += 1
+    db.session.commit()
+    return created
+
+
 def seed_user_assets(source_assets, user):
     """给演示用户造一条草稿和一条被驳回资产，便于体验“我的资产”流程。"""
     if not source_assets:
@@ -353,17 +413,22 @@ def main():
 
         licenses = 0
         user_assets = 0
+        downloads = 0
+        collections = 0
         if len(assets) >= 4:
             users = {name: User.query.filter_by(username=name).first()
                      for name in ('admin', 'adm1', 'adm2', 'user1', 'user2')}
             if all(users.values()):
                 licenses = seed_licenses(assets, users)
                 user_assets = seed_user_assets(assets, users['user1'])
-                print(f'已写入 {licenses} 条授权/申请记录，{user_assets} 条用户草稿/驳回资产')
+                downloads = seed_download_records(assets, users)
+                collections = seed_collections(assets, users)
+                print(f'已写入 {licenses} 条授权/申请记录，{user_assets} 条用户草稿/驳回资产，'
+                      f'{downloads} 条下载记录，{collections} 个合集')
 
         print('\n完成:')
         print(f'  资产 {len(assets)}，水印 {watermarked}，存证 {chained}，授权/申请 {licenses}')
-        print(f'  用户草稿/驳回资产 {user_assets}')
+        print(f'  用户草稿/驳回资产 {user_assets}，下载记录 {downloads}，合集 {collections}')
         print(f'  数据库: {db_path}')
 
 

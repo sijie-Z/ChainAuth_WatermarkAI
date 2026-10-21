@@ -314,9 +314,46 @@ class BlockchainService:
         # 查询证书
         certificate = Certificate.query.filter_by(asset_id=asset.id).first()
 
+        checks = {
+            'chain_record': True,
+            'watermark': bool(asset.watermark_id),
+            'certificate': False,
+            'file_hash': None
+        }
+
+        if certificate:
+            expired = bool(
+                certificate.valid_until and certificate.valid_until <= datetime.utcnow()
+            )
+            checks['certificate'] = certificate.status == 'valid' and not expired
+
+        # 重新计算当前文件指纹，确认文件没有被替换；
+        # 没有文件时不做“通过”判定，明确返回“无法比对”。
+        file_path = asset.watermarked_path or asset.storage_path
+        if file_path and os.path.exists(file_path) and certificate and certificate.file_hash:
+            sha256 = hashlib.sha256()
+            with open(file_path, 'rb') as file_obj:
+                for chunk in iter(lambda: file_obj.read(8192), b''):
+                    sha256.update(chunk)
+            checks['file_hash'] = sha256.hexdigest() == certificate.file_hash
+
+        simulated = not (self.enabled and self._web3 and self._contract)
+        verified = all(value is True for value in checks.values())
+
+        if verified and simulated:
+            message = '本地存证记录校验通过（演示环境，未连接链节点）'
+        elif verified:
+            message = '存证验证通过'
+        elif checks['file_hash'] is None:
+            message = '无法完成文件指纹比对（文件缺失或未签发证书）'
+        else:
+            message = '存证校验未通过，请检查文件、水印或证书状态'
+
         return {
-            'verified': True,
-            'message': '存证验证通过',
+            'verified': verified,
+            'simulated': simulated,
+            'checks': checks,
+            'message': message,
             'tx_hash': tx.tx_hash,
             'block_number': tx.block_number,
             'confirmed_at': tx.confirmed_at.isoformat() if tx.confirmed_at else None,

@@ -26,6 +26,7 @@ ASSET_STATUSES = ('draft', 'pending', 'published', 'rejected', 'deleted')
 class PublicStatsResource(Resource):
     """公开统计数据（无需登录）"""
 
+    @rate_limit(limit=120, window=60)
     def get(self):
         total = Asset.query.filter_by(status='published').count()
         watermarked = Asset.query.filter(
@@ -381,13 +382,25 @@ class AssetUploadResource(Resource):
         # 计算文件哈希（用于去重）
         file_hash = calculate_file_hash(file)
 
-        # 检查是否已存在相同文件
+        # 检查是否已存在相同文件。只向有权限查看该资产的人返回 ID，
+        # 避免通过哈希探测他人草稿/已删除资产。
         existing = Asset.query.filter_by(file_hash=file_hash).first()
         if existing:
+            visible = user and (
+                user.role in ADMIN_ROLES
+                or user_id in (existing.creator_id, existing.owner_id, existing.uploader_id)
+            )
+            data = None
+            if visible:
+                data = {
+                    'existing_asset_id': existing.id,
+                    'asset_code': existing.asset_code,
+                    'status': existing.status
+                }
             return {
                 'code': 400,
-                'message': '文件已存在',
-                'data': {'existing_asset_id': existing.id}
+                'message': '该文件已上传过，请勿重复上传',
+                'data': data
             }, 400
 
         # 生成文件名和路径（UUID + 已验证扩展名；中文原名会被 secure_filename 剥掉扩展名）
@@ -748,14 +761,33 @@ class AssetStatsResource(Resource):
         # 待审批授权数量
         pending_licenses = LicenseApplication.query.filter_by(status='pending').count()
 
-        # 水印嵌入趋势（最近7天）
-        seven_days_ago = datetime.utcnow() - timedelta(days=7)
+        # 按创建时间统计类型分布（本周 / 本月），供仪表盘切换使用
+        now = datetime.utcnow()
+        week_ago = now - timedelta(days=7)
+        month_ago = now - timedelta(days=30)
+
+        def count_by_type(since):
+            rows = db.session.query(
+                Asset.asset_type, func.count(Asset.id)
+            ).filter(
+                Asset.status == 'published',
+                Asset.created_at >= since
+            ).group_by(Asset.asset_type).all()
+            counts = {name: 0 for name in ['image', 'model', 'vector', 'document', 'video']}
+            for asset_type, count in rows:
+                counts[asset_type] = count
+            return counts
+
+        by_type_week = count_by_type(week_ago)
+        by_type_month = count_by_type(month_ago)
+
+        # 水印嵌入趋势（最近30天，前端按周/月截取）
         watermark_trends = db.session.query(
             func.date(Asset.watermark_embedded_at).label('date'),
             func.count(Asset.id).label('count')
         ).filter(
-            Asset.watermark_embedded_at >= seven_days_ago,
-            Asset.watermark_status == 'embedded'
+            Asset.watermark_embedded_at >= month_ago,
+            Asset.watermark_status.in_(['embedded', 'verified'])
         ).group_by(
             func.date(Asset.watermark_embedded_at)
         ).order_by(
@@ -777,6 +809,8 @@ class AssetStatsResource(Resource):
             'data': {
                 'total': total,
                 'by_type': by_type,
+                'by_type_week': by_type_week,
+                'by_type_month': by_type_month,
                 'by_status': by_status,
                 'watermarked': watermarked,
                 'chained': chained,

@@ -368,14 +368,18 @@ class WatermarkService:
         if asset.watermark_id == watermark_id:
             return {
                 'verified': True,
-                'message': '水印验证通过',
+                'content_verified': False,
+                'method': 'registry',
+                'message': '水印编号与平台登记一致（未校验图片内容）',
                 'asset_code': asset.asset_code,
                 'watermark_id': asset.watermark_id
             }
         else:
             return {
                 'verified': False,
-                'message': '水印ID不匹配',
+                'content_verified': False,
+                'method': 'registry',
+                'message': '水印编号与登记记录不匹配',
                 'expected': asset.watermark_id,
                 'provided': watermark_id
             }

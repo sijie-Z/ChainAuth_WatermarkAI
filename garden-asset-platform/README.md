@@ -95,7 +95,7 @@ npm run dev                  # 启动Vite开发服务器 :5173
 ### 运行测试
 
 ```bash
-# 后端测试（212个用例，覆盖API/模型/安全）
+# 后端测试（228个用例，覆盖API/模型/安全）
 cd backend && python -m pytest tests/ -v
 
 # 前端生产构建
@@ -105,6 +105,8 @@ cd frontend && npm run build
 ### 默认账号
 
 管理员 `admin / admin123` · 审批员 `adm1, adm2 / 123456` · 用户 `user1, user2 / 123456`
+
+> 正式部署前请通过 `ADMIN_INITIAL_PASSWORD` 指定初始管理员密码，或登录后立即修改；演示账号可用 `python -m flask reset-password` 重置。
 
 ## 项目结构
 
@@ -124,7 +126,7 @@ garden-asset-platform/
 │   ├── algorithm/                 # 水印算法库（DCT+QIM/矢量）
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
-│   ├── tests/                     # pytest测试（212个用例）
+│   ├── tests/                     # pytest测试（228个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -173,8 +175,22 @@ garden-asset-platform/
 | GET | `/api/assets/my` | 我的资产 |
 | GET | `/api/assets/:id/thumbnail` | 资产缩略图（`?size=card` 返回列表卡片图） |
 | GET | `/api/assets/:id/related` | 同园林相关资产 |
+| GET | `/api/assets/:id/evidence` | 资产证据链（上传/水印/存证/证书/发布/授权/下载） |
+| GET/POST | `/api/assets/:id/shares` | 查询/创建公开分享链接（有效期、访问码、下载权限） |
+| GET | `/api/shares/:token` | 公开分享页数据（免登录，返回资产与证据链） |
+| GET | `/api/shares/:token/download` | 通过分享链接下载（受分享设置限制） |
+| DELETE | `/api/shares/:id` | 撤销分享链接 |
 | GET/POST/DELETE | `/api/assets/:id/favorite` | 查询/添加/取消收藏 |
 | GET | `/api/favorites` | 我的收藏列表 |
+| GET | `/api/downloads/my` | 我的下载记录 |
+| GET | `/api/downloads` | 全平台下载台账（管理员，支持筛选与汇总） |
+| GET | `/api/assets/:id/downloads` | 单件资产下载摘要（所有者/管理员） |
+| GET/POST | `/api/collections` | 我的合集列表 / 新建合集 |
+| GET/PUT/DELETE | `/api/collections/:id` | 合集详情 / 编辑 / 删除 |
+| POST | `/api/collections/:id/assets` | 批量加入资产 |
+| DELETE | `/api/collections/:id/assets/:asset_id` | 从合集移除资产 |
+| GET/POST | `/api/gardens` | 园林列表 / 新建园林档案（管理员） |
+| PUT/DELETE | `/api/gardens/:id` | 编辑 / 删除园林档案（管理员，仍有资产时拒绝删除） |
 
 ### 水印与溯源
 
@@ -209,7 +225,8 @@ garden-asset-platform/
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/notifications` | 当前用户的待办提醒（审批、申请状态、到期） |
+| GET | `/api/notifications` | 当前用户的待办提醒（审批、申请状态、到期），含未读数与已读状态 |
+| POST | `/api/notifications/read` | 标记单条或全部待办为已读 |
 | GET | `/api/logs` | 操作日志（管理员，支持模块/结果/日期/关键词筛选） |
 
 ### 授权管理
@@ -227,8 +244,8 @@ garden-asset-platform/
 
 ## 安全特性
 
-- JWT双Token认证（Access 24h + Refresh 30d）
-- 请求频率限制（Redis计数器，可配置阈值）
+- JWT双Token认证（Access 24h + Refresh 30d）；登出同时撤销 refresh token，改密/重置密码后旧 token 立即失效
+- 请求频率限制（Redis计数器，可配置阈值；Redis异常不影响业务执行）
 - 文件上传魔数字节校验（17种文件类型）
 - 文件大小限制（继承Flask MAX_CONTENT_LENGTH）
 - Content-Security-Policy响应头（生产模式）
@@ -251,6 +268,8 @@ Docker 部署见 `garden-asset-platform/.env.example`；本地开发见 `backend
 | `AI_ENABLED` | 启用AI功能 | `true` |
 | `ZHIPU_API_KEY` | 智谱AI密钥 | - |
 | `BAIDU_OCR_API_KEY` | 百度OCR密钥 | - |
+| `ADMIN_INITIAL_PASSWORD` | 初始化脚本创建 admin 时使用的密码 | `admin123`（仅演示） |
+| `TRUST_PROXY_HEADERS` | 是否信任反向代理的 `X-Forwarded-For`（仅在后端不直接暴露时开启） | `false` |
 
 > 多 worker 部署（4 个 gunicorn worker）默认关闭任务调度器，避免备份/授权过期任务重复执行。如需启用，设置 `SCHEDULER_ENABLED=true`，并确保只运行一个调度进程（或改用外部 cron）。
 

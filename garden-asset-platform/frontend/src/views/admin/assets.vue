@@ -60,6 +60,34 @@
         </el-form-item>
       </el-form>
 
+      <!-- 批量操作 -->
+      <div v-if="selectedRows.length" class="batch-bar">
+        <span class="batch-count">已选 {{ selectedRows.length }} 件资产</span>
+        <el-button
+          v-if="canProcessAssets"
+          size="small"
+          type="primary"
+          plain
+          :loading="batchRunning === 'watermark'"
+          :disabled="!!batchRunning"
+          @click="bulkWatermark"
+        >
+          批量嵌水印
+        </el-button>
+        <el-button
+          v-if="canProcessAssets"
+          size="small"
+          type="success"
+          plain
+          :loading="batchRunning === 'chain'"
+          :disabled="!!batchRunning"
+          @click="bulkChain"
+        >
+          批量上链
+        </el-button>
+        <el-button size="small" text :disabled="!!batchRunning" @click="clearSelection">取消选择</el-button>
+      </div>
+
       <!-- 表格 -->
       <el-skeleton :loading="loading" animated :rows="8">
         <template #template>
@@ -74,7 +102,14 @@
           </div>
         </template>
         <template #default>
-          <el-table :data="assets" stripe>
+          <el-table
+            ref="tableRef"
+            :data="assets"
+            stripe
+            row-key="id"
+            @selection-change="handleSelectionChange"
+          >
+            <el-table-column v-if="canProcessAssets" type="selection" width="44" />
             <el-table-column prop="asset_code" label="编码" width="220" class-name="cell-code" />
             <el-table-column label="标题" min-width="200">
               <template #default="{ row }">
@@ -130,6 +165,7 @@
                   </template>
                   <span v-else-if="row.status === 'pending' && isOwner(row)" class="owner-hint">不能审核自己上传的资产</span>
                   <el-button
+                    v-if="canProcessAssets"
                     size="small"
                     type="primary"
                     plain
@@ -140,6 +176,7 @@
                     嵌水印
                   </el-button>
                   <el-button
+                    v-if="canProcessAssets"
                     size="small"
                     type="success"
                     plain
@@ -172,6 +209,7 @@
 
 <script setup>
 import { ref, computed, reactive, onMounted } from 'vue'
+import { parseBackendDate } from '@/utils'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Search } from '@element-plus/icons-vue'
@@ -210,6 +248,8 @@ const route = useRoute()
 const userStore = useUserStore()
 
 const canApprove = computed(() => ASSET_APPROVER_ROLES.includes(userStore.userRole))
+// 嵌水印/上链仅资产管理员与超管（审批员只参与发布审核）
+const canProcessAssets = computed(() => ['admin', 'asset_admin'].includes(userStore.userRole))
 
 function canApproveRow(row) {
   return canApprove.value && !isOwner(row)
@@ -217,6 +257,9 @@ function canApproveRow(row) {
 
 const loading = ref(false)
 const actionState = reactive({})
+const tableRef = ref(null)
+const selectedRows = ref([])
+const batchRunning = ref('')
 const assets = ref([])
 const page = ref(1)
 const perPage = ref(20)
@@ -327,8 +370,26 @@ function viewDetail(id) {
   router.push(`/assets/${id}`)
 }
 
+function handleSelectionChange(rows) {
+  selectedRows.value = rows
+}
+
+function clearSelection() {
+  tableRef.value?.clearSelection()
+  selectedRows.value = []
+}
+
 async function batchWatermark(row) {
   if (actionState[row.id]) return
+  try {
+    await ElMessageBox.confirm(
+      `确定对「${row.title}」嵌入水印？水印会写入资产文件，操作不可撤销。`,
+      '确认嵌入水印',
+      { type: 'warning', confirmButtonText: '嵌入', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
   actionState[row.id] = 'watermark'
   try {
     const response = await watermarkApi.embed(row.id)
@@ -347,6 +408,15 @@ async function batchWatermark(row) {
 
 async function batchChain(row) {
   if (actionState[row.id]) return
+  try {
+    await ElMessageBox.confirm(
+      `确定对「${row.title}」上链存证？存证记录写入后不可撤销。`,
+      '确认上链存证',
+      { type: 'warning', confirmButtonText: '上链', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
   actionState[row.id] = 'chain'
   try {
     const response = await blockchainApi.register(row.id)
@@ -361,6 +431,91 @@ async function batchChain(row) {
   } finally {
     delete actionState[row.id]
   }
+}
+
+async function bulkWatermark() {
+  if (batchRunning.value) return
+  const targets = selectedRows.value.filter(
+    row => !['embedded', 'verified'].includes(row.watermark_status)
+  )
+  if (!targets.length) {
+    ElMessage.info('所选资产都已完成水印嵌入')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `将对 ${targets.length} 件资产嵌入水印，操作不可撤销。是否继续？`,
+      '批量嵌入水印',
+      { type: 'warning', confirmButtonText: '开始处理', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+
+  batchRunning.value = 'watermark'
+  let success = 0
+  let failed = 0
+  for (const row of targets) {
+    actionState[row.id] = 'watermark'
+    try {
+      const response = await watermarkApi.embed(row.id)
+      if (response.data?.code === 200) success += 1
+      else failed += 1
+    } catch {
+      failed += 1
+    } finally {
+      delete actionState[row.id]
+    }
+  }
+  batchRunning.value = ''
+  ElMessage[failed ? 'warning' : 'success'](
+    `水印处理完成：成功 ${success} 件${failed ? `，失败 ${failed} 件` : ''}`
+  )
+  clearSelection()
+  loadAssets()
+}
+
+async function bulkChain() {
+  if (batchRunning.value) return
+  const targets = selectedRows.value.filter(
+    row => ['embedded', 'verified'].includes(row.watermark_status)
+      && row.chain_status !== 'confirmed'
+  )
+  if (!targets.length) {
+    ElMessage.info('所选资产中没有可上链的资产（需先完成水印嵌入）')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `将对 ${targets.length} 件资产上链存证，存证记录不可撤销。是否继续？`,
+      '批量上链存证',
+      { type: 'warning', confirmButtonText: '开始处理', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+
+  batchRunning.value = 'chain'
+  let success = 0
+  let failed = 0
+  for (const row of targets) {
+    actionState[row.id] = 'chain'
+    try {
+      const response = await blockchainApi.register(row.id)
+      if (response.data?.code === 200) success += 1
+      else failed += 1
+    } catch {
+      failed += 1
+    } finally {
+      delete actionState[row.id]
+    }
+  }
+  batchRunning.value = ''
+  ElMessage[failed ? 'warning' : 'success'](
+    `上链处理完成：成功 ${success} 件${failed ? `，失败 ${failed} 件` : ''}`
+  )
+  clearSelection()
+  loadAssets()
 }
 
 function getTypeName(type) {
@@ -381,8 +536,8 @@ function getAssetStatus(status) {
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString('zh-CN')
+  const date = parseBackendDate(dateStr)
+  return date ? date.toLocaleDateString('zh-CN') : ''
 }
 
 onMounted(() => {
@@ -439,6 +594,25 @@ onMounted(() => {
   border-radius: $radius-lg;
   box-shadow: $shadow-sm;
   padding: $spacing-xl;
+}
+
+.batch-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: $spacing-md;
+  padding: 10px 14px;
+  border: 1px solid rgba(47, 107, 90, 0.25);
+  border-radius: $radius-md;
+  background: rgba(47, 107, 90, 0.06);
+
+  .batch-count {
+    margin-right: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: $primary-color;
+  }
 }
 
 // ========== 筛选行 ==========

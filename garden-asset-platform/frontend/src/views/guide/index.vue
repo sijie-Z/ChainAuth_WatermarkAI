@@ -107,41 +107,21 @@
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td>普通用户</td>
-                  <td>浏览已发布资产、申请授权、查看自己的授权与申请</td>
-                  <td class="mono">user1 / 123456</td>
-                </tr>
-                <tr>
-                  <td>一级审批员</td>
-                  <td>审批授权申请的第一级；可审核资产发布</td>
-                  <td class="mono">adm1 / 123456</td>
-                </tr>
-                <tr>
-                  <td>二级审批员</td>
-                  <td>复核一级已通过的申请，通过后生成授权</td>
-                  <td class="mono">adm2 / 123456</td>
-                </tr>
-                <tr>
-                  <td>资产管理员</td>
-                  <td>管理资产、嵌入水印、上链存证</td>
-                  <td class="mono">asset_mgr / 123456</td>
-                </tr>
-                <tr>
-                  <td>授权管理员</td>
-                  <td>查看授权台账、处理审批与合同</td>
-                  <td class="mono">license_mgr / 123456</td>
-                </tr>
-                <tr>
-                  <td>超级管理员</td>
-                  <td>全部后台功能</td>
-                  <td class="mono">admin / admin123</td>
+                <tr v-for="item in roleRows" :key="item.role">
+                  <td>{{ item.role }}</td>
+                  <td>{{ item.description }}</td>
+                  <td class="mono">
+                    <template v-if="isDev">{{ item.account }}</template>
+                    <span v-else class="account-hidden">仅开发环境显示</span>
+                  </td>
                 </tr>
               </tbody>
             </table>
           </div>
           <p class="guide-note">
-            演示账号仅在开发模式显示在登录页；正式部署请删除或修改这些账号。
+            {{ isDev
+              ? '演示账号只在开发模式显示；正式部署前请删除或修改这些账号。'
+              : '正式环境不展示演示账号。部署时请删除种子账号或修改默认密码。' }}
           </p>
         </section>
 
@@ -151,7 +131,7 @@
             <span class="section-index">03</span>
             <div>
               <h2>一条完整流程</h2>
-              <p>按下面顺序操作，可以在 10 分钟内走完整个闭环。</p>
+              <p>按下面顺序操作，可以在 5–10 分钟内走完整个闭环。</p>
             </div>
           </header>
 
@@ -198,10 +178,25 @@
               <h3>我的授权</h3>
               <p>查看审批中的申请、已生效的授权、有效期与合同信息。</p>
             </router-link>
+            <router-link to="/my-assets" class="map-card">
+              <span class="map-kicker">管作品</span>
+              <h3>我的资产与收藏</h3>
+              <p>处理草稿、驳回与待审资产，或查看收藏过的园林影像。</p>
+            </router-link>
+            <router-link to="/collections" class="map-card">
+              <span class="map-kicker">做策展</span>
+              <h3>我的合集</h3>
+              <p>按主题把多件资产组织成合集，可在资产详情一键加入。</p>
+            </router-link>
+            <router-link to="/downloads" class="map-card">
+              <span class="map-kicker">查台账</span>
+              <h3>下载记录</h3>
+              <p>查看授权下载过的资产、对应授权编号与下载时间。</p>
+            </router-link>
             <router-link to="/admin" class="map-card">
               <span class="map-kicker">做管理</span>
               <h3>管理后台</h3>
-              <p>仪表盘、资产审核、水印与存证管理、双重审批、用户管理。</p>
+              <p>仪表盘、资产审核、水印与存证管理、双重审批、园林档案与用户管理。</p>
             </router-link>
           </div>
         </section>
@@ -228,6 +223,15 @@
             </el-collapse-item>
             <el-collapse-item title="申请授权后多久能审批？" name="4">
               <p>流程是“一级审批 → 二级审批”。演示环境可分别用 adm1 和 adm2 登录后台完成两级审批；审批通过后“我的授权”会出现生效记录。</p>
+            </el-collapse-item>
+            <el-collapse-item title="如何把资产发给外部人员核验？" name="5">
+              <p>资产所有者或管理员在资产详情点击“分享核验”，可生成免登录链接，并设置有效期、访问码、是否允许下载与下载次数上限。外部人员打开后会看到资产信息与完整证据链；分享链接可随时撤销。</p>
+            </el-collapse-item>
+            <el-collapse-item title="顶栏铃铛里的待办点过之后还会亮吗？" name="6">
+              <p>不会。点击待办或“全部已读”后，已读状态会保存到你的账号；业务状态再次变化时会重新变为未读。</p>
+            </el-collapse-item>
+            <el-collapse-item title="收藏和合集有什么区别？" name="7">
+              <p>收藏是“我关注这件资产”，一件资产只有收藏/未收藏两种状态；合集是“我按主题组织一组资产”，一件资产可以同时出现在多个合集里，还可以设为公开供他人浏览。</p>
             </el-collapse-item>
             <el-collapse-item title="AI 分析和智能问答为什么提示不可用？" name="5">
               <p>AI 能力需要单独配置模型与 API Key，默认关闭。关闭时接口会明确返回 503，而不是伪造分析结果。配置方式见 README 的 AI 章节。</p>
@@ -284,6 +288,17 @@ docker exec garden-backend python scripts/init_db.py</code></pre>
 <script setup>
 import { reactive, onMounted } from 'vue'
 import { gardenApi, publicApi } from '@/api/modules'
+
+const isDev = import.meta.env.DEV
+
+const roleRows = [
+  { role: '普通用户', description: '浏览已发布资产、申请授权、查看自己的授权与申请', account: 'user1 / 123456' },
+  { role: '一级审批员', description: '审批授权申请的第一级；可审核资产发布', account: 'adm1 / 123456' },
+  { role: '二级审批员', description: '复核一级已通过的申请，通过后生成授权', account: 'adm2 / 123456' },
+  { role: '资产管理员', description: '管理资产、嵌入水印、上链存证', account: 'asset_mgr / 123456' },
+  { role: '授权管理员', description: '查看授权台账、处理审批与合同', account: 'license_mgr / 123456' },
+  { role: '超级管理员', description: '全部后台功能', account: 'admin / admin123' }
+]
 
 const stats = reactive({
   assets: '—',
@@ -670,6 +685,13 @@ onMounted(async () => {
   font-size: 12px;
   line-height: 1.7;
   color: $text-placeholder;
+}
+
+.account-hidden {
+  font-family: $font-family;
+  font-size: 12px;
+  color: $text-placeholder;
+  white-space: normal;
 }
 
 // ========== 流程 ==========

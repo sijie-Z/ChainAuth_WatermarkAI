@@ -92,20 +92,19 @@
             </el-table-column>
             <el-table-column prop="created_at" :label="isApplicationView ? '提交时间' : '生效时间'" width="110">
               <template #default="{ row }">
-                {{ formatDate(row.created_at) || '-' }}
+                {{ formatDate(isApplicationView ? row.created_at : (row.start_time || row.created_at)) || '-' }}
               </template>
             </el-table-column>
             <el-table-column label="操作" width="190">
               <template #default="{ row }">
-                <el-button size="small" link type="primary" @click="viewDetail(row)">详情</el-button>
+                <el-button size="small" link type="primary" @click.stop="viewDetail(row)">详情</el-button>
                 <el-button
                   v-if="!isApplicationView"
                   size="small"
                   link
                   type="primary"
                   :loading="downloadingId === row.id"
-                  @click.stop="downloadAsset(row)"
-                  :disabled="row.status !== 'active' || !row.asset_id"
+                  @click.stop="downloadAsset(row)"                  :disabled="row.status !== 'active' || !row.asset_id"
                   :title="row.status !== 'active' ? '授权未生效或已过期，无法下载' : '下载资产'"
                 >
                   下载
@@ -256,6 +255,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { parseBackendDate } from '@/utils'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { licenseApi, assetApi } from '@/api/modules'
@@ -464,8 +464,8 @@ function formatScope(detail) {
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString('zh-CN')
+  const date = parseBackendDate(dateStr)
+  return date ? date.toLocaleDateString('zh-CN') : ''
 }
 
 onMounted(() => {

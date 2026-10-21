@@ -109,4 +109,39 @@ test.describe('登录与业务流程', () => {
     await applicationTab.click()
     await expect(page.locator('.card-title')).toHaveText('我的申请')
   })
+
+  test('Ctrl+K 全局搜索可以检索资产并跳转', async ({ page }) => {
+    await page.goto('/login')
+    await page.getByPlaceholder('请输入用户名').fill('user1')
+    await page.getByPlaceholder('请输入密码').fill('123456')
+    await page.locator('.login-btn').click()
+    await page.waitForURL('**/assets', { timeout: 15000 })
+
+    await page.keyboard.press('Control+k')
+    await expect(page.locator('.palette')).toBeVisible()
+    await page.locator('.palette-input').fill('拙政')
+
+    // 等资产接口返回（园林是本地的，会先出现），再点击第一个资产结果。
+    // 注意按分组标题精确匹配，避免匹配到“2 件资产”的园林分组。
+    const assetGroup = page.locator('.palette-group').filter({
+      has: page.locator('.palette-group-label').filter({ hasText: /^资产$/ })
+    }).first()
+    const firstAsset = assetGroup.locator('.palette-item').first()
+    await expect(firstAsset).toContainText('拙政', { timeout: 10000 })
+    await firstAsset.click()
+    await expect(page).toHaveURL(/\/assets\/[0-9a-f-]+$/)
+    await expect(page.getByRole('heading', { name: '资产详情' })).toBeVisible()
+  })
+
+  test('下载记录页可用', async ({ page }) => {
+    await page.goto('/login')
+    await page.getByPlaceholder('请输入用户名').fill('user1')
+    await page.getByPlaceholder('请输入密码').fill('123456')
+    await page.locator('.login-btn').click()
+    await page.waitForURL('**/assets', { timeout: 15000 })
+
+    await page.goto('/downloads')
+    await expect(page.getByRole('heading', { name: '下载记录' })).toBeVisible()
+    await expect(page.locator('.download-table, .el-empty').first()).toBeVisible({ timeout: 10000 })
+  })
 })

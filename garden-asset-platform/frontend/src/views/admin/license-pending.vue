@@ -130,6 +130,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { parseBackendDate } from '@/utils'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import { licenseApi } from '@/api/modules'
@@ -176,11 +177,22 @@ const approveDialog = ref({
   }
 })
 
-const commentPresets = [
-  '材料齐全，同意授权',
-  '使用范围明确，准予通过',
-  '请补充用途说明后重新提交'
-]
+const COMMENT_PRESETS = {
+  approve: [
+    '材料齐全，同意授权',
+    '使用范围明确，准予通过',
+    '授权范围与用途匹配，同意'
+  ],
+  reject: [
+    '请补充用途说明后重新提交',
+    '使用范围与授权类型不匹配',
+    '申请材料不完整，暂不通过'
+  ]
+}
+
+const commentPresets = computed(
+  () => COMMENT_PRESETS[approveDialog.value.action] || []
+)
 
 function defaultValidUntil(durationMonths) {
   if (!durationMonths) return null
@@ -277,8 +289,8 @@ function getLicenseType(type) {
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString('zh-CN')
+  const date = parseBackendDate(dateStr)
+  return date ? date.toLocaleDateString('zh-CN') : ''
 }
 
 onMounted(() => {

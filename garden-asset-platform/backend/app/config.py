@@ -107,6 +107,12 @@ class Config:
     # CORS 配置
     CORS_ORIGINS = os.environ.get('CORS_ORIGINS', '*')
 
+    # 仅在确认后端不直接对外暴露（例如只经 nginx 反代）时开启，
+    # 否则客户端可伪造 X-Forwarded-For 绕过限流。
+    TRUST_PROXY_HEADERS = os.environ.get(
+        'TRUST_PROXY_HEADERS', 'false'
+    ).lower() == 'true'
+
     # 限流配置
     RATELIMIT_ENABLED = os.environ.get('RATELIMIT_ENABLED', 'true').lower() == 'true'
     RATELIMIT_LOGIN = int(os.environ.get('RATELIMIT_LOGIN', '5'))

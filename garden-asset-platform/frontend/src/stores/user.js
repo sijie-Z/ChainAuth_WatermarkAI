@@ -37,9 +37,9 @@ export const useUserStore = defineStore('user', () => {
   }
 
   function logout() {
-    // 先让后端撤销当前 access token，再清空本地状态；失败也不阻断退出
+    // 先让后端撤销当前 access/refresh token，再清空本地状态；失败也不阻断退出
     if (token.value) {
-      api.post('/logout', null, { silent: true }).catch(() => {})
+      api.post('/logout', { refresh_token: refreshToken.value || undefined }, { silent: true }).catch(() => {})
     }
     clearAuth()
   }

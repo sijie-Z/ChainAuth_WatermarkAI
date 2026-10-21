@@ -27,20 +27,57 @@ export const assetApi = {
     : api.post('/assets/upload', formData),
   update: (id, data) => api.put(`/assets/${id}`, data),
   delete: (id) => api.delete(`/assets/${id}`),
-  download: (id) => api.get(`/assets/${id}/download`, { responseType: 'blob' }),
+  download: (id) => api.get(`/assets/${id}/download`, { responseType: 'blob', timeout: 0 }),
   my: (params) => api.get('/assets/my', { params }),
   publish: (id) => api.post(`/assets/${id}/publish`),
   approve: (id, data) => api.post(`/assets/${id}/approve`, data),
   getFavorite: (id) => api.get(`/assets/${id}/favorite`),
   addFavorite: (id) => api.post(`/assets/${id}/favorite`),
   removeFavorite: (id) => api.delete(`/assets/${id}/favorite`),
-  getFavorites: (params) => api.get('/favorites', { params })
+  getFavorites: (params) => api.get('/favorites', { params }),
+  getEvidence: (id) => api.get(`/assets/${id}/evidence`),
+  getShares: (id) => api.get(`/assets/${id}/shares`),
+  createShare: (id, data) => api.post(`/assets/${id}/shares`, data),
+  revokeShare: (shareId) => api.delete(`/shares/${shareId}`)
+}
+
+// 公开分享（免登录）
+export const shareApi = {
+  get: (token, params) => api.get(`/shares/${token}`, { params, silent: true, skipAuth: true }),
+  download: (token, params) => api.get(`/shares/${token}/download`, {
+    params,
+    responseType: 'blob',
+    timeout: 0,
+    silent: true,
+    skipAuth: true
+  })
+}
+
+// 下载记录
+export const downloadApi = {
+  mine: (params) => api.get('/downloads/my', { params }),
+  ledger: (params) => api.get('/downloads', { params }),
+  assetSummary: (assetId) => api.get(`/assets/${assetId}/downloads`)
+}
+
+// 用户合集
+export const collectionApi = {
+  getList: (params) => api.get('/collections', { params }),
+  getDetail: (id) => api.get(`/collections/${id}`),
+  create: (data) => api.post('/collections', data),
+  update: (id, data) => api.put(`/collections/${id}`, data),
+  remove: (id) => api.delete(`/collections/${id}`),
+  addAssets: (id, assetIds) => api.post(`/collections/${id}/assets`, { asset_ids: assetIds }),
+  removeAsset: (id, assetId) => api.delete(`/collections/${id}/assets/${assetId}`)
 }
 
 // 园林相关API
 export const gardenApi = {
-  getList: () => api.get('/gardens', { silent: true }),
-  getDetail: (id) => api.get(`/gardens/${id}`)
+  getList: (params) => api.get('/gardens', { params, silent: true }),
+  getDetail: (id) => api.get(`/gardens/${id}`),
+  create: (data) => api.post('/gardens', data),
+  update: (id, data) => api.put(`/gardens/${id}`, data),
+  remove: (id) => api.delete(`/gardens/${id}`)
 }
 
 // 水印相关API
@@ -90,7 +127,8 @@ export const licenseApi = {
 
 // 站内待办提醒
 export const notificationApi = {
-  get: () => api.get('/notifications', { silent: true })
+  get: () => api.get('/notifications', { silent: true }),
+  markRead: (payload) => api.post('/notifications/read', payload, { silent: true })
 }
 
 // 操作日志

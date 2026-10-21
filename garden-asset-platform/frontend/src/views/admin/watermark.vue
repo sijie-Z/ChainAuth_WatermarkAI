@@ -97,6 +97,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { parseBackendDate } from '@/utils'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import { assetApi, watermarkApi } from '@/api/modules'
@@ -243,8 +244,8 @@ async function doBatchExtract() {
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString('zh-CN')
+  const date = parseBackendDate(dateStr)
+  return date ? date.toLocaleDateString('zh-CN') : ''
 }
 
 onMounted(() => {

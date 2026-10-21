@@ -61,9 +61,19 @@
           </el-form-item>
 
           <el-form-item label="所属园林" prop="garden_id">
-            <el-select v-model="form.garden_id" placeholder="请选择园林">
+            <el-select
+              v-model="form.garden_id"
+              :loading="gardenLoading"
+              :disabled="gardenError"
+              placeholder="请选择园林"
+              style="width: 100%"
+            >
               <el-option v-for="g in gardens" :key="g.id" :label="g.name" :value="g.id" />
             </el-select>
+            <div v-if="gardenError" class="garden-error">
+              园林列表加载失败，暂时无法上传
+              <el-button link type="primary" size="small" @click="loadGardens">重试</el-button>
+            </div>
           </el-form-item>
         </div>
 
@@ -144,6 +154,8 @@ const router = useRouter()
 const formRef = ref()
 const uploadRef = ref()
 const gardens = ref([])
+const gardenLoading = ref(false)
+const gardenError = ref(false)
 const uploading = ref(false)
 const uploadProgress = ref(0)
 const uploadStatus = ref('')
@@ -184,21 +196,48 @@ const rules = {
 const canWatermark = computed(() => ['image', 'vector'].includes(form.value.asset_type))
 
 watch(canWatermark, supported => {
-  if (!supported) form.value.auto_watermark = false
-})
+  form.value.auto_watermark = supported
+}, { immediate: true })
 
 async function loadGardens() {
+  gardenLoading.value = true
+  gardenError.value = false
   try {
     const response = await gardenApi.getList()
-    if (response.data.code === 200) {
+    if (response.data.code === 200 && response.data.data?.length) {
       gardens.value = response.data.data
+    } else {
+      gardenError.value = true
     }
   } catch (error) {
     console.error('加载园林失败:', error)
+    gardenError.value = true
+  } finally {
+    gardenLoading.value = false
   }
 }
 
+const MAX_UPLOAD_SIZE = 500 * 1024 * 1024
+
+function validateSelectedFile(file) {
+  if (!file) return false
+  const ext = (file.name.split('.').pop() || '').toLowerCase()
+  if (!TYPE_BY_EXT[ext]) {
+    ElMessage.error(`不支持的文件格式：.${ext || '未知'}`)
+    return false
+  }
+  if (file.size > MAX_UPLOAD_SIZE) {
+    ElMessage.error('文件超过 500MB 上传限制，请压缩或分割后再上传')
+    return false
+  }
+  return true
+}
+
 function handleFileChange(file) {
+  if (!validateSelectedFile(file.raw)) {
+    form.value.file = null
+    return
+  }
   form.value.file = file.raw
 
   const ext = (file.name.split('.').pop() || '').toLowerCase()
@@ -251,6 +290,13 @@ async function submitUpload() {
     ElMessage.warning('请先选择文件')
     return
   }
+  if (!validateSelectedFile(form.value.file)) {
+    return
+  }
+  if (gardenError.value) {
+    ElMessage.warning('园林列表尚未加载成功，请重试后再上传')
+    return
+  }
 
   uploading.value = true
   createdAssetId.value = ''
@@ -269,6 +315,8 @@ async function submitUpload() {
     formData.append('tags', JSON.stringify(form.value.tags))
 
     const response = await assetApi.create(formData, {
+      // 大文件可能远超全局 30 秒超时，上传请求不设总超时
+      timeout: 0,
       onUploadProgress: (event) => {
         if (!event.total) return
         // 文件传输占前 60%，剩余进度用于水印/存证阶段
@@ -552,6 +600,12 @@ onUnmounted(() => {
     gap: 10px;
     margin-top: 14px;
   }
+}
+
+.garden-error {
+  margin-top: 4px;
+  font-size: 12px;
+  color: $error-color;
 }
 
 @media (max-width: 768px) {

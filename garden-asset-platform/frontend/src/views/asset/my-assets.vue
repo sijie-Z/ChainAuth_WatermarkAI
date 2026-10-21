@@ -107,6 +107,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Upload } from '@element-plus/icons-vue'
 import { assetApi } from '@/api/modules'
+import { parseBackendDate } from '@/utils'
 
 const router = useRouter()
 const assets = ref([])
@@ -193,6 +194,9 @@ async function removeAsset(item) {
     const response = await assetApi.delete(item.id)
     if (response.data?.code === 200) {
       ElMessage.success('资产已删除')
+      if (assets.value.length === 1 && page.value > 1) {
+        page.value -= 1
+      }
       loadAssets()
     } else {
       ElMessage.error(response.data?.message || '删除失败')
@@ -205,8 +209,8 @@ async function removeAsset(item) {
 }
 
 function formatDate(value) {
-  if (!value) return '-'
-  return new Date(value).toLocaleDateString('zh-CN')
+  const date = parseBackendDate(value)
+  return date ? date.toLocaleDateString('zh-CN') : '-'
 }
 
 onMounted(loadAssets)

@@ -21,6 +21,24 @@
           <el-icon><Share /></el-icon>
           复制链接
         </el-button>
+        <el-button
+          v-if="asset.status === 'published'"
+          text
+          title="把资产加入自己的合集"
+          @click="openCollectionDialog"
+        >
+          <el-icon><Collection /></el-icon>
+          加入合集
+        </el-button>
+        <el-button
+          v-if="canManage && asset.status === 'published'"
+          text
+          title="生成可对外核验的分享链接"
+          @click="openShareDialog"
+        >
+          <el-icon><Link /></el-icon>
+          分享核验
+        </el-button>
       </div>
     </header>
 
@@ -226,6 +244,10 @@
                 <span class="side-kicker">授权与分发</span>
               </header>
               <p class="side-note">下载与使用需经双重审批，授权记录会写入台账。</p>
+              <div v-if="licenseStatusError" class="license-state-error">
+                授权状态加载失败，暂时无法判断是否需要重新申请。
+                <el-button link type="primary" size="small" @click="loadExtras">重试</el-button>
+              </div>
               <el-button
                 v-if="canSubmitPublish && (!requiresWatermark || watermarkReady)"
                 type="primary"
@@ -255,7 +277,13 @@
               >
                 查看审批进度
               </el-button>
-              <el-button v-else type="primary" class="side-action" @click="applyLicense">
+              <el-button
+                v-else
+                type="primary"
+                class="side-action"
+                :disabled="licenseStatusError"
+                @click="applyLicense"
+              >
                 {{ rejectedApplication ? '重新申请授权' : '申请授权' }}
               </el-button>
               <el-button class="side-action" @click="goBack">返回资产列表</el-button>
@@ -281,6 +309,168 @@
             <el-button type="primary" :loading="editSaving" @click="saveEdit">保存</el-button>
           </template>
         </el-dialog>
+
+        <!-- 分享核验链接 -->
+        <el-dialog v-model="shareVisible" title="分享核验" width="min(620px, 94vw)">
+          <p class="share-dialog-note">
+            生成一个免登录的核验页，外部人员无需注册即可查看资产信息与证据链。
+            分享链接不会暴露文件存储路径。
+          </p>
+          <el-form label-position="top" class="share-form">
+            <div class="share-form-grid">
+              <el-form-item label="有效期">
+                <el-select v-model="shareForm.expires_in_days" style="width: 100%">
+                  <el-option label="7 天" :value="7" />
+                  <el-option label="30 天" :value="30" />
+                  <el-option label="90 天" :value="90" />
+                  <el-option label="长期有效" :value="0" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="访问码（可选）">
+                <el-input
+                  v-model="shareForm.access_code"
+                  placeholder="4-32 位，留空则无需访问码"
+                  maxlength="32"
+                  show-password
+                />
+              </el-form-item>
+            </div>
+            <el-form-item label="下载权限">
+              <div class="share-download-row">
+                <el-switch v-model="shareForm.allow_download" active-text="允许下载" />
+                <el-input
+                  v-if="shareForm.allow_download"
+                  v-model.number="shareForm.max_downloads"
+                  type="number"
+                  min="1"
+                  max="1000"
+                  placeholder="下载次数上限（留空不限）"
+                  class="share-limit-input"
+                />
+              </div>
+            </el-form-item>
+          </el-form>
+
+          <div class="share-create-row">
+            <el-button type="primary" :loading="shareCreating" @click="createShareLink">
+              生成分享链接
+            </el-button>
+            <span class="share-create-hint">仅已发布资产可分享</span>
+          </div>
+
+          <div v-if="createdShare" class="created-share">
+            <span class="created-label">新链接</span>
+            <code>{{ sharePageUrl(createdShare.token) }}</code>
+            <el-button size="small" @click="copyShareUrl(createdShare.token)">
+              <el-icon><CopyDocument /></el-icon>
+              复制
+            </el-button>
+          </div>
+
+          <div class="existing-shares">
+            <div class="existing-head">
+              <strong>已创建的链接</strong>
+              <span v-if="shareListLoading">加载中…</span>
+            </div>
+            <el-empty
+              v-if="!shareListLoading && shares.length === 0"
+              description="还没有分享链接"
+              :image-size="52"
+            />
+            <ul v-else class="share-list">
+              <li v-for="share in shares" :key="share.id" class="share-item">
+                <div class="share-item-main">
+                  <span class="share-item-url">{{ sharePageUrl(share.token) }}</span>
+                  <span class="share-item-meta">
+                    {{ share.has_access_code ? '需要访问码' : '无需访问码' }}
+                    · {{ share.allow_download ? `允许下载（${share.download_count}/${share.max_downloads || '不限'}）` : '仅查看' }}
+                    · {{ share.expires_at ? `${formatDate(share.expires_at)} 到期` : '长期有效' }}
+                  </span>
+                </div>
+                <div class="share-item-actions">
+                  <el-button size="small" text @click="copyShareUrl(share.token)">复制</el-button>
+                  <el-button
+                    size="small"
+                    text
+                    type="danger"
+                    :disabled="share.status !== 'active'"
+                    @click="revokeShare(share)"
+                  >
+                    {{ share.status === 'active' ? '撤销' : '已失效' }}
+                  </el-button>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </el-dialog>
+
+        <!-- 加入合集 -->
+        <el-dialog v-model="collectionDialogVisible" title="加入合集" width="min(520px, 92vw)">
+          <p class="share-dialog-note">
+            合集用于按主题组织资产。你可以同时加入多个合集；取消勾选会从对应合集中移出。
+          </p>
+          <el-skeleton v-if="collectionLoading" animated :rows="3" />
+          <el-empty
+            v-else-if="collectionOptions.length === 0"
+            description="还没有合集"
+            :image-size="60"
+          >
+            <el-button type="primary" @click="$router.push('/collections')">去新建合集</el-button>
+          </el-empty>
+          <el-checkbox-group v-else v-model="collectionChecked" class="collection-choices">
+            <label
+              v-for="item in collectionOptions"
+              :key="item.id"
+              class="collection-choice"
+            >
+              <el-checkbox :value="item.id" />
+              <span class="choice-body">
+                <strong>{{ item.name }}</strong>
+                <small>{{ item.asset_count }} 件资产 · {{ item.is_public ? '公开' : '私有' }}</small>
+              </span>
+            </label>
+          </el-checkbox-group>
+          <template #footer>
+            <el-button @click="collectionDialogVisible = false">取消</el-button>
+            <el-button
+              type="primary"
+              :loading="collectionSaving"
+              :disabled="collectionOptions.length === 0"
+              @click="saveCollections"
+            >
+              保存
+            </el-button>
+          </template>
+        </el-dialog>
+
+        <!-- 溯源证据链 -->
+        <section class="evidence-section">
+          <header class="related-head">
+            <div>
+              <h2 class="related-title">溯源证据链</h2>
+              <p class="related-subtitle">上传登记、水印、链上存证与业务台账按时间排列</p>
+            </div>
+            <el-button
+              v-if="canManage && asset.status === 'published'"
+              type="primary"
+              plain
+              size="small"
+              @click="openShareDialog"
+            >
+              分享核验
+            </el-button>
+          </header>
+          <el-skeleton v-if="evidenceLoading" animated :rows="4" />
+          <div v-else-if="evidenceError" class="evidence-error">
+            <span>证据链加载失败，可能影响对资产状态的判断。</span>
+            <el-button type="primary" link @click="loadEvidence">重新加载</el-button>
+          </div>
+          <EvidenceChain
+            v-else
+            :items="evidence.items"
+            :summary="evidence.summary"
+          />
+        </section>
 
         <!-- 同园林相关资产 -->
         <section v-if="related.length" class="related-section">
@@ -314,12 +504,16 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { ArrowLeft, Document, Picture, Star, StarFilled, Share, Download } from '@element-plus/icons-vue'
-import { assetApi, licenseApi, watermarkApi, blockchainApi } from '@/api/modules'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  ArrowLeft, Collection, CopyDocument, Document, Link, Picture, Star, StarFilled, Share, Download
+} from '@element-plus/icons-vue'
+import { assetApi, collectionApi, licenseApi, watermarkApi, blockchainApi } from '@/api/modules'
 import { useUserStore } from '@/stores/user'
+import { copyToClipboard, parseBackendDate } from '@/utils'
+import EvidenceChain from '@/components/common/EvidenceChain.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -342,17 +536,39 @@ const tags = ref([])
 const related = ref([])
 const myLicenses = ref([])
 const myApplications = ref([])
+const evidence = ref({ items: [], summary: null })
+const evidenceLoading = ref(false)
+const evidenceError = ref(false)
+const licenseStatusError = ref(false)
+const shareVisible = ref(false)
+const shareCreating = ref(false)
+const shareListLoading = ref(false)
+const shares = ref([])
+const createdShare = ref(null)
+const shareForm = reactive({
+  expires_in_days: 7,
+  access_code: '',
+  allow_download: false,
+  max_downloads: null
+})
+const collectionDialogVisible = ref(false)
+const collectionOptions = ref([])
+const collectionChecked = ref([])
+const collectionLoading = ref(false)
+const collectionSaving = ref(false)
 const watermarkReady = computed(() =>
   ['embedded', 'verified'].includes(asset.value.watermark_status)
 )
 const requiresWatermark = computed(() =>
   ['image', 'vector'].includes(asset.value.asset_type)
 )
+const isOwner = computed(() => {
+  const userId = userStore.user?.id
+  return Boolean(userId) && [asset.value.creator_id, asset.value.owner_id, asset.value.uploader_id].includes(userId)
+})
 const canManage = computed(() => {
   const role = userStore.userRole
-  const userId = userStore.user?.id
-  return ['admin', 'asset_admin'].includes(role)
-    || (userId && [asset.value.creator_id, asset.value.owner_id].includes(userId))
+  return ['admin', 'asset_admin'].includes(role) || isOwner.value
 })
 const activeLicense = computed(() => myLicenses.value.find(license => {
   if (license.status !== 'active') return false
@@ -367,7 +583,7 @@ const rejectedApplication = computed(() => myApplications.value.find(application
 ) || null)
 const canDownload = computed(() => Boolean(canManage.value || activeLicense.value))
 const canSubmitPublish = computed(() =>
-  canManage.value && ['draft', 'rejected'].includes(asset.value.status)
+  isOwner.value && ['draft', 'rejected'].includes(asset.value.status)
 )
 const assetState = computed(() => {
   if (activeLicense.value) {
@@ -416,6 +632,7 @@ async function loadAsset() {
     if (response.data.code === 200) {
       asset.value = response.data.data
       loadExtras()
+      loadEvidence()
     } else {
       loadError.value = true
     }
@@ -450,6 +667,172 @@ async function loadExtras() {
   }
   if (results[4].status === 'fulfilled' && results[4].value.data?.code === 200) {
     myApplications.value = results[4].value.data.data?.items || []
+  }
+  // 授权/申请状态未知时不能贸然让用户再次申请，避免重复提交
+  licenseStatusError.value = [results[3], results[4]].some(
+    result => result.status !== 'fulfilled' || result.value.data?.code !== 200
+  )
+}
+
+async function loadEvidence() {
+  if (!asset.value.id) return
+  evidenceLoading.value = true
+  evidenceError.value = false
+  try {
+    const response = await assetApi.getEvidence(asset.value.id)
+    if (response.data?.code === 200) {
+      evidence.value = response.data.data || { items: [], summary: null }
+    } else {
+      evidenceError.value = true
+    }
+  } catch {
+    evidenceError.value = true
+  } finally {
+    evidenceLoading.value = false
+  }
+}
+
+async function openShareDialog() {
+  shareVisible.value = true
+  createdShare.value = null
+  await loadShares()
+}
+
+async function loadShares() {
+  if (!asset.value.id) return
+  shareListLoading.value = true
+  try {
+    const response = await assetApi.getShares(asset.value.id)
+    if (response.data?.code === 200) {
+      shares.value = response.data.data || []
+    }
+  } catch {
+    ElMessage.error('分享链接加载失败')
+  } finally {
+    shareListLoading.value = false
+  }
+}
+
+function sharePageUrl(token) {
+  return `${window.location.origin}/share/${token}`
+}
+
+async function copyShareUrl(token) {
+  const ok = await copyToClipboard(sharePageUrl(token))
+  ElMessage[ok ? 'success' : 'error'](ok ? '分享链接已复制' : '复制失败，请手动选择')
+}
+
+async function createShareLink() {
+  if (shareCreating.value) return
+  const code = shareForm.access_code.trim()
+  if (code && (code.length < 4 || code.length > 32)) {
+    ElMessage.warning('访问码长度需为 4-32 位')
+    return
+  }
+  if (shareForm.allow_download && shareForm.max_downloads) {
+    const limit = Number(shareForm.max_downloads)
+    if (!Number.isInteger(limit) || limit < 1 || limit > 1000) {
+      ElMessage.warning('下载次数上限需在 1-1000 之间')
+      return
+    }
+  }
+
+  shareCreating.value = true
+  try {
+    const response = await assetApi.createShare(asset.value.id, {
+      expires_in_days: shareForm.expires_in_days,
+      access_code: code || undefined,
+      allow_download: shareForm.allow_download,
+      max_downloads: shareForm.allow_download ? (shareForm.max_downloads || undefined) : undefined
+    })
+    if (response.data?.code === 200) {
+      createdShare.value = response.data.data
+      ElMessage.success('分享链接已生成')
+      await loadShares()
+    } else {
+      ElMessage.error(response.data?.message || '创建分享失败')
+    }
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '创建分享失败')
+  } finally {
+    shareCreating.value = false
+  }
+}
+
+async function revokeShare(share) {
+  try {
+    await ElMessageBox.confirm(
+      '撤销后该链接立即失效，已经拿到链接的人将无法继续查看。',
+      '撤销分享链接',
+      { type: 'warning', confirmButtonText: '撤销', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  try {
+    const response = await assetApi.revokeShare(share.id)
+    if (response.data?.code === 200) {
+      ElMessage.success('分享链接已撤销')
+      if (createdShare.value?.id === share.id) createdShare.value = null
+      await loadShares()
+    } else {
+      ElMessage.error(response.data?.message || '撤销失败')
+    }
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '撤销失败')
+  }
+}
+
+async function openCollectionDialog() {
+  collectionDialogVisible.value = true
+  collectionLoading.value = true
+  try {
+    const response = await collectionApi.getList({ asset_id: asset.value.id })
+    if (response.data?.code === 200) {
+      collectionOptions.value = response.data.data || []
+      collectionChecked.value = collectionOptions.value
+        .filter(item => item.contains)
+        .map(item => item.id)
+    } else {
+      ElMessage.error(response.data?.message || '合集加载失败')
+    }
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '合集加载失败')
+  } finally {
+    collectionLoading.value = false
+  }
+}
+
+async function saveCollections() {
+  if (collectionSaving.value) return
+  const selected = new Set(collectionChecked.value)
+  const tasks = []
+  for (const item of collectionOptions.value) {
+    const shouldContain = selected.has(item.id)
+    if (shouldContain && !item.contains) {
+      tasks.push(collectionApi.addAssets(item.id, [asset.value.id]))
+    } else if (!shouldContain && item.contains) {
+      tasks.push(collectionApi.removeAsset(item.id, asset.value.id))
+    }
+  }
+
+  if (tasks.length === 0) {
+    collectionDialogVisible.value = false
+    return
+  }
+
+  collectionSaving.value = true
+  try {
+    const results = await Promise.allSettled(tasks)
+    const failed = results.filter(result => result.status === 'rejected').length
+    if (failed) {
+      ElMessage.warning(`已保存，${failed} 个合集操作失败`)
+    } else {
+      ElMessage.success('合集已更新')
+    }
+    collectionDialogVisible.value = false
+  } finally {
+    collectionSaving.value = false
   }
 }
 
@@ -663,8 +1046,8 @@ function formatSize(size) {
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString('zh-CN')
+  const date = parseBackendDate(dateStr)
+  return date ? date.toLocaleDateString('zh-CN') : ''
 }
 
 onMounted(() => {
@@ -975,6 +1358,235 @@ onMounted(() => {
   background: $bg-secondary;
   font-size: 12px;
   color: $text-secondary;
+}
+
+// ========== 证据链 ==========
+.evidence-section {
+  margin-top: $spacing-3xl;
+  padding: $spacing-xl;
+  border: 1px solid $border-light;
+  border-radius: $radius-lg;
+  background: $bg-card;
+  box-shadow: $shadow-card;
+}
+
+.evidence-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px;
+  border: 1px dashed $border-color;
+  border-radius: $radius-md;
+  background: $bg-secondary;
+  font-size: 13px;
+  color: $text-secondary;
+}
+
+.license-state-error {
+  margin: 8px 0 12px;
+  padding: 8px 10px;
+  border-radius: $radius-sm;
+  background: $warning-bg;
+  font-size: 12px;
+  line-height: 1.6;
+  color: $warning-color;
+}
+
+// ========== 分享弹窗 ==========
+.share-dialog-note {
+  margin: 0 0 16px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: $text-secondary;
+}
+
+.share-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.share-download-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+}
+
+.share-limit-input {
+  max-width: 220px;
+}
+
+.share-create-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-top: 1px dashed $border-light;
+  border-bottom: 1px dashed $border-light;
+}
+
+.share-create-hint {
+  font-size: 12px;
+  color: $text-placeholder;
+}
+
+.created-share {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(47, 107, 90, 0.25);
+  border-radius: $radius-md;
+  background: rgba(47, 107, 90, 0.06);
+
+  .created-label {
+    flex: 0 0 auto;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: $primary-color;
+  }
+
+  code {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: $font-mono;
+    font-size: 12px;
+    color: $text-primary;
+  }
+}
+
+.existing-shares {
+  margin-top: 18px;
+}
+
+.existing-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: $text-secondary;
+
+  strong {
+    font-weight: 600;
+    color: $text-primary;
+  }
+
+  span {
+    font-size: 12px;
+    color: $text-placeholder;
+  }
+}
+
+.share-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.share-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid $border-light;
+
+  &:last-child { border-bottom: none; }
+}
+
+.share-item-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.share-item-url {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: $font-mono;
+  font-size: 12px;
+  color: $text-primary;
+}
+
+.share-item-meta {
+  font-size: 11px;
+  color: $text-placeholder;
+}
+
+.share-item-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 2px;
+}
+
+.collection-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.collection-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid $border-light;
+  border-radius: $radius-md;
+  cursor: pointer;
+
+  &:hover {
+    border-color: $primary-light;
+    background: $bg-hover;
+  }
+}
+
+.choice-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+
+  strong {
+    font-size: 13px;
+    color: $text-primary;
+  }
+
+  small {
+    font-size: 11px;
+    color: $text-placeholder;
+  }
+}
+
+@media (max-width: 720px) {
+  .share-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .share-download-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .share-limit-input {
+    max-width: 100%;
+  }
+
+  .evidence-section {
+    padding: 16px;
+  }
 }
 
 // ========== 相关资产 ==========

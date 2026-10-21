@@ -1,5 +1,5 @@
 """操作日志查询（管理员）"""
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
@@ -8,7 +8,7 @@ from flask_restful import Resource
 from app.models import OperationLog, User
 
 ADMIN_ROLES = ('admin', 'asset_admin', 'license_admin', 'adm1', 'adm2')
-MODULES = ('asset', 'watermark', 'blockchain', 'license', 'auth', 'user')
+MODULES = ('asset', 'watermark', 'blockchain', 'license', 'auth', 'user', 'garden')
 
 
 class LogListResource(Resource):
@@ -47,7 +47,13 @@ class LogListResource(Resource):
                 return {'code': 400, 'message': '开始日期格式无效'}, 400
         if date_to:
             try:
-                query = query.filter(OperationLog.created_at <= datetime.fromisoformat(date_to))
+                end = datetime.fromisoformat(date_to)
+                # 只给日期时按“当天结束”处理，避免漏掉结束日当天的日志
+                if len(date_to) == 10:
+                    end += timedelta(days=1)
+                    query = query.filter(OperationLog.created_at < end)
+                else:
+                    query = query.filter(OperationLog.created_at <= end)
             except ValueError:
                 return {'code': 400, 'message': '结束日期格式无效'}, 400
 

@@ -159,6 +159,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { parseBackendDate } from '@/utils'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Printer, Share, Link, CircleCheck, CircleClose } from '@element-plus/icons-vue'
@@ -234,8 +235,8 @@ function getOwnershipName(type) {
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return ''
-  return new Date(dateStr).toLocaleString('zh-CN')
+  const date = parseBackendDate(dateStr)
+  return date ? date.toLocaleString('zh-CN') : ''
 }
 
 onMounted(() => {

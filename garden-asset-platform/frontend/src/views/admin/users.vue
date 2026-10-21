@@ -98,6 +98,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { parseBackendDate } from '@/utils'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { userApi } from '@/api/modules'
@@ -275,8 +276,8 @@ function getRoleType(role) {
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString('zh-CN')
+  const date = parseBackendDate(dateStr)
+  return date ? date.toLocaleDateString('zh-CN') : ''
 }
 
 onMounted(() => {

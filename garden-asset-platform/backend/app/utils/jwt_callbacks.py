@@ -38,12 +38,25 @@ def user_lookup_error_callback(_jwt_header, _jwt_data):
 
 @jwt.token_in_blocklist_loader
 def check_if_token_revoked(_jwt_header, jwt_payload):
-    """登出后写入 UserToken 的 jti 立即失效"""
+    """登出后的 jti 与密码修改前的 token 都立即失效"""
+    from datetime import datetime
     from app.models.user import UserToken
+    from app.utils.tokens import user_token_invalid_before
+
     jti = jwt_payload.get('jti')
-    if not jti:
-        return False
-    return UserToken.query.filter_by(token=jti, is_revoked=True).first() is not None
+    if jti and UserToken.query.filter_by(token=jti, is_revoked=True).first() is not None:
+        return True
+
+    identity = jwt_payload.get('sub')
+    cutoff = user_token_invalid_before(identity)
+    issued_at = jwt_payload.get('iat')
+    if cutoff and issued_at:
+        try:
+            return datetime.utcfromtimestamp(int(issued_at)) < cutoff
+        except (TypeError, ValueError, OverflowError):
+            return False
+
+    return False
 
 
 @jwt.expired_token_loader

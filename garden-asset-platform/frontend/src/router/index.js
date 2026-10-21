@@ -63,6 +63,24 @@ const routes = [
     meta: { title: '我的收藏', requiresAuth: true, siteHeader: true }
   },
   {
+    path: '/downloads',
+    name: 'MyDownloads',
+    component: page(() => import('@/views/download/index.vue')),
+    meta: { title: '下载记录', requiresAuth: true, siteHeader: true }
+  },
+  {
+    path: '/collections',
+    name: 'Collections',
+    component: page(() => import('@/views/collections/index.vue')),
+    meta: { title: '我的合集', requiresAuth: true, siteHeader: true }
+  },
+  {
+    path: '/collections/:id',
+    name: 'CollectionDetail',
+    component: page(() => import('@/views/collections/detail.vue')),
+    meta: { title: '合集详情', requiresAuth: true, siteHeader: true }
+  },
+  {
     path: '/my-assets',
     name: 'MyAssets',
     component: page(() => import('@/views/asset/my-assets.vue')),
@@ -97,6 +115,12 @@ const routes = [
     name: 'Certificate',
     component: page(() => import('@/views/certificate/index.vue')),
     meta: { title: '存证证书', siteHeader: true }
+  },
+  {
+    path: '/share/:token',
+    name: 'SharedAsset',
+    component: page(() => import('@/views/share/index.vue'), false),
+    meta: { title: '资产分享' }
   },
   {
     path: '/profile',
@@ -139,13 +163,13 @@ const routes = [
         path: 'assets',
         name: 'AdminAssets',
         component: page(() => import('@/views/admin/assets.vue'), false),
-        meta: { title: '资产管理' }
+        meta: { title: '资产管理', roles: ['admin', 'asset_admin', 'adm1', 'adm2'] }
       },
       {
         path: 'watermark',
         name: 'AdminWatermark',
         component: page(() => import('@/views/admin/watermark.vue'), false),
-        meta: { title: '水印管理' }
+        meta: { title: '水印管理', roles: ['admin', 'asset_admin'] }
       },
       {
         path: 'license/pending',
@@ -157,19 +181,31 @@ const routes = [
         path: 'license/approved',
         name: 'AdminLicenseApproved',
         component: page(() => import('@/views/admin/license-approved.vue'), false),
-        meta: { title: '已审批' }
+        meta: { title: '已审批', roles: ADMIN_ROLES }
       },
       {
         path: 'blockchain',
         name: 'AdminBlockchain',
         component: page(() => import('@/views/admin/blockchain.vue'), false),
-        meta: { title: '存证管理' }
+        meta: { title: '存证管理', roles: ['admin', 'asset_admin'] }
+      },
+      {
+        path: 'gardens',
+        name: 'AdminGardens',
+        component: page(() => import('@/views/admin/gardens.vue'), false),
+        meta: { title: '园林档案', roles: ['admin', 'asset_admin'] }
       },
       {
         path: 'users',
         name: 'AdminUsers',
         component: page(() => import('@/views/admin/users.vue'), false),
-        meta: { title: '用户管理' }
+        meta: { title: '用户管理', roles: ['admin'] }
+      },
+      {
+        path: 'downloads',
+        name: 'AdminDownloads',
+        component: page(() => import('@/views/download/index.vue'), false),
+        meta: { title: '下载台账', roles: ADMIN_ROLES }
       },
       {
         path: 'logs',
@@ -185,7 +221,11 @@ const router = createRouter({
   history: createWebHistory(),
   routes,
   scrollBehavior(to, from, savedPosition) {
-    return savedPosition || { top: 0 }
+    if (savedPosition) return savedPosition
+    if (to.hash) {
+      return { el: to.hash, top: 88, behavior: 'smooth' }
+    }
+    return { top: 0 }
   }
 })
 
@@ -219,9 +259,12 @@ router.beforeEach((to, from, next) => {
       return next({ path: '/login', query: { redirect: to.fullPath } })
     }
 
-    // 角色权限检查：遍历 matched 路由收集所有允许的角色
-    const allowedRoles = to.matched
-      .flatMap(record => record.meta.roles || [])
+    // 角色权限检查：以最深层（最具体）路由的 roles 为准，
+    // 避免父级后台路由的角色集合放宽子页面权限。
+    const roleRecords = to.matched.filter(record => record.meta.roles?.length)
+    const allowedRoles = roleRecords.length
+      ? roleRecords[roleRecords.length - 1].meta.roles
+      : []
     if (allowedRoles.length > 0) {
       const userRole = userStore.user?.role
       if (!allowedRoles.includes(userRole)) {

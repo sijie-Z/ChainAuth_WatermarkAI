@@ -158,8 +158,10 @@ const form = ref({
 })
 
 const demoAccounts = [
-  { role: '管理员', username: 'admin', password: 'admin123' },
-  { role: '一级审批员', username: 'adm1', password: '123456' }
+  { role: '普通用户', username: 'user1', password: '123456' },
+  { role: '一级审批员', username: 'adm1', password: '123456' },
+  { role: '二级审批员', username: 'adm2', password: '123456' },
+  { role: '管理员', username: 'admin', password: 'admin123' }
 ]
 
 const rules = {
@@ -174,6 +176,8 @@ const rules = {
 }
 
 async function handleLogin() {
+  if (loading.value) return
+
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
 

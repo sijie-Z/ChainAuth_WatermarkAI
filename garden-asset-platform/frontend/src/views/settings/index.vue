@@ -95,6 +95,9 @@
               <el-tag size="small" type="info" effect="plain" class="local-pref-tag">本地偏好</el-tag>
             </div>
           </template>
+          <p class="setting-note">
+            站内待办会自动汇总到顶栏铃铛；以下开关只保存本机偏好，邮件/短信通知尚未接入。
+          </p>
           <div class="setting-list">
             <div class="setting-item">
               <div class="setting-info">
@@ -343,6 +346,13 @@ function changePassword() {
   .local-pref-tag {
     margin-left: auto;
   }
+}
+
+.setting-note {
+  margin: 0 0 14px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: $text-placeholder;
 }
 
 .setting-list {

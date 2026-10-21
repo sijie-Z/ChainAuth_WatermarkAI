@@ -56,11 +56,14 @@ class BlockchainRegisterResource(Resource):
 class BlockchainVerifyResource(Resource):
     """存证验证"""
 
-    def get(self, asset_id):
-        """验证资产存证"""
+    def get(self, asset_id=None):
+        """验证资产存证（公开核验仅限已发布资产）"""
+        if not asset_id:
+            return {'code': 400, 'message': '缺少资产ID'}, 400
+
         asset = Asset.query.get(asset_id)
 
-        if not asset:
+        if not asset or asset.status != 'published':
             return {'code': 404, 'message': '资产不存在'}, 404
 
         result = blockchain_service.verify_asset(asset)
@@ -82,7 +85,7 @@ class BlockchainVerifyResource(Resource):
 
         asset = Asset.query.filter_by(watermark_id=watermark_id).first()
 
-        if not asset:
+        if not asset or asset.status != 'published':
             return {
                 'code': 404,
                 'verified': False,

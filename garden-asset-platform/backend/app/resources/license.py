@@ -7,6 +7,7 @@ from flask import request
 from flask_restful import Resource
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 from app.extensions import db
 from app.models.license import License, LicenseApplication, LicenseContract
 from app.models.asset import Asset
@@ -318,7 +319,12 @@ class LicenseApproveResource(Resource):
         if not acted:
             return {'code': 400, 'message': '当前状态不可审批，或不属于你的审批阶段'}, 400
 
-        db.session.commit()
+        try:
+            db.session.commit()
+        except IntegrityError:
+            # 同一申请并发审批时，合同唯一索引会拦住第二次写入
+            db.session.rollback()
+            return {'code': 409, 'message': '该申请已生成授权，请勿重复审批'}, 409
 
         OperationLog.log(
             user=user,
@@ -332,7 +338,13 @@ class LicenseApproveResource(Resource):
         return {'code': 200, 'message': '审批成功'}
 
     def _create_license(self, application, end_time=None):
-        """创建授权记录"""
+        """创建授权记录（同一申请只生成一份合同与授权）"""
+        existing_contract = LicenseContract.query.filter_by(
+            application_id=application.id
+        ).first()
+        if existing_contract:
+            return existing_contract.license
+
         asset = application.asset
         if end_time is None and application.duration_months:
             end_time = datetime.utcnow() + timedelta(days=application.duration_months * 30)
@@ -353,6 +365,7 @@ class LicenseApproveResource(Resource):
         )
         db.session.add(license)
         db.session.flush()
+        asset.license_count = (asset.license_count or 0) + 1
         db.session.add(LicenseContract(
             contract_code=f"CON-{datetime.now().strftime('%Y%m%d%H%M%S%f')}-{uuid.uuid4().hex[:4].upper()}",
             application_id=application.id,
@@ -411,6 +424,18 @@ class LicenseApprovedResource(Resource):
                 application.adm2_review_time.isoformat()
                 if application and application.adm2_review_time else None
             )
+            if application:
+                lic_dict['application_code'] = application.application_code
+                lic_dict['applicant_name'] = (
+                    (application.applicant.nickname or application.applicant.username)
+                    if application.applicant else None
+                )
+                lic_dict['adm1_comment'] = application.adm1_review_comment
+                lic_dict['adm2_comment'] = application.adm2_review_comment
+                lic_dict['approve_comment'] = (
+                    application.adm2_review_comment or application.adm1_review_comment
+                )
+                lic_dict['usage_purpose'] = application.usage_purpose
             contract = LicenseContract.query.filter_by(license_id=lic.id).first()
             lic_dict['contract_code'] = contract.contract_code if contract else None
             result.append(lic_dict)

@@ -116,6 +116,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { parseBackendDate } from '@/utils'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import { licenseApi } from '@/api/modules'
@@ -238,8 +239,8 @@ function getStatusType(status) {
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString('zh-CN')
+  const date = parseBackendDate(dateStr)
+  return date ? date.toLocaleDateString('zh-CN') : ''
 }
 
 onMounted(() => {

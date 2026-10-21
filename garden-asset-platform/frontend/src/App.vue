@@ -8,6 +8,7 @@
       />
     </router-view>
   </ErrorBoundary>
+  <CommandPalette />
 </template>
 
 <script setup>
@@ -15,6 +16,7 @@ import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import SiteHeader from '@/components/common/SiteHeader.vue'
+import CommandPalette from '@/components/common/CommandPalette.vue'
 
 const route = useRoute()
 const userStore = useUserStore()

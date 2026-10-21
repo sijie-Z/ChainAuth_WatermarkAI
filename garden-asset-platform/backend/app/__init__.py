@@ -26,6 +26,13 @@ def create_app(config_name='default'):
     # 初始化扩展
     init_extensions(app)
 
+    # 反向代理后的真实客户端 IP（仅显式开启时信任，避免伪造 X-Forwarded-For）
+    if app.config.get('TRUST_PROXY_HEADERS'):
+        from werkzeug.middleware.proxy_fix import ProxyFix
+        app.wsgi_app = ProxyFix(
+            app.wsgi_app, x_for=1, x_proto=1, x_host=0, x_port=0, x_prefix=0
+        )
+
     # 配置日志
     setup_logging(app)
 
@@ -69,6 +76,12 @@ def create_app(config_name='default'):
         except Exception:
             status['database'] = 'disconnected'
             status['status'] = 'degraded'
+        status['integrations'] = {
+            'redis': 'connected' if app.extensions.get('redis') else 'memory-fallback',
+            'blockchain': 'enabled' if app.config.get('BLOCKCHAIN_ENABLED') else 'simulated',
+            'ai': 'enabled' if app.config.get('AI_ENABLED') else 'disabled',
+            'scheduler': 'enabled' if app.config.get('SCHEDULER_ENABLED') else 'disabled'
+        }
         return jsonify(status), 200 if status['status'] == 'healthy' else 503
 
     return app
@@ -147,6 +160,39 @@ def register_api_resources(app):
     api.add_resource(AssetPublishResource, '/assets/<string:asset_id>/publish')
     api.add_resource(AssetApproveResource, '/assets/<string:asset_id>/approve')
 
+    # 证据链与公开分享
+    from app.resources.evidence import AssetEvidenceResource
+    from app.resources.share import (
+        AssetShareListResource, ShareResource,
+        PublicShareResource, PublicShareDownloadResource
+    )
+    api.add_resource(AssetEvidenceResource, '/assets/<string:asset_id>/evidence')
+    api.add_resource(AssetShareListResource, '/assets/<string:asset_id>/shares')
+    api.add_resource(PublicShareResource, '/shares/<string:token>')
+    api.add_resource(PublicShareDownloadResource, '/shares/<string:token>/download')
+    api.add_resource(ShareResource, '/shares/<int:share_id>')
+
+    # 下载台账
+    from app.resources.downloads import (
+        MyDownloadsResource, DownloadLedgerResource, AssetDownloadSummaryResource
+    )
+    api.add_resource(MyDownloadsResource, '/downloads/my')
+    api.add_resource(DownloadLedgerResource, '/downloads')
+    api.add_resource(AssetDownloadSummaryResource, '/assets/<string:asset_id>/downloads')
+
+    # 用户合集
+    from app.resources.collections import (
+        CollectionListResource, CollectionResource,
+        CollectionAssetsResource, CollectionAssetResource
+    )
+    api.add_resource(CollectionListResource, '/collections')
+    api.add_resource(CollectionResource, '/collections/<int:collection_id>')
+    api.add_resource(CollectionAssetsResource, '/collections/<int:collection_id>/assets')
+    api.add_resource(
+        CollectionAssetResource,
+        '/collections/<int:collection_id>/assets/<string:asset_id>'
+    )
+
     # 园林相关
     from app.resources.garden import GardenListResource, GardenResource, GardenStatsResource
     api.add_resource(GardenListResource, '/gardens')
@@ -204,8 +250,9 @@ def register_api_resources(app):
     api.add_resource(MyApplicationsResource, '/license/my-applications')
 
     # 站内待办提醒
-    from app.resources.notifications import NotificationsResource
+    from app.resources.notifications import NotificationsResource, NotificationReadResource
     api.add_resource(NotificationsResource, '/notifications')
+    api.add_resource(NotificationReadResource, '/notifications/read')
 
     # 操作日志
     from app.resources.logs import LogListResource

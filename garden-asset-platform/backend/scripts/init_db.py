@@ -29,6 +29,7 @@ def create_admin_user():
     print("Creating admin user...")
 
     if not User.query.filter_by(username='admin').first():
+        admin_password = os.environ.get('ADMIN_INITIAL_PASSWORD', 'admin123')
         admin = User(
             username='admin',
             email='admin@szgarden.cn',
@@ -37,11 +38,14 @@ def create_admin_user():
             status='active',
             user_number='ADMIN001'
         )
-        admin.set_password('admin123')
+        admin.set_password(admin_password)
 
         db.session.add(admin)
         db.session.commit()
-        print("Admin user created! Username: admin, Password: admin123")
+        if os.environ.get('ADMIN_INITIAL_PASSWORD'):
+            print("Admin user created with ADMIN_INITIAL_PASSWORD.")
+        else:
+            print("Admin user created! Username: admin, Password: admin123 (change it before deployment)")
     else:
         print("Admin user already exists.")
 
@@ -117,6 +121,21 @@ def create_watermark_dir():
         print(f"  Created: {path}")
 
 
+def ensure_indexes():
+    """为旧库补建唯一索引（create_all 不会修改已存在的表）"""
+    from sqlalchemy import text
+    try:
+        db.session.execute(text(
+            'CREATE UNIQUE INDEX IF NOT EXISTS uq_license_contract_application '
+            'ON license_contracts(application_id)'
+        ))
+        db.session.commit()
+        print("Indexes ready.")
+    except Exception as exc:
+        db.session.rollback()
+        print(f"Index check skipped: {exc}")
+
+
 def init_database():
     """初始化数据库"""
     app = create_app('development')
@@ -127,6 +146,7 @@ def init_database():
 
         # 创建表
         create_tables()
+        ensure_indexes()
 
         # 创建基础数据
         create_admin_user()

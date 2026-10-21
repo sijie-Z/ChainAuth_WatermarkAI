@@ -18,6 +18,12 @@
       </nav>
 
       <div class="site-actions">
+        <button type="button" class="site-search-btn" aria-label="全局搜索（Ctrl K）" @click="openCommandPalette">
+          <el-icon><Search /></el-icon>
+          <span>搜索</span>
+          <kbd>Ctrl K</kbd>
+        </button>
+
         <router-link to="/guide" class="guide-link">
           <el-icon><Reading /></el-icon>
           <span>新手指南</span>
@@ -32,8 +38,8 @@
           popper-class="notification-popover"
         >
           <template #reference>
-            <button class="site-icon-btn" type="button" aria-label="待办提醒">
-              <el-badge :value="notificationCount" :hidden="notificationCount === 0" :max="99">
+            <button class="site-icon-btn" type="button" :aria-label="`待办提醒，${unreadCount} 条未读`">
+              <el-badge :value="unreadCount" :hidden="unreadCount === 0" :max="99">
                 <el-icon><Bell /></el-icon>
               </el-badge>
             </button>
@@ -41,13 +47,26 @@
           <div class="notification-panel">
             <header class="notification-head">
               <strong>待办提醒</strong>
-              <span>{{ notificationCount }} 项</span>
+              <div class="notification-head-actions">
+                <span>{{ unreadCount }} 条未读</span>
+                <button
+                  v-if="unreadCount > 0"
+                  type="button"
+                  class="mark-all"
+                  @click="markAllRead"
+                >
+                  全部已读
+                </button>
+              </div>
             </header>
             <el-empty v-if="notifications.length === 0" description="暂无待办" :image-size="56" />
             <ul v-else class="notification-list">
-              <li v-for="item in notifications" :key="item.id">
-                <router-link :to="item.link" @click="notificationVisible = false">
-                  <span class="notification-title">{{ item.title }}</span>
+              <li v-for="item in notifications" :key="item.id" :class="{ unread: !item.read }">
+                <router-link :to="item.link" @click="markNotificationRead(item)">
+                  <span class="notification-title">
+                    <span v-if="!item.read" class="unread-dot" aria-hidden="true"></span>
+                    {{ item.title }}
+                  </span>
                   <span class="notification-desc">{{ item.description }}</span>
                 </router-link>
               </li>
@@ -71,6 +90,14 @@
                 <el-dropdown-item command="favorites">
                   <el-icon><Star /></el-icon>
                   我的收藏
+                </el-dropdown-item>
+                <el-dropdown-item command="collections">
+                  <el-icon><Collection /></el-icon>
+                  我的合集
+                </el-dropdown-item>
+                <el-dropdown-item command="downloads">
+                  <el-icon><Download /></el-icon>
+                  下载记录
                 </el-dropdown-item>
                 <el-dropdown-item command="profile">
                   <el-icon><User /></el-icon>
@@ -117,6 +144,8 @@
       <router-link v-if="isLoggedIn" to="/license/my" @click="mobileOpen = false">我的授权</router-link>
       <router-link v-if="isLoggedIn" to="/my-assets" @click="mobileOpen = false">我的资产</router-link>
       <router-link v-if="isLoggedIn" to="/favorites" @click="mobileOpen = false">我的收藏</router-link>
+      <router-link v-if="isLoggedIn" to="/collections" @click="mobileOpen = false">我的合集</router-link>
+      <router-link v-if="isLoggedIn" to="/downloads" @click="mobileOpen = false">下载记录</router-link>
       <router-link v-if="isAdmin" to="/admin" @click="mobileOpen = false">管理后台</router-link>
       <router-link v-if="!isLoggedIn" to="/login" @click="mobileOpen = false">登录</router-link>
     </nav>
@@ -129,7 +158,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { notificationApi, userApi } from '@/api/modules'
 import {
-  ArrowDown, Bell, DataLine, Menu, Picture, Reading, Setting, Star, SwitchButton, User
+  ArrowDown, Bell, Collection, DataLine, Download, Menu, Picture, Reading, Search, Setting, Star, SwitchButton, User
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
@@ -139,6 +168,7 @@ const mobileOpen = ref(false)
 const notificationVisible = ref(false)
 const notifications = ref([])
 const notificationCount = ref(0)
+const unreadCount = ref(0)
 
 const ADMIN_ROLES = ['admin', 'asset_admin', 'license_admin', 'adm1', 'adm2']
 const isLoggedIn = computed(() => userStore.isLoggedIn)
@@ -154,6 +184,7 @@ async function loadNotifications() {
   if (!userStore.isLoggedIn) {
     notifications.value = []
     notificationCount.value = 0
+    unreadCount.value = 0
     return
   }
   try {
@@ -161,9 +192,39 @@ async function loadNotifications() {
     if (response.data?.code === 200) {
       notifications.value = response.data.data?.items || []
       notificationCount.value = response.data.data?.count || 0
+      unreadCount.value = response.data.data?.unread_count ?? notificationCount.value
     }
   } catch {
     // 待办提醒失败不阻断页面
+  }
+}
+
+async function markNotificationRead(item) {
+  notificationVisible.value = false
+  if (item.read || !item.key) return
+  item.read = true
+  unreadCount.value = Math.max(0, unreadCount.value - (item.count || 1))
+  try {
+    const response = await notificationApi.markRead({ keys: [item.key] })
+    if (typeof response.data?.data?.unread_count === 'number') {
+      unreadCount.value = response.data.data.unread_count
+    }
+  } catch {
+    item.read = false
+    loadNotifications()
+  }
+}
+
+async function markAllRead() {
+  if (unreadCount.value === 0) return
+  const previous = notifications.value.map(item => item.read)
+  notifications.value.forEach(item => { item.read = true })
+  unreadCount.value = 0
+  try {
+    await notificationApi.markRead({ all: true })
+  } catch {
+    notifications.value.forEach((item, index) => { item.read = previous[index] })
+    loadNotifications()
   }
 }
 
@@ -184,6 +245,10 @@ onMounted(() => {
   loadNotifications()
 })
 
+function openCommandPalette() {
+  window.dispatchEvent(new Event('open-command-palette'))
+}
+
 function handleCommand(command) {
   if (command === 'logout') {
     userStore.logout()
@@ -192,6 +257,10 @@ function handleCommand(command) {
     router.push('/my-assets')
   } else if (command === 'favorites') {
     router.push('/favorites')
+  } else if (command === 'collections') {
+    router.push('/collections')
+  } else if (command === 'downloads') {
+    router.push('/downloads')
   } else if (command === 'profile') {
     router.push('/profile')
   } else if (command === 'settings') {
@@ -321,6 +390,35 @@ function handleCommand(command) {
   }
 }
 
+.site-search-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid $border-color;
+  border-radius: $radius-sm;
+  background: $bg-card;
+  color: $text-placeholder;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:hover {
+    border-color: $primary-color;
+    color: $primary-color;
+  }
+
+  kbd {
+    padding: 1px 5px;
+    border: 1px solid $border-light;
+    border-radius: $radius-xs;
+    background: $bg-secondary;
+    font-family: $font-mono;
+    font-size: 10px;
+    color: $text-placeholder;
+  }
+}
+
 .site-icon-btn {
   display: inline-flex;
   align-items: center;
@@ -338,7 +436,6 @@ function handleCommand(command) {
     border-color: $primary-color;
     color: $primary-dark;
   }
-
   :deep(.el-badge__content) {
     border: none;
     background: $accent-color;
@@ -368,6 +465,23 @@ function handleCommand(command) {
   }
 }
 
+.notification-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mark-all {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 11px;
+  color: $primary-color;
+  cursor: pointer;
+
+  &:hover { text-decoration: underline; }
+}
+
 .notification-list {
   list-style: none;
   max-height: 360px;
@@ -375,6 +489,10 @@ function handleCommand(command) {
 
   li + li {
     border-top: 1px solid $border-light;
+  }
+
+  li.unread a {
+    background: rgba(47, 107, 90, 0.04);
   }
 
   a {
@@ -392,8 +510,19 @@ function handleCommand(command) {
   }
 
   .notification-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     font-size: 13px;
     font-weight: 500;
+  }
+
+  .unread-dot {
+    width: 6px;
+    height: 6px;
+    flex: 0 0 6px;
+    border-radius: 50%;
+    background: $accent-color;
   }
 
   .notification-desc {
@@ -521,6 +650,18 @@ function handleCommand(command) {
 
   .site-username {
     display: none;
+  }
+
+  .site-search-btn {
+    width: 34px;
+    height: 34px;
+    justify-content: center;
+    padding: 0;
+
+    span,
+    kbd {
+      display: none;
+    }
   }
 }
 

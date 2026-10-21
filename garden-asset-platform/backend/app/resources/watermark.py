@@ -14,6 +14,7 @@ from app.utils.middleware import rate_limit
 class WatermarkEmbedResource(Resource):
     """水印嵌入"""
 
+    @rate_limit(limit=10, window=60)
     @jwt_required()
     def post(self):
         """嵌入水印"""
@@ -56,6 +57,7 @@ class WatermarkEmbedResource(Resource):
 class WatermarkExtractResource(Resource):
     """水印提取"""
 
+    @rate_limit(limit=20, window=60)
     @jwt_required()
     def post(self):
         """提取水印"""
@@ -97,6 +99,7 @@ class WatermarkExtractResource(Resource):
 class WatermarkVerifyResource(Resource):
     """水印验证"""
 
+    @rate_limit(limit=60, window=60)
     def post(self):
         """验证水印ID"""
         data = request.get_json()
@@ -108,7 +111,8 @@ class WatermarkVerifyResource(Resource):
         # 查找资产
         asset = Asset.query.filter_by(watermark_id=watermark_id).first()
 
-        if not asset:
+        # 公开核验只针对已发布资产，避免通过水印编号探测草稿
+        if not asset or asset.status != 'published':
             return {
                 'code': 404,
                 'message': '未找到对应资产',
@@ -121,13 +125,15 @@ class WatermarkVerifyResource(Resource):
         return {
             'code': 200,
             'verified': result['verified'],
+            'content_verified': result.get('content_verified', False),
             'message': result['message'],
             'data': {
                 'asset_id': asset.id,
                 'asset_code': asset.asset_code,
                 'title': asset.title,
                 'watermark_id': asset.watermark_id,
-                'chain_status': asset.chain_status
+                'chain_status': asset.chain_status,
+                'method': result.get('method', 'registry')
             }
         }, 200
 

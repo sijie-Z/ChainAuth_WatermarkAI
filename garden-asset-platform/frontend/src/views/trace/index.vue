@@ -17,9 +17,11 @@
         <el-tabs v-model="activeTab">
           <el-tab-pane label="上传图片溯源" name="upload">
             <el-upload
+              ref="uploadRef"
               drag
               :auto-upload="false"
               :on-change="handleFileChange"
+              :on-exceed="handleExceed"
               :limit="1"
               accept="image/*"
             >
@@ -50,13 +52,40 @@
       <!-- 溯源结果 -->
       <section v-if="traceResult" class="result-card">
         <header class="result-header">
-          <h2 class="result-title">溯源结果</h2>
+          <div>
+            <h2 class="result-title">溯源结果</h2>
+            <p v-if="traceResult.verified" class="result-caption">
+              {{ activeTab === 'upload'
+                ? '已从图片中提取水印并匹配平台登记记录'
+                : '水印编号与平台登记记录一致，未校验图片内容' }}
+            </p>
+          </div>
           <el-tag :type="traceResult.verified ? 'success' : 'danger'">
-            {{ traceResult.verified ? '验证通过' : '验证失败' }}
+            {{ traceResult.verified ? '核验通过' : '未匹配' }}
           </el-tag>
         </header>
 
         <template v-if="traceResult.verified">
+          <div class="verify-checks">
+            <span class="verify-check ok"><span class="dot"></span>水印编号匹配</span>
+            <span class="verify-check" :class="traceResult.certificate_id ? 'ok' : 'pending'">
+              <span class="dot"></span>证书{{ traceResult.certificate_id ? '已签发' : '待签发' }}
+            </span>
+            <span class="verify-check" :class="traceResult.tx_hash ? 'ok' : 'pending'">
+              <span class="dot"></span>链上记录{{ traceResult.tx_hash ? '存在' : '未找到' }}
+            </span>
+            <button
+              v-if="traceResult.tx_hash"
+              type="button"
+              class="hash-copy"
+              :title="traceResult.tx_hash"
+              @click="copyHash"
+            >
+              交易哈希 {{ shortHash(traceResult.tx_hash) }}
+              <el-icon><CopyDocument /></el-icon>
+            </button>
+          </div>
+
           <!-- 资产信息 -->
           <el-descriptions title="资产信息" :column="2" border>
             <el-descriptions-item label="资产编码">{{ traceResult.asset_code }}</el-descriptions-item>
@@ -100,8 +129,9 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowRight, Search, UploadFilled } from '@element-plus/icons-vue'
+import { ArrowRight, CopyDocument, Search, UploadFilled } from '@element-plus/icons-vue'
 import { watermarkApi, blockchainApi } from '@/api/modules'
+import { copyToClipboard, parseBackendDate } from '@/utils'
 
 const router = useRouter()
 
@@ -109,10 +139,35 @@ const activeTab = ref('upload')
 const loading = ref(false)
 const watermarkId = ref('')
 const uploadedFile = ref(null)
+const uploadRef = ref()
 const traceResult = ref(null)
+const MAX_TRACE_SIZE = 20 * 1024 * 1024
+const IMAGE_PATTERN = /\.(jpe?g|png|bmp|tiff?|webp)$/i
 
 function handleFileChange(file) {
-  uploadedFile.value = file.raw
+  const raw = file.raw
+  if (!raw) return
+  if (!raw.type.startsWith('image/') && !IMAGE_PATTERN.test(raw.name)) {
+    ElMessage.error('溯源仅支持 JPG、PNG、BMP、TIFF、WebP 图片')
+    uploadedFile.value = null
+    uploadRef.value?.clearFiles()
+    return
+  }
+  if (raw.size > MAX_TRACE_SIZE) {
+    ElMessage.error('图片超过 20MB，请压缩后再试')
+    uploadedFile.value = null
+    uploadRef.value?.clearFiles()
+    return
+  }
+  uploadedFile.value = raw
+}
+
+function handleExceed(files) {
+  uploadRef.value?.clearFiles()
+  const raw = files[0]
+  if (!raw) return
+  handleFileChange({ raw })
+  uploadRef.value?.handleStart(raw)
 }
 
 async function doTrace() {
@@ -173,6 +228,25 @@ function viewCertificate() {
   }
 }
 
+function shortHash(value) {
+  if (!value) return ''
+  return value.length > 24 ? `${value.slice(0, 12)}…${value.slice(-8)}` : value
+}
+
+async function copyHash() {
+  const ok = await copyToClipboard(traceResult.value?.tx_hash || '')
+  ElMessage[ok ? 'success' : 'error'](ok ? '交易哈希已复制' : '复制失败')
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 function downloadReport() {
   const r = traceResult.value
   if (!r) {
@@ -183,7 +257,7 @@ function downloadReport() {
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<title>溯源报告 - ${r.watermark_id || r.asset_code || ''}</title>
+<title>溯源报告 - ${escapeHtml(r.watermark_id || r.asset_code || '')}</title>
 <style>
   body { font-family: "Microsoft YaHei", sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; color: #333; }
   h1 { text-align: center; border-bottom: 2px solid #2f6b5a; padding-bottom: 16px; }
@@ -206,16 +280,16 @@ function downloadReport() {
   <p class="${r.verified ? 'verified' : 'failed'}">${r.verified ? '验证通过 — 该资产已在平台注册并获得合法授权' : '验证失败 — 未找到对应资产记录'}</p>
 </div>
 ${r.asset_code ? `<div class="section"><h2>资产信息</h2><table>
-  <tr><td>资产编码</td><td>${r.asset_code || '-'}</td></tr>
-  <tr><td>标题</td><td>${r.title || '-'}</td></tr>
-  <tr><td>水印ID</td><td>${r.watermark_id || '-'}</td></tr>
-  <tr><td>创建时间</td><td>${formatDate(r.created_at)}</td></tr>
+  <tr><td>资产编码</td><td>${escapeHtml(r.asset_code) || '-'}</td></tr>
+  <tr><td>标题</td><td>${escapeHtml(r.title) || '-'}</td></tr>
+  <tr><td>水印ID</td><td>${escapeHtml(r.watermark_id) || '-'}</td></tr>
+  <tr><td>创建时间</td><td>${escapeHtml(formatDate(r.created_at))}</td></tr>
 </table></div>` : ''}
 ${r.tx_hash ? `<div class="section"><h2>区块链存证</h2><table>
   <tr><td>存证状态</td><td><span class="verified">已存证</span></td></tr>
-  <tr><td>证书ID</td><td>${r.certificate_id || '-'}</td></tr>
-  <tr><td>交易哈希</td><td class="hash">${r.tx_hash}</td></tr>
-  <tr><td>存证时间</td><td>${formatDate(r.confirmed_at)}</td></tr>
+  <tr><td>证书ID</td><td>${escapeHtml(r.certificate_id) || '-'}</td></tr>
+  <tr><td>交易哈希</td><td class="hash">${escapeHtml(r.tx_hash)}</td></tr>
+  <tr><td>存证时间</td><td>${escapeHtml(formatDate(r.confirmed_at))}</td></tr>
 </table></div>` : ''}
 <div class="footer">
   <p>本报告由苏州园林数字资产平台生成</p>
@@ -236,8 +310,8 @@ ${r.tx_hash ? `<div class="section"><h2>区块链存证</h2><table>
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString('zh-CN')
+  const date = parseBackendDate(dateStr)
+  return date ? date.toLocaleDateString('zh-CN') : ''
 }
 </script>
 
@@ -330,6 +404,71 @@ function formatDate(dateStr) {
   padding-bottom: 16px;
   margin-bottom: 20px;
   border-bottom: 1px solid $border-color;
+}
+
+.result-caption {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: $text-placeholder;
+}
+
+.verify-checks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.verify-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: $radius-full;
+  background: $bg-secondary;
+  font-size: 12px;
+  color: $text-secondary;
+
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: $text-placeholder;
+  }
+
+  &.ok {
+    background: $success-bg;
+    color: $success-color;
+
+    .dot { background: $success-color; }
+  }
+
+  &.pending {
+    background: $warning-bg;
+    color: $warning-color;
+
+    .dot { background: $warning-color; }
+  }
+}
+
+.hash-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px dashed $border-color;
+  border-radius: $radius-full;
+  background: $bg-card;
+  font-family: $font-mono;
+  font-size: 11px;
+  color: $text-secondary;
+  cursor: pointer;
+
+  &:hover {
+    border-color: $primary-color;
+    color: $primary-color;
+  }
 }
 
 .result-title {

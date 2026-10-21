@@ -15,7 +15,11 @@
             <el-icon><Upload /></el-icon>
             管理资产
           </el-button>
-          <el-button class="btn-action-secondary" @click="$router.push('/admin/watermark')">
+          <el-button
+            v-if="canProcessAssets"
+            class="btn-action-secondary"
+            @click="$router.push('/admin/watermark')"
+          >
             <el-icon><Stamp /></el-icon>
             水印处理
           </el-button>
@@ -230,13 +234,14 @@
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick, shallowRef } from 'vue'
+import { parseBackendDate } from '@/utils'
 import { useUserStore } from '@/stores/user'
 import { useRouter } from 'vue-router'
 import { assetApi, licenseApi } from '@/api/modules'
 import {
   Picture, Stamp, Link, Document, Upload, Clock,
   ArrowUp, ArrowDown, User, Reading,
-  CircleCheck, Timer
+  CircleCheck, Timer, Download, Place
 } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 
@@ -285,13 +290,16 @@ const LICENSE_ROLES = ['admin', 'asset_admin', 'license_admin', 'adm1', 'adm2']
 
 const currentRole = computed(() => userStore.userRole)
 const canManageAssets = computed(() => ASSET_ROLES.includes(currentRole.value))
+const canProcessAssets = computed(() => ['admin', 'asset_admin'].includes(currentRole.value))
 
 // 快捷操作（按角色过滤）
 const quickActionDefs = [
   { label: '资产管理', icon: Picture, path: '/admin/assets', gradient: 'linear-gradient(135deg, #2f6b5a, #1c5145)', roles: ASSET_ROLES },
-  { label: '水印处理', icon: Stamp, path: '/admin/watermark', gradient: 'linear-gradient(135deg, #4c6e8a, #34506a)', roles: ASSET_ROLES },
-  { label: '存证管理', icon: Link, path: '/admin/blockchain', gradient: 'linear-gradient(135deg, #6d5b7a, #584765)', roles: ASSET_ROLES },
+  { label: '水印处理', icon: Stamp, path: '/admin/watermark', gradient: 'linear-gradient(135deg, #4c6e8a, #34506a)', roles: ['admin', 'asset_admin'] },
+  { label: '存证管理', icon: Link, path: '/admin/blockchain', gradient: 'linear-gradient(135deg, #6d5b7a, #584765)', roles: ['admin', 'asset_admin'] },
   { label: '授权审批', icon: Document, path: '/admin/license/pending', gradient: 'linear-gradient(135deg, #b07a2a, #8f6322)', roles: LICENSE_ROLES },
+  { label: '园林档案', icon: Place, path: '/admin/gardens', gradient: 'linear-gradient(135deg, #4a7c59, #365c42)', roles: ['admin', 'asset_admin'] },
+  { label: '下载台账', icon: Download, path: '/admin/downloads', gradient: 'linear-gradient(135deg, #5b7f8a, #45616a)', roles: LICENSE_ROLES },
   { label: '用户管理', icon: User, path: '/admin/users', gradient: 'linear-gradient(135deg, #5b675f, #414b43)', roles: ['admin'] }
 ]
 
@@ -476,8 +484,8 @@ function getChainStatus(status) {
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString('zh-CN')
+  const date = parseBackendDate(dateStr)
+  return date ? date.toLocaleDateString('zh-CN') : ''
 }
 
 function formatTimeAgo(dateStr) {
@@ -577,11 +585,10 @@ function initCharts() {
       dates = trendData.map(d => d.date?.substring(5) || d.date) // MM-DD
       counts = trendData.map(d => d.count)
     }
-    // 如果没有趋势数据，显示空图
+    // 没有趋势数据时明确显示空态，不伪造一周的 0 值
     if (dates.length === 0) {
-      const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-      dates = weekdays
-      counts = [0, 0, 0, 0, 0, 0, 0]
+      dates = ['暂无趋势数据']
+      counts = [0]
     }
 
     const option = {

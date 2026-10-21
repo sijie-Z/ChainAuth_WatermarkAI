@@ -120,13 +120,50 @@
         <div class="topbar-right">
           <router-link to="/home" class="topbar-link">返回前台</router-link>
 
-          <el-tooltip content="待办提醒" placement="bottom">
-            <button class="topbar-bell" type="button" aria-label="待办提醒" @click="goPending">
-              <el-badge :value="pendingNotifications" :hidden="pendingNotifications === 0" :max="99">
-                <el-icon><Bell /></el-icon>
-              </el-badge>
-            </button>
-          </el-tooltip>
+          <el-popover
+            v-model:visible="pendingVisible"
+            placement="bottom-end"
+            :width="340"
+            trigger="click"
+            popper-class="admin-notification-popover"
+          >
+            <template #reference>
+              <button class="topbar-bell" type="button" :aria-label="`待办提醒，${pendingNotifications} 条未读`">
+                <el-badge :value="pendingNotifications" :hidden="pendingNotifications === 0" :max="99">
+                  <el-icon><Bell /></el-icon>
+                </el-badge>
+              </button>
+            </template>
+            <div class="admin-pending-panel">
+              <header class="pending-head">
+                <strong>待办提醒</strong>
+                <div class="pending-head-actions">
+                  <span>{{ pendingNotifications }} 条未读</span>
+                  <button
+                    v-if="pendingNotifications > 0"
+                    type="button"
+                    class="pending-mark-all"
+                    @click="markAllPendingRead"
+                  >
+                    全部已读
+                  </button>
+                </div>
+              </header>
+              <el-empty
+                v-if="pendingItems.length === 0"
+                description="暂无待办"
+                :image-size="52"
+              />
+              <ul v-else class="pending-list">
+                <li v-for="item in pendingItems" :key="item.id" :class="{ unread: !item.read }">
+                  <router-link :to="item.link" @click="markPendingRead(item)">
+                    <span class="pending-title">{{ item.title }}</span>
+                    <span class="pending-desc">{{ item.description }}</span>
+                  </router-link>
+                </li>
+              </ul>
+            </div>
+          </el-popover>
 
           <el-button
             :icon="isFullscreen ? Close : FullScreen"
@@ -179,7 +216,7 @@ import { useUserStore } from '@/stores/user'
 import {
   DataLine, Picture, Stamp, Document, Link, User, Setting,
   Menu, HomeFilled, ArrowDown, Expand, SwitchButton,
-  FullScreen, Close, Reading, Bell
+  FullScreen, Close, Reading, Bell, Download, Place
 } from '@element-plus/icons-vue'
 import { notificationApi } from '@/api/modules'
 
@@ -192,6 +229,8 @@ const mobileOpen = ref(false)
 const isFullscreen = ref(false)
 const expandedMenus = ref(['license'])
 const pendingNotifications = ref(0)
+const pendingItems = ref([])
+const pendingVisible = ref(false)
 
 const username = computed(() => userStore.username)
 const userRole = computed(() => userStore.userRole)
@@ -209,6 +248,8 @@ const roleLabel = computed(() => {
 
 // 与后端角色枚举一致：user/asset_admin/license_admin/adm1/adm2/admin
 const ASSET_ROLES = ['admin', 'asset_admin', 'adm1', 'adm2']
+// 水印/上链只允许资产管理员与超级管理员（与后端一致）
+const WATERMARK_ROLES = ['admin', 'asset_admin']
 // 后端审批角色：adm1/asset_admin 参与一级审批，adm2/license_admin 参与二级审批
 const LICENSE_ROLES = ['admin', 'asset_admin', 'license_admin', 'adm1', 'adm2']
 const ADMIN_ROLES = ['admin', 'asset_admin', 'license_admin', 'adm1', 'adm2']
@@ -216,8 +257,8 @@ const ADMIN_ROLES = ['admin', 'asset_admin', 'license_admin', 'adm1', 'adm2']
 const menuItems = shallowRef([
   { path: '/admin', label: '仪表盘', icon: DataLine, roles: ADMIN_ROLES },
   { path: '/admin/assets', label: '资产管理', icon: Picture, roles: ASSET_ROLES },
-  { path: '/admin/watermark', label: '水印管理', icon: Stamp, roles: ASSET_ROLES },
-  { path: '/admin/blockchain', label: '存证管理', icon: Link, roles: ASSET_ROLES },
+  { path: '/admin/watermark', label: '水印管理', icon: Stamp, roles: WATERMARK_ROLES },
+  { path: '/admin/blockchain', label: '存证管理', icon: Link, roles: WATERMARK_ROLES },
   {
     path: 'license',
     label: '授权审批',
@@ -228,6 +269,8 @@ const menuItems = shallowRef([
       { path: '/admin/license/approved', label: '已审批' }
     ]
   },
+  { path: '/admin/gardens', label: '园林档案', icon: Place, roles: WATERMARK_ROLES },
+  { path: '/admin/downloads', label: '下载台账', icon: Download, roles: ADMIN_ROLES },
   { path: '/admin/users', label: '用户管理', icon: User, roles: ['admin'] },
   { path: '/admin/logs', label: '操作日志', icon: Document, roles: ADMIN_ROLES }
 ])
@@ -259,18 +302,45 @@ function toggleMobileMenu() {
   mobileOpen.value = !mobileOpen.value
 }
 
-function goPending() {
-  router.push('/admin/license/pending')
-}
-
 async function loadPendingNotifications() {
   try {
     const response = await notificationApi.get()
     if (response.data?.code === 200) {
-      pendingNotifications.value = response.data.data?.count || 0
+      const data = response.data.data || {}
+      pendingItems.value = data.items || []
+      pendingNotifications.value = data.unread_count ?? data.count ?? 0
     }
   } catch {
     // 待办数量失败不影响后台使用
+  }
+}
+
+async function markPendingRead(item) {
+  pendingVisible.value = false
+  if (item.read || !item.key) return
+  item.read = true
+  pendingNotifications.value = Math.max(
+    0, pendingNotifications.value - (item.count || 1)
+  )
+  try {
+    const response = await notificationApi.markRead({ keys: [item.key] })
+    if (typeof response.data?.data?.unread_count === 'number') {
+      pendingNotifications.value = response.data.data.unread_count
+    }
+  } catch {
+    item.read = false
+    loadPendingNotifications()
+  }
+}
+
+async function markAllPendingRead() {
+  if (pendingNotifications.value === 0) return
+  pendingItems.value.forEach(item => { item.read = true })
+  pendingNotifications.value = 0
+  try {
+    await notificationApi.markRead({ all: true })
+  } catch {
+    loadPendingNotifications()
   }
 }
 
@@ -310,13 +380,26 @@ function handleFullscreenChange() {
   isFullscreen.value = !!document.fullscreenElement
 }
 
+function handleKeydown(event) {
+  if (event.key === 'Escape' && mobileOpen.value) {
+    mobileOpen.value = false
+  }
+}
+
+watch(mobileOpen, open => {
+  document.body.style.overflow = open ? 'hidden' : ''
+})
+
 onMounted(() => {
   document.addEventListener('fullscreenchange', handleFullscreenChange)
+  document.addEventListener('keydown', handleKeydown)
   loadPendingNotifications()
 })
 
 onUnmounted(() => {
   document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  document.removeEventListener('keydown', handleKeydown)
+  document.body.style.overflow = ''
 })
 </script>
 
@@ -730,6 +813,80 @@ onUnmounted(() => {
     background: $accent-color;
     font-size: 10px;
   }
+}
+
+.admin-pending-panel {
+  .pending-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding-bottom: 8px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid $border-light;
+
+    strong {
+      font-size: 14px;
+      color: $text-primary;
+    }
+  }
+}
+
+.pending-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: $text-placeholder;
+}
+
+.pending-mark-all {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 11px;
+  color: $primary-color;
+  cursor: pointer;
+
+  &:hover { text-decoration: underline; }
+}
+
+.pending-list {
+  list-style: none;
+  max-height: 320px;
+  overflow-y: auto;
+
+  li + li {
+    border-top: 1px solid $border-light;
+  }
+
+  li.unread a {
+    background: rgba(47, 107, 90, 0.04);
+  }
+
+  a {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 9px 6px;
+    border-radius: $radius-xs;
+    color: $text-primary;
+
+    &:hover {
+      background: $bg-hover;
+      color: $text-primary;
+    }
+  }
+}
+
+.pending-title {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.pending-desc {
+  font-size: 12px;
+  line-height: 1.6;
+  color: $text-secondary;
 }
 
 .topbar-link {
