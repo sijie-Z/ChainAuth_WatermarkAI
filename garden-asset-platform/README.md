@@ -43,6 +43,8 @@
 
 ## 快速开始
 
+> 第一次使用建议先读 [使用指南](docs/USER-GUIDE.md)，或启动后访问 `/guide` 查看站内引导。
+
 ### 环境要求
 
 - Python 3.11+ / Node.js 22+
@@ -93,7 +95,7 @@ npm run dev                  # 启动Vite开发服务器 :5173
 ### 运行测试
 
 ```bash
-# 后端测试（194个用例，覆盖API/模型/安全）
+# 后端测试（200个用例，覆盖API/模型/安全）
 cd backend && python -m pytest tests/ -v
 
 # 前端生产构建
@@ -122,7 +124,7 @@ garden-asset-platform/
 │   ├── algorithm/                 # 水印算法库（DCT+QIM/矢量）
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
-│   ├── tests/                     # pytest测试（194个用例）
+│   ├── tests/                     # pytest测试（200个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
