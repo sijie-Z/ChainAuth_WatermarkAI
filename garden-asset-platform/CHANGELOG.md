@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## [1.6.0] - 2026-10-21
+
+### Changed
+- 前端工具链：Vite 8.3（Rolldown）、@vitejs/plugin-vue 6、Vitest 5、@vitest/coverage-v8 5、jsdom 29、sass 1.99；分包配置改为函数形式
+- 后端依赖：Flask 3.1.3、Flask-JWT-Extended 4.7.4、Flask-Cors 6.0.5、gunicorn 26.2、cryptography 50.0.2、Pillow 13、geopandas 1.1.2、fiona 1.10.1、pyogrio 0.13、requests 2.34.2、python-dotenv 1.2.4
+- 安全：显式 pin PyJWT 2.15.1；`zhipuai` 因与安全版 PyJWT 的元数据冲突改为可选安装（需 GLM 对话时另行安装）
+- 前端 npm audit 告警 17 → 9（0 critical）；后端 requirements 的 OSV 扫描无 high/critical
+
+### Fixed
+- 水印缩放恢复遇到容量不足的小尺寸候选图时不再抛 `IndexError`
+- 注册日志写入失败不再把已创建用户判为注册失败
+- 溯源接口正式支持 `.webp`
+- 园林列表返回实时已发布资产数
+
+### Tests
+- 后端 194 个用例，覆盖率 57%（auth 98%、license 100%、watermark 100%）；CI 覆盖率门槛提升到 55%
+- 前端 41 个 Vitest、5 个 Playwright 点击流
+
 ## [1.5.0] - 2026-10-19
 
 ### Added
