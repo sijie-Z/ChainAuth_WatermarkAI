@@ -1,6 +1,7 @@
 """
 认证相关API资源
 """
+import logging
 from datetime import datetime
 from flask import request
 from flask_restful import Resource
@@ -16,6 +17,9 @@ from app.models.user import User, UserToken
 from app.models.log import OperationLog
 from app.utils.middleware import rate_limit
 from app.utils.validators import has_html_tags
+
+
+logger = logging.getLogger(__name__)
 
 
 class RegisterResource(Resource):
@@ -64,8 +68,13 @@ class RegisterResource(Resource):
         try:
             db.session.add(user)
             db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f'注册失败: {e}', exc_info=True)
+            return {'code': 500, 'message': '注册失败，请稍后重试'}, 500
 
-            # 记录日志
+        # 日志写入失败不应把已创建成功的用户判为注册失败
+        try:
             OperationLog.log(
                 user=user,
                 action='register',
@@ -73,18 +82,14 @@ class RegisterResource(Resource):
                 description=f'用户注册: {username}',
                 request=request
             )
+        except Exception:
+            logger.warning('注册日志写入失败', exc_info=True)
 
-            return {
-                'code': 200,
-                'message': '注册成功',
-                'data': {'user_id': user.id, 'username': user.username}
-            }, 200
-
-        except Exception as e:
-            db.session.rollback()
-            import logging
-            logging.getLogger(__name__).error(f'注册失败: {e}', exc_info=True)
-            return {'code': 500, 'message': '注册失败，请稍后重试'}, 500
+        return {
+            'code': 200,
+            'message': '注册成功',
+            'data': {'user_id': user.id, 'username': user.username}
+        }, 200
 
 
 class LoginResource(Resource):

@@ -421,7 +421,7 @@ class WatermarkService:
                     )
                 finally:
                     WatermarkService.cleanup_vector_temp(vector_source)
-            elif ext in ['.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff']:
+            elif ext in ['.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff', '.webp']:
                 # 栅格图像水印提取
                 result = extract_raster_watermark(
                     watermarked_path=file_path,
