@@ -71,8 +71,10 @@ class License(db.Model):
             'end_time': self.end_time.isoformat() if self.end_time else None,
             'is_exclusive': self.is_exclusive,
             'status': self.status,
+            'tx_hash': self.tx_hash,
             'asset_code': self.asset.asset_code if self.asset else None,
             'asset_title': self.asset.title if self.asset else None,
+            'file_format': self.asset.file_format if self.asset else None,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
@@ -142,6 +144,10 @@ class LicenseApplication(db.Model):
             'status': self.status,
             'adm1_status': self.adm1_status,
             'adm2_status': self.adm2_status,
+            'adm1_review_comment': self.adm1_review_comment,
+            'adm2_review_comment': self.adm2_review_comment,
+            'adm1_review_time': self.adm1_review_time.isoformat() if self.adm1_review_time else None,
+            'adm2_review_time': self.adm2_review_time.isoformat() if self.adm2_review_time else None,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 

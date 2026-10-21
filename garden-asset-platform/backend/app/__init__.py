@@ -130,12 +130,14 @@ def register_api_resources(app):
         AssetListResource, AssetResource, AssetUploadResource,
         AssetDownloadResource, AssetFavoriteResource, AssetStatsResource,
         MyAssetsResource, AssetTagsResource, AssetPublishResource, AssetApproveResource,
-        AssetThumbnailResource, PublicStatsResource
+        AssetThumbnailResource, AssetRelatedResource, FavoriteListResource, PublicStatsResource
     )
     api.add_resource(PublicStatsResource, '/stats')
     api.add_resource(AssetListResource, '/assets')
     api.add_resource(AssetResource, '/assets/<string:asset_id>')
     api.add_resource(AssetThumbnailResource, '/assets/<string:asset_id>/thumbnail')
+    api.add_resource(AssetRelatedResource, '/assets/<string:asset_id>/related')
+    api.add_resource(FavoriteListResource, '/favorites')
     api.add_resource(AssetUploadResource, '/assets/upload')
     api.add_resource(AssetDownloadResource, '/assets/<string:asset_id>/download')
     api.add_resource(AssetFavoriteResource, '/assets/<string:asset_id>/favorite')
@@ -189,14 +191,25 @@ def register_api_resources(app):
     from app.resources.license import (
         LicenseApplyResource, LicensePendingResource,
         LicenseApproveResource, LicenseApprovedResource,
-        MyLicenseResource, MyApplicationsResource
+        MyLicenseResource, MyApplicationsResource,
+        LicenseCancelResource, LicenseContractResource
     )
     api.add_resource(LicenseApplyResource, '/license/apply')
     api.add_resource(LicensePendingResource, '/license/pending')
+    api.add_resource(LicenseCancelResource, '/license/applications/<int:application_id>/cancel')
+    api.add_resource(LicenseContractResource, '/license/<int:license_id>/contract')
     api.add_resource(LicenseApproveResource, '/license/approve/<int:application_id>')
     api.add_resource(LicenseApprovedResource, '/license/approved')
     api.add_resource(MyLicenseResource, '/license/my')
     api.add_resource(MyApplicationsResource, '/license/my-applications')
+
+    # 站内待办提醒
+    from app.resources.notifications import NotificationsResource
+    api.add_resource(NotificationsResource, '/notifications')
+
+    # 操作日志
+    from app.resources.logs import LogListResource
+    api.add_resource(LogListResource, '/logs')
 
 
 def init_services(app):

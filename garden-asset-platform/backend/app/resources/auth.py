@@ -344,16 +344,36 @@ class UserResource(Resource):
 
         # 更新字段
         if 'email' in data:
-            user.email = data['email']
+            email = (data.get('email') or '').strip()
+            if email and User.query.filter(User.email == email, User.id != user.id).first():
+                return {'code': 400, 'message': '邮箱已被使用'}, 400
+            user.email = email
         if 'phone' in data:
-            user.phone = data['phone']
+            phone = (data.get('phone') or '').strip()
+            if phone and User.query.filter(User.phone == phone, User.id != user.id).first():
+                return {'code': 400, 'message': '手机号已被使用'}, 400
+            user.phone = phone
+        if data.get('nickname') is not None:
+            user.nickname = (data.get('nickname') or '').strip()[:50]
+
+        if data.get('password'):
+            if current_user.role != 'admin':
+                return {'code': 403, 'message': '只有管理员可以重置密码'}, 403
+            if len(str(data['password'])) < 6:
+                return {'code': 400, 'message': '密码至少 6 位'}, 400
+            user.set_password(str(data['password']))
+
         if 'role' in data and current_user.role == 'admin':
             if data['role'] not in ('user', 'asset_admin', 'license_admin', 'adm1', 'adm2', 'admin'):
                 return {'code': 400, 'message': '无效的角色'}, 400
+            if user.id == current_user_id and data['role'] != 'admin':
+                return {'code': 400, 'message': '不能降低自己的管理员角色'}, 400
             user.role = data['role']
         if 'status' in data and current_user.role == 'admin':
             if data['status'] not in ('active', 'inactive', 'banned'):
                 return {'code': 400, 'message': '无效的状态'}, 400
+            if user.id == current_user_id and data['status'] != 'active':
+                return {'code': 400, 'message': '不能停用自己的账号'}, 400
             user.status = data['status']
 
         db.session.commit()

@@ -208,6 +208,61 @@ def seed_licenses(assets, users):
     return 5
 
 
+def seed_user_assets(source_assets, user):
+    """给演示用户造一条草稿和一条被驳回资产，便于体验“我的资产”流程。"""
+    if not source_assets:
+        return 0
+
+    created = 0
+    drafts = [
+        {
+            'code': 'ZZY-IMG-20261021-U01',
+            'title': '拙政园·见山楼（待整理）',
+            'description': '从远香堂西望见山楼，尚待补充拍摄年代与授权说明。',
+            'source': source_assets[0],
+            'status': 'draft',
+            'reason': None
+        },
+        {
+            'code': 'HXSZ-IMG-20261021-U02',
+            'title': '环秀山庄·旧影（待补充来源）',
+            'description': '历史影像，需补充拍摄年代、收藏机构与授权说明。',
+            'source': source_assets[-1],
+            'status': 'rejected',
+            'reason': '历史影像缺少拍摄年代与来源说明，请补充后重新提交。'
+        }
+    ]
+
+    for item in drafts:
+        if Asset.query.filter_by(asset_code=item['code']).first():
+            continue
+        source = item['source']
+        path = source.storage_path
+        asset = Asset(
+            asset_code=item['code'],
+            title=item['title'],
+            description=item['description'],
+            asset_type='image',
+            file_format='jpg',
+            file_size=os.path.getsize(path),
+            file_hash=hashlib.sha256((path + item['code']).encode()).hexdigest(),
+            storage_path=path,
+            garden_id=source.garden_id,
+            creator_id=user.id,
+            uploader_id=user.id,
+            owner_id=user.id,
+            status=item['status'],
+            reject_reason=item['reason']
+        )
+        db.session.add(asset)
+        db.session.flush()
+        asset.thumbnail_path, _ = generate_thumbnail_set(path, asset.id)
+        created += 1
+
+    db.session.commit()
+    return created
+
+
 def process_assets(assets, admin, watermark_count, chain_count):
     from app.services.watermark_service import WatermarkService
     from app.services.blockchain_service import blockchain_service
@@ -297,15 +352,18 @@ def main():
             )
 
         licenses = 0
+        user_assets = 0
         if len(assets) >= 4:
             users = {name: User.query.filter_by(username=name).first()
                      for name in ('admin', 'adm1', 'adm2', 'user1', 'user2')}
             if all(users.values()):
                 licenses = seed_licenses(assets, users)
-                print(f'已写入 {licenses} 条授权/申请记录')
+                user_assets = seed_user_assets(assets, users['user1'])
+                print(f'已写入 {licenses} 条授权/申请记录，{user_assets} 条用户草稿/驳回资产')
 
         print('\n完成:')
         print(f'  资产 {len(assets)}，水印 {watermarked}，存证 {chained}，授权/申请 {licenses}')
+        print(f'  用户草稿/驳回资产 {user_assets}')
         print(f'  数据库: {db_path}')
 
 

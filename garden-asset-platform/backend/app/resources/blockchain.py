@@ -123,6 +123,12 @@ class BlockchainCertificateResource(Resource):
                 'asset': {
                     'asset_code': asset.asset_code if asset else None,
                     'title': asset.title if asset else None,
+                    'asset_type': asset.asset_type if asset else None,
+                    'file_format': asset.file_format if asset else None,
+                    'owner_name': (
+                        (asset.owner.nickname or asset.owner.username)
+                        if asset and asset.owner else None
+                    ),
                     'watermark_id': asset.watermark_id if asset else None
                 }
             }

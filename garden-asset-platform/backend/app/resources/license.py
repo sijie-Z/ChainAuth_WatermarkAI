@@ -132,6 +132,120 @@ class LicensePendingResource(Resource):
         return {'code': 200, 'data': result}
 
 
+def build_contract_content(license, asset, application=None):
+    """生成可读的授权合同正文，供合同接口与前端展示。"""
+    def fmt(value):
+        return value.strftime('%Y-%m-%d') if value else '未约定期限'
+
+    usage = license.usage_scope or (application.usage_scope if application else '') or '按双方约定'
+    type_names = {
+        'personal': '个人使用',
+        'non_commercial': '非商业使用',
+        'academic': '学术研究',
+        'commercial': '商业使用',
+        'commercial_ad': '商业-广告',
+        'commercial_product': '商业-产品',
+        'commercial_publish': '商业-出版',
+        'display': '展览展示',
+        'derivative': '衍生创作',
+        'exclusive': '独家授权',
+    }
+    return (
+        f"数字资产使用授权合同\n\n"
+        f"合同编号：{license.license_code}\n"
+        f"授权方：{license.licensor.username if license.licensor else '平台资产权利人'}\n"
+        f"被授权方：{license.licensee.username if license.licensee else '申请人'}\n"
+        f"授权资产：{asset.title}（{asset.asset_code}）\n"
+        f"授权类型：{type_names.get(license.license_type, license.license_type)}\n"
+        f"使用范围：{usage}\n"
+        f"授权地域：{license.territory or '中国大陆'}\n"
+        f"授权期限：{fmt(license.start_time)} 至 {fmt(license.end_time)}\n"
+        f"是否独家：{'是' if license.is_exclusive else '否'}\n\n"
+        f"1. 被授权方仅可在上述范围内使用授权资产，不得转授权或超范围使用。\n"
+        f"2. 被授权方应保留资产中的水印标识，不得去除、篡改或规避溯源。\n"
+        f"3. 授权方保证其对授权资产拥有合法权利，并有权作出本授权。\n"
+        f"4. 本合同的成立、生效与解释适用中华人民共和国法律。\n"
+    )
+
+
+class LicenseCancelResource(Resource):
+    """申请人撤回授权申请"""
+
+    @jwt_required()
+    def post(self, application_id):
+        current_user_id = get_jwt_identity()
+        application = LicenseApplication.query.get(application_id)
+        if not application:
+            return {'code': 404, 'message': '申请不存在'}, 404
+        if application.applicant_id != current_user_id:
+            return {'code': 403, 'message': '只能撤回自己的申请'}, 403
+        if application.status not in ('pending', 'adm1_approved'):
+            return {'code': 400, 'message': '当前状态不可撤回'}, 400
+
+        application.status = 'cancelled'
+        db.session.commit()
+
+        OperationLog.log(
+            user=User.query.get(current_user_id),
+            action='license_cancel',
+            module='license',
+            description=f'撤回授权申请: {application.application_code}',
+            target_type='license_application',
+            target_id=str(application.id)
+        )
+        db.session.commit()
+        return {'code': 200, 'message': '申请已撤回'}, 200
+
+
+class LicenseContractResource(Resource):
+    """授权合同详情（不存在时按授权记录生成标准合同）"""
+
+    @jwt_required()
+    def get(self, license_id):
+        current_user_id = get_jwt_identity()
+        user = User.query.get(current_user_id)
+        license = License.query.get(license_id)
+        if not license:
+            return {'code': 404, 'message': '授权记录不存在'}, 404
+
+        admin_roles = ('admin', 'asset_admin', 'license_admin', 'adm1', 'adm2')
+        if current_user_id not in (license.licensee_id, license.licensor_id) and user.role not in admin_roles:
+            return {'code': 403, 'message': '无权查看该合同'}, 403
+
+        asset = license.asset
+        application = LicenseApplication.query.filter_by(
+            asset_id=license.asset_id,
+            applicant_id=license.licensee_id
+        ).order_by(LicenseApplication.created_at.desc()).first()
+
+        contract = LicenseContract.query.filter_by(license_id=license.id).first()
+        if not contract:
+            contract = LicenseContract(
+                contract_code=f"CON-{datetime.now().strftime('%Y%m%d%H%M%S%f')}-{uuid.uuid4().hex[:4].upper()}",
+                application_id=application.id if application else None,
+                license_id=license.id,
+                contract_content=build_contract_content(license, asset, application),
+                fee_amount=application.expected_fee if application else None,
+                effective_time=license.start_time,
+                expiry_time=license.end_time,
+                status='effective'
+            )
+            db.session.add(contract)
+            db.session.commit()
+
+        data = contract.to_dict()
+        data['contract_content'] = contract.contract_content
+        data['license_code'] = license.license_code
+        data['license_type'] = license.license_type
+        data['usage_scope'] = license.usage_scope
+        data['territory'] = license.territory
+        data['licensee_name'] = license.licensee.username if license.licensee else None
+        data['licensor_name'] = license.licensor.username if license.licensor else None
+        data['asset_title'] = asset.title if asset else None
+        data['asset_code'] = asset.asset_code if asset else None
+        return {'code': 200, 'data': data}, 200
+
+
 class LicenseApproveResource(Resource):
     """审批授权申请"""
 
@@ -206,6 +320,15 @@ class LicenseApproveResource(Resource):
 
         db.session.commit()
 
+        OperationLog.log(
+            user=user,
+            action='approve' if action == 'approve' else 'reject',
+            module='license',
+            description=f"{'通过' if action == 'approve' else '拒绝'}授权申请: {application.application_code}",
+            target_type='license_application',
+            target_id=str(application.id)
+        )
+
         return {'code': 200, 'message': '审批成功'}
 
     def _create_license(self, application, end_time=None):
@@ -229,6 +352,18 @@ class LicenseApproveResource(Resource):
             status='active'
         )
         db.session.add(license)
+        db.session.flush()
+        db.session.add(LicenseContract(
+            contract_code=f"CON-{datetime.now().strftime('%Y%m%d%H%M%S%f')}-{uuid.uuid4().hex[:4].upper()}",
+            application_id=application.id,
+            license_id=license.id,
+            contract_content=build_contract_content(license, asset, application),
+            special_terms='',
+            fee_amount=application.expected_fee,
+            effective_time=license.start_time,
+            expiry_time=end_time,
+            status='effective'
+        ))
 
 
 class LicenseApprovedResource(Resource):
@@ -263,6 +398,21 @@ class LicenseApprovedResource(Resource):
             lic_dict['asset_title'] = lic.asset.title if lic.asset else ''
             lic_dict['licensee_name'] = lic.licensee.username if lic.licensee else ''
             lic_dict['licensor_name'] = lic.licensor.username if lic.licensor else ''
+
+            application = LicenseApplication.query.filter_by(
+                asset_id=lic.asset_id,
+                applicant_id=lic.licensee_id
+            ).order_by(LicenseApplication.created_at.desc()).first()
+            lic_dict['approver_name'] = (
+                application.adm2_reviewer.username
+                if application and application.adm2_reviewer else None
+            )
+            lic_dict['approved_at'] = (
+                application.adm2_review_time.isoformat()
+                if application and application.adm2_review_time else None
+            )
+            contract = LicenseContract.query.filter_by(license_id=lic.id).first()
+            lic_dict['contract_code'] = contract.contract_code if contract else None
             result.append(lic_dict)
 
         return {
@@ -285,8 +435,11 @@ class MyLicenseResource(Resource):
         page = max(data.get('page', 1, type=int), 1)
         per_page = min(max(data.get('per_page', 20, type=int), 1), 100)
         status = (data.get('status') or '').strip()
+        asset_id = (data.get('asset_id') or '').strip()
 
         query = License.query.filter_by(licensee_id=current_user_id)
+        if asset_id:
+            query = query.filter_by(asset_id=asset_id)
         if status:
             if status not in ('pending', 'active', 'expired', 'revoked'):
                 return {'code': 400, 'message': '无效的状态筛选'}, 400
@@ -321,8 +474,11 @@ class MyApplicationsResource(Resource):
         page = max(data.get('page', 1, type=int), 1)
         per_page = min(max(data.get('per_page', 20, type=int), 1), 100)
         status = (data.get('status') or '').strip()
+        asset_id = (data.get('asset_id') or '').strip()
 
         query = LicenseApplication.query.filter_by(applicant_id=current_user_id)
+        if asset_id:
+            query = query.filter_by(asset_id=asset_id)
         if status:
             if status not in ('pending', 'adm1_approved', 'approved', 'rejected', 'cancelled', 'in_progress'):
                 return {'code': 400, 'message': '无效的状态筛选'}, 400

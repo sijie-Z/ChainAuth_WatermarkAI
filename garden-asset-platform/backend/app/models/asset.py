@@ -2,6 +2,7 @@
 资产数据模型
 """
 from datetime import datetime
+import json
 import uuid
 from app.extensions import db
 
@@ -81,6 +82,15 @@ class Asset(db.Model):
     licenses = db.relationship('License', backref='asset', lazy='dynamic')
 
     def to_dict(self):
+        vr_value = None
+        if self.vr_value:
+            try:
+                parsed = json.loads(self.vr_value)
+                if isinstance(parsed, (int, float)):
+                    vr_value = parsed
+            except (TypeError, ValueError):
+                pass
+
         return {
             'id': self.id,
             'asset_code': self.asset_code,
@@ -92,16 +102,25 @@ class Asset(db.Model):
             'thumbnail_path': self.thumbnail_path,
             'watermark_status': self.watermark_status,
             'watermark_id': self.watermark_id,
+            'watermark_embedded_at': self.watermark_embedded_at.isoformat() if self.watermark_embedded_at else None,
+            'vr_value': vr_value,
             'chain_status': self.chain_status,
+            'chain_tx_hash': self.chain_tx_hash,
+            'chain_timestamp': self.chain_timestamp.isoformat() if self.chain_timestamp else None,
             'certificate_id': self.certificate_id,
             'garden_id': self.garden_id,
             'garden_name': self.garden.name if self.garden else None,
             'creator_id': self.creator_id,
+            'owner_id': self.owner_id,
             'uploader_name': (self.uploader.nickname or self.uploader.username) if self.uploader else None,
             'creator_name': (self.creator.nickname or self.creator.username) if self.creator else None,
             'view_count': self.view_count,
             'download_count': self.download_count,
+            'favorite_count': self.favorite_count,
+            'license_count': self.license_count,
             'status': self.status,
+            'publish_at': self.publish_at.isoformat() if self.publish_at else None,
+            'reject_reason': self.reject_reason,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
