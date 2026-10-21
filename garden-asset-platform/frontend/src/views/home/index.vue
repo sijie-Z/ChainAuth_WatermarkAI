@@ -15,6 +15,7 @@
           <router-link to="/home" class="nav-link">首页</router-link>
           <router-link to="/assets" class="nav-link">资产档案</router-link>
           <router-link to="/trace" class="nav-link">溯源查询</router-link>
+          <router-link to="/guide" class="nav-link">使用指南</router-link>
           <template v-if="isLoggedIn">
             <router-link to="/license/my" class="nav-link">我的授权</router-link>
             <router-link v-if="isAdmin" to="/admin" class="nav-link">管理后台</router-link>
@@ -68,6 +69,7 @@
       <router-link to="/home" @click="mobileNavOpen = false">首页</router-link>
       <router-link to="/assets" @click="mobileNavOpen = false">资产档案</router-link>
       <router-link to="/trace" @click="mobileNavOpen = false">溯源查询</router-link>
+      <router-link to="/guide" @click="mobileNavOpen = false">使用指南</router-link>
       <router-link v-if="isLoggedIn" to="/license/my" @click="mobileNavOpen = false">我的授权</router-link>
       <router-link v-if="isAdmin" to="/admin" @click="mobileNavOpen = false">管理后台</router-link>
     </nav>
@@ -99,11 +101,24 @@
               <el-icon><Search /></el-icon>
               溯源查询
             </button>
+            <router-link to="/guide" class="btn-secondary guide-entry">
+              3 分钟上手
+              <el-icon><ArrowRight /></el-icon>
+            </router-link>
           </div>
         </div>
 
-        <div class="hero-visual" aria-hidden="true">
-          <svg class="moon-gate" viewBox="0 0 560 560" fill="none">
+        <div class="hero-visual">
+          <div v-if="heroCover" class="moon-photo">
+            <img
+              :src="heroCover"
+              :alt="`${heroGarden}园林实景`"
+              fetchpriority="high"
+              decoding="async"
+              @error="heroCover = ''"
+            />
+          </div>
+          <svg v-else class="moon-gate" viewBox="0 0 560 560" fill="none" aria-hidden="true">
             <defs>
               <clipPath id="gateClip">
                 <circle cx="280" cy="280" r="196" />
@@ -148,12 +163,12 @@
                 y="141"
                 text-anchor="middle"
                 fill="#fcfdfb"
-                font-family="'Noto Serif SC','Songti SC','STSong','SimSun',serif"
+                font-family="'Songti SC','STSong','SimSun','Noto Serif SC',serif"
                 font-size="24"
               >园</text>
             </g>
           </svg>
-          <p class="gate-caption">拙政园 · 见山楼 · 数字档案</p>
+          <p class="gate-caption">{{ heroCaption }}</p>
         </div>
       </div>
 
@@ -208,7 +223,7 @@
         <div class="features-grid">
           <article class="feature-item" v-for="feature in features" :key="feature.title">
             <div class="feature-head">
-              <el-icon class="feature-icon"><component :is="feature.icon" /></el-icon>
+              <span class="feature-mark" aria-hidden="true">{{ feature.mark }}</span>
               <h3 class="feature-title">{{ feature.title }}</h3>
             </div>
             <p class="feature-desc">{{ feature.description }}</p>
@@ -267,7 +282,8 @@
         </div>
 
         <div v-else class="garden-empty">
-          <p>暂无园林数据。启动后端并执行 <code>python scripts/create_test_data.py</code> 后即可看到档案。</p>
+          <p>园林档案暂未加载</p>
+          <el-button text type="primary" @click="reloadGardens">重新加载</el-button>
         </div>
       </div>
     </section>
@@ -303,6 +319,7 @@
           <router-link to="/home">首页</router-link>
           <router-link to="/assets">资产档案</router-link>
           <router-link to="/trace">溯源查询</router-link>
+          <router-link to="/guide">使用指南</router-link>
           <router-link to="/login">登录</router-link>
         </nav>
         <p class="footer-copyright">
@@ -320,7 +337,7 @@ import { useUserStore } from '@/stores/user'
 import { gardenApi, publicApi } from '@/api/modules'
 import {
   ArrowDown, ArrowRight, Search, User, Setting, SwitchButton,
-  Location, Stamp, Link, Aim, Guide, Menu
+  Location, Menu
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -330,6 +347,11 @@ const gardens = ref([])
 const isScrolled = ref(false)
 const mobileNavOpen = ref(false)
 const statsLoaded = ref(false)
+const heroCover = ref('')
+const heroGarden = ref('拙政园')
+const heroCaption = computed(() =>
+  heroCover.value ? `${heroGarden.value} · 园林实景 · 数字档案` : '拙政园 · 见山楼 · 数字档案'
+)
 const animatedStats = ref({
   assets: 0,
   watermarked: 0,
@@ -339,25 +361,25 @@ const animatedStats = ref({
 
 const features = [
   {
-    icon: Stamp,
+    mark: '水',
     title: '水印确权',
     description: '自研鲁棒水印算法，将资产唯一标识隐式嵌入影像与矢量数据，抗 JPEG 压缩、缩放与噪声；裁剪场景可结合链上存证核验。',
     tags: ['DCT 频域', '矢量坐标扰动', 'NC 完整性校验']
   },
   {
-    icon: Link,
+    mark: '链',
     title: '区块链存证',
     description: '资产与授权信息写入 FISCO BCOS 联盟链，形成不可篡改的存证记录与电子证书。',
     tags: ['联盟链', '存证证书', '哈希校验']
   },
   {
-    icon: Aim,
+    mark: '检',
     title: 'AI 侵权检测',
     description: '基于 CLIP 特征与向量检索，在海量图像中定位相似资产，辅助人工判定侵权。',
     tags: ['CLIP 特征', 'Milvus 检索', '相似度评分']
   },
   {
-    icon: Guide,
+    mark: '溯',
     title: '全链路溯源',
     description: '从上传、嵌入、存证到授权分发，每一次流转都记录在案，可回溯完整证据链。',
     tags: ['流转记录', '授权合同', '溯源报告']
@@ -402,6 +424,12 @@ async function loadStats() {
       }
       if (d.gardens?.length) {
         gardens.value = d.gardens.slice(0, 4)
+        const preferred = d.gardens.find(g => g.code === 'ZZY' && g.cover_image)
+          || d.gardens.find(g => g.cover_image)
+        if (preferred) {
+          heroCover.value = preferred.cover_image
+          heroGarden.value = preferred.name
+        }
       }
       statsLoaded.value = true
     }
@@ -418,15 +446,16 @@ async function loadGardens() {
       gardens.value = response.data.data.slice(0, 4)
     }
   } catch {
+    // 接口失败时保持空态并提供重试，不伪造园林数据
     if (gardens.value.length === 0) {
-      gardens.value = [
-        { id: 1, name: '拙政园', code: 'ZZY', description: '中国四大名园之首，以水景与远借塔影著称。', asset_count: 0, location: '姑苏区' },
-        { id: 2, name: '留园', code: 'LY', description: '以建筑空间与太湖石闻名，廊院层次丰富。', asset_count: 0, location: '姑苏区' },
-        { id: 3, name: '狮子林', code: 'SZL', description: '假山迷宫与湖石景观的代表。', asset_count: 0, location: '姑苏区' },
-        { id: 4, name: '沧浪亭', code: 'CLT', description: '苏州现存最古老的园林，以复廊借景见长。', asset_count: 0, location: '姑苏区' }
-      ]
+      gardens.value = []
     }
   }
+}
+
+function reloadGardens() {
+  loadStats()
+  loadGardens()
 }
 
 function animateNumbers() {
@@ -527,8 +556,7 @@ onUnmounted(() => {
   }
 
   &.navbar-scrolled {
-    background: rgba(252, 253, 251, 0.94);
-    backdrop-filter: $glass-blur;
+    background: rgba(252, 253, 251, 0.98);
     border-bottom-color: $border-light;
 
     .brand-mark {
@@ -838,6 +866,25 @@ onUnmounted(() => {
     animation: fadeIn 1.4s ease both;
   }
 
+  .moon-photo {
+    width: min(100%, 500px);
+    aspect-ratio: 1;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 2px solid rgba(252, 253, 251, 0.36);
+    box-shadow:
+      0 0 0 14px rgba(252, 253, 251, 0.06),
+      0 0 0 15px rgba(252, 253, 251, 0.16),
+      0 30px 80px rgba(0, 0, 0, 0.28);
+    background: rgba(252, 253, 251, 0.06);
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  }
+
   .gate-caption {
     margin-top: 12px;
     font-size: 12px;
@@ -1000,17 +1047,18 @@ onUnmounted(() => {
     margin-bottom: 14px;
   }
 
-  .feature-icon {
+  .feature-mark {
     width: 36px;
     height: 36px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid $border-color;
+    border: 1px solid rgba(166, 64, 47, 0.45);
     border-radius: $radius-xs;
-    color: $primary-color;
-    font-size: 18px;
-    background: $bg-secondary;
+    color: $accent-color;
+    font-family: $font-display;
+    font-size: 17px;
+    background: transparent;
   }
 
   .feature-title {
@@ -1131,10 +1179,9 @@ onUnmounted(() => {
       padding: 3px 8px;
       font-size: 11px;
       color: #fcfdfb;
-      background: rgba(14, 59, 51, 0.72);
+      background: rgba(14, 59, 51, 0.78);
       border: 1px solid rgba(252, 253, 251, 0.2);
       border-radius: $radius-xs;
-      backdrop-filter: blur(6px);
     }
   }
 
@@ -1325,6 +1372,7 @@ onUnmounted(() => {
   .hero-visual {
     order: -1;
     .moon-gate { width: min(70vw, 380px); }
+    .moon-photo { width: min(70vw, 380px); }
   }
 
   .workflow-list {

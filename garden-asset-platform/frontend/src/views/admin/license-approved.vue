@@ -16,11 +16,11 @@
     <div class="content-card">
       <div class="filter-bar">
         <el-radio-group v-model="filterStatus" @change="handleFilterChange">
-          <el-radio-button label="">全部</el-radio-button>
-          <el-radio-button label="pending">审批中</el-radio-button>
-          <el-radio-button label="active">生效中</el-radio-button>
-          <el-radio-button label="expired">已过期</el-radio-button>
-          <el-radio-button label="revoked">已撤销</el-radio-button>
+          <el-radio-button value="">全部</el-radio-button>
+          <el-radio-button value="pending">审批中</el-radio-button>
+          <el-radio-button value="active">生效中</el-radio-button>
+          <el-radio-button value="expired">已过期</el-radio-button>
+          <el-radio-button value="revoked">已撤销</el-radio-button>
         </el-radio-group>
       </div>
 
@@ -40,7 +40,7 @@
             <el-tag size="small">{{ getLicenseType(row.license_type) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="licensee_name" label="授权方" width="100">
+        <el-table-column prop="licensee_name" label="被授权方" width="100">
           <template #default="{ row }">
             {{ row.licensee_name || '-' }}
           </template>
@@ -67,7 +67,7 @@
             {{ row.approved_at ? formatDate(row.approved_at) : '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="160">
           <template #default="{ row }">
             <el-button size="small" @click="viewDetail(row)">详情</el-button>
             <el-button size="small" type="primary" @click="downloadContract(row)" :disabled="row.status !== 'active'">
@@ -90,7 +90,7 @@
     </div>
 
     <!-- 详情对话框 -->
-    <el-dialog v-model="detailDialog.visible" title="授权详情" width="600px">
+    <el-dialog v-model="detailDialog.visible" title="授权详情" width="min(600px, 92vw)">
       <el-descriptions :column="2" border>
         <el-descriptions-item label="授权编码">{{ detailDialog.license_code || '-' }}</el-descriptions-item>
         <el-descriptions-item label="状态">
@@ -100,7 +100,7 @@
         </el-descriptions-item>
         <el-descriptions-item label="资产标题">{{ detailDialog.asset_title || '-' }}</el-descriptions-item>
         <el-descriptions-item label="授权类型">{{ getLicenseType(detailDialog.license_type) }}</el-descriptions-item>
-        <el-descriptions-item label="授权方">{{ detailDialog.licensee_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="被授权方">{{ detailDialog.licensee_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="申请方">{{ detailDialog.applicant_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="有效期">{{ detailDialog.end_time ? formatDate(detailDialog.end_time) : '-' }}</el-descriptions-item>
         <el-descriptions-item label="审批人">{{ detailDialog.approver_name || '-' }}</el-descriptions-item>

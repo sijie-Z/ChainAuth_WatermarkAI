@@ -16,7 +16,10 @@
         </p>
       </div>
 
-      <svg class="aside-gate" viewBox="0 0 360 360" fill="none" aria-hidden="true">
+      <div v-if="coverImage" class="aside-photo">
+        <img :src="coverImage" alt="苏州园林实景" />
+      </div>
+      <svg v-else class="aside-gate" viewBox="0 0 360 360" fill="none" aria-hidden="true">
         <defs>
           <clipPath id="loginGateClip">
             <circle cx="180" cy="180" r="126" />
@@ -104,6 +107,10 @@
           <router-link to="/register">申请注册</router-link>
         </p>
 
+        <p class="guide-hint">
+          <router-link to="/guide">第一次使用？查看 3 分钟使用指南 →</router-link>
+        </p>
+
         <div v-if="showDemoAccounts" class="demo-block">
           <p class="demo-title">演示账号</p>
           <button
@@ -125,8 +132,9 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { publicApi } from '@/api/modules'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 
@@ -135,12 +143,14 @@ const ADMIN_ROLES = ['admin', 'asset_admin', 'license_admin', 'adm1', 'adm2']
 const REMEMBERED_USERNAME_KEY = 'rememberedUsername'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 const showDemoAccounts = import.meta.env.DEV
 
 const formRef = ref()
 const loading = ref(false)
 const rememberMe = ref(false)
+const coverImage = ref('')
 
 const form = ref({
   username: '',
@@ -184,13 +194,12 @@ async function handleLogin() {
       } else {
         localStorage.removeItem(REMEMBERED_USERNAME_KEY)
       }
-      setTimeout(() => {
-        if (ADMIN_ROLES.includes(role)) {
-          router.push('/admin')
-        } else {
-          router.push('/assets')
-        }
-      }, 400)
+
+      // 登录后直接进入目标页，仅在站点内部路径时回跳，避免开放重定向
+      const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : ''
+      const isSafeRedirect = redirect.startsWith('/') && !redirect.startsWith('//')
+      const fallback = ADMIN_ROLES.includes(role) ? '/admin' : '/assets'
+      await router.push(isSafeRedirect ? redirect : fallback)
     } else {
       ElMessage.error(result.message || '登录失败，请检查用户名与密码')
     }
@@ -210,7 +219,19 @@ onMounted(() => {
     form.value.username = remembered
     rememberMe.value = true
   }
+  loadCover()
 })
+
+async function loadCover() {
+  try {
+    const response = await publicApi.getStats()
+    const gardens = response.data?.data?.gardens || []
+    const garden = gardens.find(g => g.code === 'ZZY' && g.cover_image) || gardens.find(g => g.cover_image)
+    if (garden) coverImage.value = garden.cover_image
+  } catch {
+    // 封面加载失败时保留线稿月洞门，不影响登录
+  }
+}
 </script>
 
 <style lang="scss" scoped>
@@ -292,11 +313,16 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
+.aside-body {
+  position: relative;
+  z-index: 1;
+}
+
 .aside-note {
   font-size: 14px;
   line-height: 1.9;
   color: rgba(252, 253, 251, 0.66);
-  max-width: 32em;
+  max-width: 26em;
 }
 
 .aside-gate {
@@ -309,8 +335,28 @@ onMounted(() => {
   pointer-events: none;
 }
 
+.aside-photo {
+  position: absolute;
+  right: -140px;
+  bottom: -130px;
+  width: 380px;
+  height: 380px;
+  border-radius: 50%;
+  overflow: hidden;
+  opacity: 0.62;
+  border: 1px solid rgba(252, 253, 251, 0.22);
+  pointer-events: none;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
 .aside-foot {
   position: relative;
+  z-index: 1;
   font-size: 11px;
   letter-spacing: 0.16em;
   color: rgba(252, 253, 251, 0.4);
@@ -413,6 +459,20 @@ onMounted(() => {
 }
 
 // ========== 演示账号 ==========
+.guide-hint {
+  margin-top: 10px;
+  text-align: center;
+  font-size: 12px;
+
+  a {
+    color: $text-placeholder;
+
+    &:hover {
+      color: $primary-color;
+    }
+  }
+}
+
 .demo-block {
   margin-top: 36px;
   padding-top: 20px;
@@ -487,6 +547,14 @@ onMounted(() => {
     height: 240px;
     right: -60px;
     bottom: -80px;
+  }
+
+  .aside-photo {
+    width: 220px;
+    height: 220px;
+    right: -50px;
+    bottom: -70px;
+    opacity: 0.5;
   }
 
   .aside-foot { display: none; }

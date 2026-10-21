@@ -1,18 +1,27 @@
 <template>
+  <SiteHeader v-if="showSiteHeader" />
   <ErrorBoundary>
     <router-view v-slot="{ Component, route }">
-      <transition name="fade-slide" mode="out-in">
-        <component :is="Component" :key="route.path" />
-      </transition>
+      <component
+        :is="Component"
+        :key="route.matched[0]?.path === '/admin' ? '/admin' : route.path"
+      />
     </router-view>
   </ErrorBoundary>
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import SiteHeader from '@/components/common/SiteHeader.vue'
 
+const route = useRoute()
 const userStore = useUserStore()
+
+const showSiteHeader = computed(() =>
+  route.matched.some(record => record.meta.siteHeader)
+)
 
 onMounted(() => {
   userStore.initStore()
@@ -23,23 +32,13 @@ onMounted(() => {
 #app {
   width: 100%;
   min-height: 100vh;
+  background: #f4f6f3;
 }
 
 img {
   max-width: 100%;
   height: auto;
   vertical-align: middle;
-}
-
-// 页面过渡
-.fade-slide-enter-active,
-.fade-slide-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.fade-slide-enter-from,
-.fade-slide-leave-to {
-  opacity: 0;
 }
 
 // 工具类

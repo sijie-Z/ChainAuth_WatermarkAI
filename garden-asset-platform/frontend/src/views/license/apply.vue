@@ -8,6 +8,19 @@
       <h1 class="page-title">申请授权</h1>
     </header>
 
+    <!-- 资产加载中 -->
+    <el-card v-if="assetLoading" class="asset-info-card">
+      <el-skeleton :rows="3" animated />
+    </el-card>
+
+    <!-- 资产缺失或加载失败：阻止继续填写 -->
+    <el-card v-else-if="assetError" class="asset-info-card">
+      <el-empty :description="assetError">
+        <el-button type="primary" @click="goBack">返回资产档案</el-button>
+      </el-empty>
+    </el-card>
+
+    <template v-else>
     <!-- 资产信息 -->
     <el-card class="asset-info-card">
       <template #header>
@@ -16,7 +29,7 @@
           <span v-if="asset.asset_code" class="asset-code">{{ asset.asset_code }}</span>
         </div>
       </template>
-      <el-descriptions :column="3" border>
+      <el-descriptions :column="isMobile ? 1 : 3" border>
         <el-descriptions-item label="资产编码">{{ asset.asset_code }}</el-descriptions-item>
         <el-descriptions-item label="标题">{{ asset.title }}</el-descriptions-item>
         <el-descriptions-item label="类型">{{ getTypeName(asset.asset_type) }}</el-descriptions-item>
@@ -40,11 +53,11 @@
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px" class="apply-form">
         <el-form-item label="授权类型" prop="license_type">
           <el-radio-group v-model="form.license_type">
-            <el-radio-button label="personal">个人使用</el-radio-button>
-            <el-radio-button label="academic">学术研究</el-radio-button>
-            <el-radio-button label="commercial">商业使用</el-radio-button>
-            <el-radio-button label="display">展览展示</el-radio-button>
-            <el-radio-button label="derivative">衍生创作</el-radio-button>
+            <el-radio-button value="personal">个人使用</el-radio-button>
+            <el-radio-button value="academic">学术研究</el-radio-button>
+            <el-radio-button value="commercial">商业使用</el-radio-button>
+            <el-radio-button value="display">展览展示</el-radio-button>
+            <el-radio-button value="derivative">衍生创作</el-radio-button>
           </el-radio-group>
         </el-form-item>
 
@@ -95,6 +108,7 @@
         </el-form-item>
       </el-form>
     </el-card>
+    </template>
 
     <!-- 授权协议对话框 -->
     <el-dialog v-model="agreementVisible" title="数字资产使用授权协议" width="min(600px, 92vw)">
@@ -123,7 +137,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
@@ -135,6 +149,9 @@ const router = useRouter()
 const formRef = ref()
 const submitting = ref(false)
 const agreementVisible = ref(false)
+const assetLoading = ref(true)
+const assetError = ref('')
+const isMobile = ref(window.innerWidth <= 768)
 
 const asset = ref({})
 const form = ref({
@@ -156,19 +173,32 @@ const rules = {
 
 async function loadAsset() {
   const assetId = route.query.asset_id
-  if (!assetId) return
+  if (!assetId) {
+    assetError.value = '未指定要申请授权的资产'
+    assetLoading.value = false
+    return
+  }
 
   try {
     const response = await assetApi.getDetail(assetId)
     if (response.data.code === 200) {
       asset.value = response.data.data
+    } else {
+      assetError.value = response.data.message || '资产不存在或不可申请授权'
     }
-  } catch (error) {
-    ElMessage.error('加载资产失败')
+  } catch {
+    assetError.value = '资产加载失败，请返回资产档案后重试'
+  } finally {
+    assetLoading.value = false
   }
 }
 
 async function doSubmit() {
+  if (!asset.value.id) {
+    ElMessage.error('资产信息尚未加载，无法提交申请')
+    return
+  }
+
   try {
     await formRef.value.validate()
   } catch {
@@ -178,7 +208,7 @@ async function doSubmit() {
   submitting.value = true
   try {
     const data = {
-      asset_id: asset.value.id || route.query.asset_id,
+      asset_id: asset.value.id,
       ...form.value
     }
     const response = await licenseApi.apply(data)
@@ -211,7 +241,16 @@ function getTypeName(type) {
 
 onMounted(() => {
   loadAsset()
+  window.addEventListener('resize', handleResize)
 })
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+})
+
+function handleResize() {
+  isMobile.value = window.innerWidth <= 768
+}
 </script>
 
 <style lang="scss" scoped>
@@ -325,10 +364,6 @@ onMounted(() => {
 @media (max-width: $breakpoint-md) {
   .license-apply {
     padding: $spacing-lg;
-
-    :deep(.el-descriptions) {
-      overflow-x: auto;
-    }
   }
 
   .asset-info-card {

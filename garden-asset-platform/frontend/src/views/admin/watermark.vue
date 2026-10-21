@@ -185,15 +185,24 @@ async function doBatchEmbed() {
 
   for (const assetId of batchEmbed.value.assets) {
     try {
-      await watermarkApi.embed(assetId, { algorithm: batchEmbed.value.algorithm })
-      successCount++
+      const response = await watermarkApi.embed(assetId, { algorithm: batchEmbed.value.algorithm })
+      if (response.data?.code === 200) {
+        successCount++
+      } else {
+        failCount++
+      }
     } catch {
       failCount++
     }
   }
 
   batchEmbed.value.loading = false
-  ElMessage.success(`批量嵌入完成，成功${successCount}个，失败${failCount}个`)
+  const message = `批量嵌入完成，成功${successCount}个，失败${failCount}个`
+  if (failCount > 0) {
+    ElMessage.warning(message)
+  } else {
+    ElMessage.success(message)
+  }
   batchEmbed.value.assets = []
   loadAssets()
   loadLogs()
@@ -207,18 +216,28 @@ async function doBatchExtract() {
 
   batchExtract.value.loading = true
   let successCount = 0
+  let failCount = 0
 
   for (const assetId of batchExtract.value.assets) {
     try {
-      await watermarkApi.extract(assetId)
-      successCount++
+      const response = await watermarkApi.extract(assetId)
+      if (response.data?.code === 200) {
+        successCount++
+      } else {
+        failCount++
+      }
     } catch {
-      // ignore
+      failCount++
     }
   }
 
   batchExtract.value.loading = false
-  ElMessage.success(`批量提取完成，成功${successCount}个`)
+  const message = `批量提取完成，成功${successCount}个，失败${failCount}个`
+  if (failCount > 0) {
+    ElMessage.warning(message)
+  } else {
+    ElMessage.success(message)
+  }
   batchExtract.value.assets = []
   loadLogs()
 }

@@ -19,15 +19,22 @@ const props = defineProps({
 const statusConfig = {
   pending: { text: '待处理', tone: 'warning' },
   processing: { text: '处理中', tone: 'info' },
+  in_progress: { text: '审批中', tone: 'warning' },
   embedded: { text: '已嵌入', tone: 'success' },
+  verified: { text: '已校验', tone: 'success' },
   confirmed: { text: '已确认', tone: 'success' },
   active: { text: '生效中', tone: 'success' },
   approved: { text: '已通过', tone: 'success' },
+  adm1_approved: { text: '待二级审批', tone: 'info' },
+  adm2_approved: { text: '待复核', tone: 'info' },
   rejected: { text: '已拒绝', tone: 'error' },
   expired: { text: '已过期', tone: 'neutral' },
   failed: { text: '失败', tone: 'error' },
   published: { text: '已发布', tone: 'success' },
   draft: { text: '草稿', tone: 'neutral' },
+  archived: { text: '已归档', tone: 'neutral' },
+  deleted: { text: '已删除', tone: 'error' },
+  cancelled: { text: '已取消', tone: 'neutral' },
   revoked: { text: '已撤销', tone: 'error' },
   none: { text: '未处理', tone: 'neutral' }
 }

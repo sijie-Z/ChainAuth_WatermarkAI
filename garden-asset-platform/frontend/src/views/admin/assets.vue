@@ -112,7 +112,7 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="300" fixed="right">
+            <el-table-column label="操作" width="300">
               <template #default="{ row }">
                 <div class="row-actions">
                   <el-button size="small" link type="primary" @click="viewDetail(row.id)">查看</el-button>
@@ -132,7 +132,8 @@
                     size="small"
                     type="primary"
                     plain
-                    :disabled="['embedded', 'verified'].includes(row.watermark_status)"
+                    :loading="actionState[row.id] === 'watermark'"
+                    :disabled="!!actionState[row.id] || ['embedded', 'verified'].includes(row.watermark_status)"
                     @click="batchWatermark(row)"
                   >
                     嵌水印
@@ -141,7 +142,8 @@
                     size="small"
                     type="success"
                     plain
-                    :disabled="row.chain_status === 'confirmed' || !['embedded', 'verified'].includes(row.watermark_status)"
+                    :loading="actionState[row.id] === 'chain'"
+                    :disabled="!!actionState[row.id] || row.chain_status === 'confirmed' || !['embedded', 'verified'].includes(row.watermark_status)"
                     @click="batchChain(row)"
                   >
                     上链
@@ -168,7 +170,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Search } from '@element-plus/icons-vue'
@@ -208,6 +210,7 @@ const userStore = useUserStore()
 const canApprove = computed(() => ASSET_APPROVER_ROLES.includes(userStore.userRole))
 
 const loading = ref(false)
+const actionState = reactive({})
 const assets = ref([])
 const page = ref(1)
 const perPage = ref(20)
@@ -319,26 +322,38 @@ function viewDetail(id) {
 }
 
 async function batchWatermark(row) {
+  if (actionState[row.id]) return
+  actionState[row.id] = 'watermark'
   try {
     const response = await watermarkApi.embed(row.id)
     if (response.data.code === 200) {
       ElMessage.success('水印嵌入成功')
       loadAssets()
+    } else {
+      ElMessage.error(response.data.message || '水印嵌入失败')
     }
   } catch (error) {
-    ElMessage.error('水印嵌入失败')
+    ElMessage.error(error.response?.data?.message || '水印嵌入失败')
+  } finally {
+    delete actionState[row.id]
   }
 }
 
 async function batchChain(row) {
+  if (actionState[row.id]) return
+  actionState[row.id] = 'chain'
   try {
     const response = await blockchainApi.register(row.id)
     if (response.data.code === 200) {
       ElMessage.success('上链存证成功')
       loadAssets()
+    } else {
+      ElMessage.error(response.data.message || '上链存证失败')
     }
   } catch (error) {
-    ElMessage.error('上链存证失败')
+    ElMessage.error(error.response?.data?.message || '上链存证失败')
+  } finally {
+    delete actionState[row.id]
   }
 }
 

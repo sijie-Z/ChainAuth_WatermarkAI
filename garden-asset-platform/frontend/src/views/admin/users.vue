@@ -37,7 +37,7 @@
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="180">
           <template #default="{ row }">
             <el-button size="small" @click="openEditDialog(row)">编辑</el-button>
             <el-button size="small" type="danger" @click="toggleStatus(row)">
@@ -49,7 +49,7 @@
     </div>
 
     <!-- 创建/编辑对话框 -->
-    <el-dialog v-model="dialog.visible" :title="dialog.title" width="400px">
+    <el-dialog v-model="dialog.visible" :title="dialog.title" width="min(420px, 92vw)">
       <el-form ref="formRef" :model="dialog.form" :rules="dialog.rules" label-width="80px">
         <el-form-item label="用户名" prop="username">
           <el-input v-model="dialog.form.username" :disabled="dialog.isEdit" />

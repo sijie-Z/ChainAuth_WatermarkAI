@@ -12,30 +12,17 @@
     <!-- 加载骨架屏 -->
     <el-skeleton :loading="loading" animated>
       <template #template>
-        <el-row :gutter="20">
-          <el-col :span="16">
-            <el-card>
-              <template #header>
-                <div style="display: flex; justify-content: space-between; align-items: center">
-                  <el-skeleton-item variant="text" style="width: 200px; height: 24px" />
-                  <el-skeleton-item variant="text" style="width: 60px; height: 24px" />
-                </div>
-              </template>
-              <el-skeleton-item variant="image" style="width: 100%; height: 400px" />
-              <div style="margin-top: 20px">
-                <el-skeleton :rows="4" animated />
-              </div>
-            </el-card>
-          </el-col>
-          <el-col :span="8">
-            <el-card v-for="i in 3" :key="i" style="margin-bottom: 20px">
-              <template #header>
-                <el-skeleton-item variant="text" style="width: 100px" />
-              </template>
-              <el-skeleton :rows="2" animated />
-            </el-card>
-          </el-col>
-        </el-row>
+        <div class="detail-grid">
+          <div class="skeleton-sheet">
+            <el-skeleton-item variant="text" style="width: 40%; height: 26px" />
+            <el-skeleton-item variant="image" style="width: 100%; aspect-ratio: 16 / 10; margin-top: 20px" />
+            <el-skeleton :rows="4" animated style="margin-top: 20px" />
+          </div>
+          <div class="skeleton-side">
+            <el-skeleton :rows="5" animated />
+            <el-skeleton :rows="3" animated style="margin-top: 32px" />
+          </div>
+        </div>
       </template>
 
       <template #default>
@@ -48,137 +35,183 @@
         </el-card>
 
         <!-- 正常内容 -->
-        <template v-else>
-          <el-row :gutter="20">
-            <!-- 左侧：资产预览 -->
-            <el-col :xs="24" :sm="24" :md="16">
-              <el-card>
-                <template #header>
-                  <div class="card-header">
-                    <span>{{ asset.title }}</span>
-                    <StatusTag :status="asset.status" />
+        <div v-else class="detail-grid">
+          <!-- 左侧：资产图版与著录信息 -->
+          <article class="asset-sheet">
+            <header class="sheet-head">
+              <div class="sheet-title-group">
+                <p class="sheet-kicker">{{ asset.garden_name || '苏州园林' }} · 数字资产</p>
+                <h2 class="sheet-title">{{ asset.title }}</h2>
+              </div>
+              <StatusTag :status="asset.status" />
+            </header>
+
+            <figure class="preview-area">
+              <el-image
+                v-if="asset.asset_type === 'image' || asset.asset_type === 'vector'"
+                class="asset-photo"
+                :src="getAssetUrl(asset)"
+                :preview-src-list="asset.asset_type === 'image' ? [getAssetUrl(asset)] : []"
+                :preview-teleported="true"
+                hide-on-click-modal
+                fit="contain"
+              >
+                <template #error>
+                  <div class="preview-placeholder">
+                    <el-icon :size="48"><Picture /></el-icon>
+                    <span>{{ typeLabel(asset.asset_type) }}预览暂不可用</span>
                   </div>
                 </template>
+              </el-image>
+              <div v-else class="preview-placeholder">
+                <el-icon :size="56"><Document /></el-icon>
+                <span>{{ typeLabel(asset.asset_type) }} · {{ asset.file_format || '文件' }}</span>
+              </div>
+              <figcaption class="preview-caption">
+                <span>{{ asset.garden_name || '未归类园林' }}</span>
+                <span class="mono">{{ asset.asset_code }}</span>
+              </figcaption>
+            </figure>
 
-                <!-- 预览区域 -->
-                <div class="preview-area">
-                  <img v-if="asset.asset_type === 'image'" :src="getAssetUrl(asset)" alt="资产预览" />
-                  <div v-else class="preview-placeholder">
-                    <el-icon :size="64"><Document /></el-icon>
-                    <span>{{ asset.file_format }}</span>
-                  </div>
-                </div>
+            <dl class="spec-grid">
+              <div class="spec-item">
+                <dt>资产编码</dt>
+                <dd class="mono">{{ asset.asset_code || '—' }}</dd>
+              </div>
+              <div class="spec-item">
+                <dt>所属园林</dt>
+                <dd>{{ asset.garden_name || '—' }}</dd>
+              </div>
+              <div class="spec-item">
+                <dt>文件格式</dt>
+                <dd>{{ (asset.file_format || '—').toUpperCase() }}</dd>
+              </div>
+              <div class="spec-item">
+                <dt>文件大小</dt>
+                <dd>{{ formatSize(asset.file_size) }}</dd>
+              </div>
+              <div class="spec-item">
+                <dt>上传者</dt>
+                <dd>{{ asset.uploader_name || asset.creator_name || '—' }}</dd>
+              </div>
+              <div class="spec-item">
+                <dt>创建时间</dt>
+                <dd>{{ formatDate(asset.created_at) }}</dd>
+              </div>
+              <div class="spec-item spec-span">
+                <dt>著录说明</dt>
+                <dd>{{ asset.description || '暂无描述' }}</dd>
+              </div>
+            </dl>
+          </article>
 
-                <!-- 基本信息 -->
-                <el-descriptions title="基本信息" :column="2" border>
-                  <el-descriptions-item label="资产编码">{{ asset.asset_code }}</el-descriptions-item>
-                  <el-descriptions-item label="文件格式">{{ asset.file_format }}</el-descriptions-item>
-                  <el-descriptions-item label="文件大小">{{ formatSize(asset.file_size) }}</el-descriptions-item>
-                  <el-descriptions-item label="创建时间">{{ formatDate(asset.created_at) }}</el-descriptions-item>
-                  <el-descriptions-item label="描述" :span="2">{{ asset.description || '暂无描述' }}</el-descriptions-item>
-                </el-descriptions>
-              </el-card>
-            </el-col>
+          <!-- 右侧：状态与操作 -->
+          <aside class="side-panel">
+            <section class="side-block">
+              <header class="side-head">
+                <span class="side-kicker">水印状态</span>
+                <StatusTag :status="asset.watermark_status || 'none'" kind="watermark" />
+              </header>
+              <dl class="side-meta">
+                <div v-if="asset.watermark_id" class="side-row">
+                  <dt>水印 ID</dt>
+                  <dd class="mono">{{ asset.watermark_id }}</dd>
+                </div>
+                <div v-if="asset.vr_value !== undefined" class="side-row">
+                  <dt>鲁棒性值</dt>
+                  <dd>{{ asset.vr_value?.toFixed(4) || '-' }}</dd>
+                </div>
+                <div v-if="!asset.watermark_id" class="side-row">
+                  <dt>说明</dt>
+                  <dd>尚未写入水印标识</dd>
+                </div>
+              </dl>
+              <el-button
+                v-if="canManage && !watermarkReady"
+                type="primary"
+                class="side-action"
+                :loading="watermarking"
+                @click="embedWatermark"
+              >
+                嵌入水印
+              </el-button>
+              <el-button
+                v-else-if="canManage"
+                class="side-action"
+                :loading="extracting"
+                @click="extractWatermark"
+              >
+                提取并校验水印
+              </el-button>
+              <p v-else class="side-hint">仅上传者或资产管理员可操作水印。</p>
+            </section>
 
-            <!-- 右侧：状态与操作 -->
-            <el-col :xs="24" :sm="24" :md="8">
-              <!-- 水印状态 -->
-              <el-card class="status-card">
-                <template #header>
-                  <div class="card-header">
-                    <span>水印状态</span>
-                    <StatusTag :status="asset.watermark_status || 'none'" kind="watermark" />
-                  </div>
-                </template>
-                <div v-if="asset.watermark_id" class="status-item">
-                  <span class="label">水印ID：</span>
-                  <span class="value mono">{{ asset.watermark_id }}</span>
+            <section class="side-block">
+              <header class="side-head">
+                <span class="side-kicker">区块链存证</span>
+                <StatusTag :status="asset.chain_status || 'none'" kind="chain" />
+              </header>
+              <dl class="side-meta">
+                <div v-if="asset.chain_tx_hash" class="side-row">
+                  <dt>交易哈希</dt>
+                  <dd class="mono">{{ asset.chain_tx_hash }}</dd>
                 </div>
-                <div v-if="asset.vr_value !== undefined" class="status-item">
-                  <span class="label">鲁棒性值：</span>
-                  <span class="value">{{ asset.vr_value?.toFixed(4) || '-' }}</span>
+                <div v-if="asset.certificate_id" class="side-row">
+                  <dt>证书编号</dt>
+                  <dd class="mono">{{ asset.certificate_id }}</dd>
                 </div>
-                <el-button
-                  v-if="asset.watermark_status !== 'embedded'"
-                  type="primary"
-                  style="width: 100%; margin-top: 12px"
-                  :loading="watermarking"
-                  @click="embedWatermark"
-                >
-                  嵌入水印
-                </el-button>
-                <el-button
-                  v-else
-                  type="primary"
-                  style="width: 100%; margin-top: 12px"
-                  :loading="extracting"
-                  @click="extractWatermark"
-                >
-                  提取水印
-                </el-button>
-              </el-card>
+                <div v-if="!asset.chain_tx_hash" class="side-row">
+                  <dt>说明</dt>
+                  <dd>尚未写入联盟链</dd>
+                </div>
+              </dl>
+              <el-button
+                v-if="canManage && asset.chain_status !== 'confirmed'"
+                type="primary"
+                class="side-action"
+                :disabled="!watermarkReady"
+                :loading="chaining"
+                @click="registerChain"
+              >
+                上链存证
+              </el-button>
+              <el-button v-else-if="canManage" class="side-action" @click="viewCertificate">
+                查看存证证书
+              </el-button>
+              <p v-if="!canManage" class="side-hint">存证操作由上传者或资产管理员完成。</p>
+              <p v-else-if="asset.chain_status !== 'confirmed' && !watermarkReady" class="side-hint">
+                上链前需先完成水印嵌入
+              </p>
+            </section>
 
-              <!-- 区块链存证 -->
-              <el-card class="status-card">
-                <template #header>
-                  <div class="card-header">
-                    <span>区块链存证</span>
-                    <StatusTag :status="asset.chain_status || 'none'" kind="chain" />
-                  </div>
-                </template>
-                <div v-if="asset.chain_tx_hash" class="status-item">
-                  <span class="label">交易哈希：</span>
-                  <span class="value mono">{{ asset.chain_tx_hash }}</span>
-                </div>
-                <div v-if="asset.certificate_id" class="status-item">
-                  <span class="label">证书ID：</span>
-                  <span class="value mono">{{ asset.certificate_id }}</span>
-                </div>
-                <el-button
-                  v-if="asset.chain_status !== 'confirmed'"
-                  type="primary"
-                  style="width: 100%; margin-top: 12px"
-                  :disabled="asset.watermark_status !== 'embedded'"
-                  :loading="chaining"
-                  @click="registerChain"
-                >
-                  上链存证
-                </el-button>
-                <el-button
-                  v-else
-                  type="primary"
-                  style="width: 100%; margin-top: 12px"
-                  @click="viewCertificate"
-                >
-                  查看证书
-                </el-button>
-              </el-card>
-
-              <!-- 操作按钮 -->
-              <el-card class="status-card">
-                <template #header>操作</template>
-                <el-button type="primary" style="width: 100%; margin-bottom: 10px" @click="applyLicense">
-                  申请授权
-                </el-button>
-                <el-button style="width: 100%" @click="goBack">返回列表</el-button>
-              </el-card>
-            </el-col>
-          </el-row>
-        </template>
+            <section class="side-block side-actions">
+              <header class="side-head">
+                <span class="side-kicker">授权与分发</span>
+              </header>
+              <p class="side-note">下载与使用需经双重审批，授权记录会写入台账。</p>
+              <el-button type="primary" class="side-action" @click="applyLicense">
+                申请授权
+              </el-button>
+              <el-button class="side-action" @click="goBack">返回资产列表</el-button>
+            </section>
+          </aside>
+        </div>
       </template>
     </el-skeleton>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, Document } from '@element-plus/icons-vue'
+import { ArrowLeft, Document, Picture } from '@element-plus/icons-vue'
 import { assetApi, watermarkApi, blockchainApi } from '@/api/modules'
+import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 
 const asset = ref({})
 const loading = ref(true)
@@ -186,6 +219,15 @@ const loadError = ref(false)
 const watermarking = ref(false)
 const extracting = ref(false)
 const chaining = ref(false)
+const watermarkReady = computed(() =>
+  ['embedded', 'verified'].includes(asset.value.watermark_status)
+)
+const canManage = computed(() => {
+  const role = userStore.userRole
+  const userId = userStore.user?.id
+  return ['admin', 'asset_admin'].includes(role)
+    || (userId && asset.value.creator_id === userId)
+})
 
 async function loadAsset() {
   loading.value = true
@@ -260,12 +302,22 @@ function goBack() {
   router.push('/assets')
 }
 
+const TYPE_LABELS = { image: '影像', vector: '矢量图', model: '三维模型', document: '文献', video: '视频' }
+
+function typeLabel(type) {
+  return TYPE_LABELS[type] || '文件'
+}
+
 function getAssetUrl(asset) {
-  if (asset.thumbnail_path) return asset.thumbnail_path
+  if (asset.id) return `/api/assets/${asset.id}/thumbnail`
+  return placeholderImage(asset.asset_type)
+}
+
+function placeholderImage(type) {
   const colors = { image: '#2f6b5a', vector: '#4c6e8a', model: '#6d5b7a', document: '#b07a2a', video: '#a6402f' }
-  const color = (colors[asset.asset_type] || '#5b675f').replace('#', '')
-  const label = (asset.asset_type || 'FILE').substring(0, 3).toUpperCase()
-  return `data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="800" height="600"%3E%3Crect fill="%23${color}" width="800" height="600" rx="12"/%3E%3Ctext x="400" y="310" text-anchor="middle" fill="white" font-size="48"%3E${label}%3C/text%3E%3C/svg%3E`
+  const color = (colors[type] || '#5b675f').replace('#', '')
+  const label = (type || 'FILE').substring(0, 3).toUpperCase()
+  return `data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="800" height="500"%3E%3Crect fill="%23${color}" width="800" height="500"/%3E%3Ctext x="400" y="260" text-anchor="middle" fill="white" font-size="42"%3E${label}%3C/text%3E%3C/svg%3E`
 }
 
 function formatSize(size) {
@@ -291,31 +343,15 @@ onMounted(() => {
 .asset-detail-container {
   max-width: 1280px;
   margin: 0 auto;
-  padding: $spacing-2xl $spacing-3xl;
+  padding: $spacing-2xl $spacing-3xl $spacing-4xl;
   min-height: 100vh;
   background: $bg-primary;
-
-  :deep(.el-card__header) {
-    padding: $spacing-lg $spacing-xl;
-    border-bottom: 1px solid $border-light;
-    font-family: $font-display;
-    font-weight: $font-weight-semibold;
-  }
-
-  :deep(.el-card__body) {
-    padding: $spacing-xl;
-  }
-
-  :deep(.el-card__header .status-tag) {
-    font-family: $font-family;
-    font-weight: $font-weight-medium;
-  }
 }
 
 // ========== 页眉 ==========
 .page-bar {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   flex-wrap: wrap;
   gap: $spacing-md;
   padding-bottom: $spacing-md;
@@ -327,6 +363,7 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  align-self: center;
   font-size: $font-size-sm;
   color: $text-secondary;
   transition: color $transition-fast;
@@ -347,37 +384,70 @@ onMounted(() => {
 
 .page-meta {
   margin-left: auto;
+  align-self: center;
   font-family: $font-mono;
   font-size: $font-size-xs;
   letter-spacing: 0.08em;
   color: $text-placeholder;
 }
 
-.card-header {
+// ========== 版面 ==========
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: $spacing-2xl;
+  align-items: start;
+}
+
+.asset-sheet {
+  min-width: 0;
+  background: $bg-card;
+  border: 1px solid $border-color;
+  border-radius: $radius-lg;
+  padding: $spacing-2xl;
+  box-shadow: $shadow-sm;
+}
+
+.sheet-head {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  gap: $spacing-md;
+  align-items: flex-start;
+  gap: $spacing-lg;
+  margin-bottom: $spacing-lg;
+}
+
+.sheet-kicker {
+  font-size: $font-size-xs;
+  letter-spacing: 0.14em;
+  color: $text-secondary;
+  margin-bottom: 6px;
+}
+
+.sheet-title {
   font-family: $font-display;
-  font-size: $font-size-lg;
+  font-size: 24px;
+  line-height: 1.35;
   font-weight: $font-weight-semibold;
+  color: $text-primary;
 }
 
 .preview-area {
-  min-height: 400px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
+  margin: 0 0 $spacing-xl;
+}
+
+.asset-photo {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
   background: $bg-secondary;
   border: 1px solid $border-light;
-  margin-bottom: $spacing-lg;
   border-radius: $radius-md;
-  gap: $spacing-md;
+  overflow: hidden;
+  cursor: zoom-in;
 
-  img {
-    max-width: 100%;
-    max-height: 400px;
+  :deep(.el-image__inner) {
+    width: 100%;
+    height: 100%;
     object-fit: contain;
   }
 }
@@ -386,40 +456,179 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: $spacing-sm;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  background: $bg-secondary;
+  border: 1px solid $border-light;
+  border-radius: $radius-md;
   color: $text-placeholder;
-  font-size: $font-size-lg;
+  font-size: $font-size-base;
 }
 
-.status-card {
-  margin-bottom: $spacing-xl;
-}
-
-.status-item {
+.preview-caption {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: $spacing-sm;
+  gap: $spacing-md;
+  padding-top: $spacing-sm;
+  font-size: $font-size-xs;
+  color: $text-placeholder;
 
-  .label {
-    color: $text-secondary;
-    font-size: $font-size-sm;
+  .mono {
+    font-family: $font-mono;
+    letter-spacing: 0.04em;
+    overflow-wrap: anywhere;
+    text-align: right;
+  }
+}
+
+.spec-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid $border-light;
+
+  .spec-item {
+    display: grid;
+    grid-template-columns: 80px minmax(0, 1fr);
+    gap: $spacing-sm;
+    padding: $spacing-md 0;
+    border-bottom: 1px solid $border-light;
+    min-width: 0;
+
+    &:nth-child(odd) {
+      padding-right: $spacing-lg;
+    }
+
+    &:nth-child(even) {
+      padding-left: $spacing-lg;
+      border-left: 1px solid $border-light;
+    }
   }
 
-  .value {
+  .spec-span {
+    grid-column: 1 / -1;
+
+    &:nth-child(even) {
+      border-left: none;
+      padding-left: 0;
+    }
+  }
+
+  dt {
+    font-size: $font-size-xs;
+    letter-spacing: 0.06em;
+    color: $text-secondary;
+    padding-top: 2px;
+  }
+
+  dd {
     font-size: $font-size-sm;
     color: $text-primary;
-    max-width: 180px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    line-height: 1.7;
+    overflow-wrap: anywhere;
   }
 
   .mono {
     font-family: $font-mono;
     font-size: $font-size-xs;
-    letter-spacing: 0.02em;
   }
+}
+
+// ========== 右侧面板 ==========
+.side-panel {
+  position: sticky;
+  top: $spacing-xl;
+  background: $bg-card;
+  border: 1px solid $border-color;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-sm;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.side-block {
+  padding: $spacing-xl;
+  border-bottom: 1px solid $border-light;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.side-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: $spacing-sm;
+  margin-bottom: $spacing-md;
+}
+
+.side-kicker {
+  font-family: $font-display;
+  font-size: $font-size-base;
+  font-weight: $font-weight-semibold;
+  color: $text-primary;
+}
+
+.side-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.side-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+
+  dt {
+    font-size: $font-size-xs;
+    color: $text-secondary;
+    letter-spacing: 0.04em;
+  }
+
+  dd {
+    font-size: $font-size-sm;
+    color: $text-primary;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+  }
+
+  .mono {
+    font-family: $font-mono;
+    font-size: $font-size-xs;
+  }
+}
+
+.side-action {
+  width: 100%;
+  margin-top: $spacing-md;
+}
+
+.side-hint,
+.side-note {
+  margin-top: $spacing-sm;
+  font-size: $font-size-xs;
+  line-height: 1.6;
+  color: $text-placeholder;
+}
+
+.side-actions {
+  .side-action {
+    margin-top: 10px;
+  }
+}
+
+// 骨架
+.skeleton-sheet,
+.skeleton-side {
+  background: $bg-card;
+  border: 1px solid $border-color;
+  border-radius: $radius-lg;
+  padding: $spacing-2xl;
 }
 
 .error-card {
@@ -429,25 +638,48 @@ onMounted(() => {
   justify-content: center;
 }
 
+@media (max-width: $breakpoint-lg) {
+  .detail-grid {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+}
+
 @media (max-width: $breakpoint-md) {
   .asset-detail-container {
     padding: $spacing-lg;
+  }
 
-    :deep(.el-descriptions) {
-      overflow-x: auto;
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .side-panel {
+    position: static;
+  }
+
+  .asset-sheet {
+    padding: $spacing-lg;
+  }
+
+  .spec-grid {
+    grid-template-columns: 1fr;
+
+    .spec-item {
+      &:nth-child(odd) {
+        padding-right: 0;
+      }
+
+      &:nth-child(even) {
+        padding-left: 0;
+        border-left: none;
+      }
     }
   }
 
   .page-meta {
+    width: 100%;
     margin-left: 0;
-  }
-
-  .preview-area {
-    min-height: 250px;
-  }
-
-  .status-item .value {
-    max-width: 140px;
+    text-align: left;
   }
 }
 </style>

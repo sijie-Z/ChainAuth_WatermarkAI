@@ -3,7 +3,7 @@
     <!-- 侧边栏 -->
     <aside class="sidebar lattice-light" :class="{ collapsed: isCollapsed, 'mobile-open': mobileOpen }">
       <div class="sidebar-header">
-        <router-link to="/admin" class="logo-container">
+        <router-link to="/admin" class="logo-container" title="返回仪表盘">
           <span class="logo-mark">园</span>
           <transition name="fade">
             <span v-if="!isCollapsed" class="logo-text">
@@ -12,7 +12,13 @@
             </span>
           </transition>
         </router-link>
-        <button class="collapse-btn" type="button" aria-label="折叠侧边栏" @click="toggleCollapse">
+        <button
+          class="collapse-btn"
+          type="button"
+          :aria-label="isCollapsed ? '展开侧边栏' : '收起侧边栏'"
+          :title="isCollapsed ? '展开侧边栏' : '收起侧边栏'"
+          @click.stop="toggleCollapse"
+        >
           <el-icon :class="{ rotated: isCollapsed }"><Expand /></el-icon>
         </button>
       </div>
@@ -26,6 +32,7 @@
               :to="item.path"
               class="nav-item"
               :class="{ active: isActive(item.path) }"
+              :title="isCollapsed ? item.label : undefined"
             >
               <el-icon class="nav-icon"><component :is="item.icon" /></el-icon>
               <transition name="fade">
@@ -38,6 +45,7 @@
                 type="button"
                 class="nav-item has-children"
                 :class="{ expanded: expandedMenus.includes(item.path) }"
+                :title="isCollapsed ? item.label : undefined"
                 @click="toggleSubMenu(item.path)"
               >
                 <el-icon class="nav-icon"><component :is="item.icon" /></el-icon>
@@ -68,6 +76,14 @@
       </nav>
 
       <div class="sidebar-footer">
+        <router-link to="/guide" class="sidebar-aux-link" title="使用指南">
+          <el-icon><Reading /></el-icon>
+          <span v-if="!isCollapsed">使用指南</span>
+        </router-link>
+        <router-link to="/home" class="sidebar-aux-link" title="返回前台">
+          <el-icon><HomeFilled /></el-icon>
+          <span v-if="!isCollapsed">返回前台</span>
+        </router-link>
         <div class="user-card" :class="{ compact: isCollapsed }">
           <span class="user-avatar">{{ username?.charAt(0)?.toUpperCase() }}</span>
           <transition name="fade">
@@ -139,11 +155,9 @@
         </div>
       </header>
 
-      <main class="page-content">
+      <main class="admin-main">
         <router-view v-slot="{ Component }">
-          <transition name="page-fade" mode="out-in">
-            <component :is="Component" />
-          </transition>
+          <component :is="Component" />
         </router-view>
       </main>
     </div>
@@ -151,13 +165,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, shallowRef } from 'vue'
+import { ref, computed, onMounted, onUnmounted, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import {
   DataLine, Picture, Stamp, Document, Link, User, Setting,
   Menu, HomeFilled, ArrowDown, Expand, SwitchButton,
-  FullScreen, Close
+  FullScreen, Close, Reading
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
@@ -223,6 +237,11 @@ const breadcrumbs = computed(() => {
 function toggleCollapse() {
   isCollapsed.value = !isCollapsed.value
 }
+
+// 切换后台子页面时收起移动端抽屉，避免遮住新页面
+watch(() => route.path, () => {
+  mobileOpen.value = false
+})
 
 function toggleMobileMenu() {
   mobileOpen.value = !mobileOpen.value
@@ -300,11 +319,16 @@ onUnmounted(() => {
     width: $sidebar-collapsed-width;
 
     .sidebar-header {
-      padding: 18px 12px;
+      flex-direction: column;
+      gap: 8px;
+      padding: 14px 8px;
       justify-content: center;
     }
 
-    .collapse-btn { display: none; }
+    // 折叠后仍保留展开入口，否则桌面端没有恢复方式
+    .collapse-btn {
+      display: inline-flex;
+    }
 
     .nav-item {
       justify-content: center;
@@ -507,6 +531,30 @@ onUnmounted(() => {
   border-top: 1px solid rgba(252, 253, 251, 0.08);
 }
 
+.sidebar-aux-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  margin-bottom: 2px;
+  border-radius: $radius-xs;
+  font-size: 12.5px;
+  color: rgba(252, 253, 251, 0.62);
+
+  &:hover {
+    background: rgba(252, 253, 251, 0.06);
+    color: #fcfdfb;
+  }
+
+  .el-icon {
+    font-size: 14px;
+  }
+}
+
+.sidebar.collapsed .sidebar-aux-link {
+  justify-content: center;
+}
+
 .user-card {
   display: flex;
   align-items: center;
@@ -572,8 +620,7 @@ onUnmounted(() => {
 
 .topbar {
   height: $header-height;
-  background: rgba(252, 253, 251, 0.94);
-  backdrop-filter: $glass-blur;
+  background: rgba(252, 253, 251, 0.98);
   border-bottom: 1px solid $border-light;
   display: flex;
   align-items: center;
@@ -692,7 +739,7 @@ onUnmounted(() => {
   }
 }
 
-.page-content {
+.admin-main {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
@@ -700,8 +747,8 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
-  .page-content {
-    padding: 16px;
+  .admin-main {
+    padding: 0;
   }
 }
 
@@ -735,7 +782,10 @@ onUnmounted(() => {
     transform: translateX(-100%);
     transition: transform $transition-base;
 
-    &.mobile-open { transform: translateX(0); }
+    &.mobile-open {
+      width: $sidebar-width;
+      transform: translateX(0);
+    }
   }
 
   .main-area {

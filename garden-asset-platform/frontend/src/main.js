@@ -6,11 +6,14 @@ import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
 // Element Plus样式
 import 'element-plus/dist/index.css'
 
+// 顶部路由进度条样式（需先于自定义样式加载，便于主题覆盖）
+import 'nprogress/nprogress.css'
+
 // 自定义样式
 import '@/assets/styles/main.scss'
 
 import App from './App.vue'
-import router from './router'
+import router, { prefetchRoutes } from './router'
 import GlobalComponents from '@/components'
 
 const app = createApp(App)
@@ -51,3 +54,8 @@ app.config.globalProperties.$formatSize = (bytes) => {
 }
 
 app.mount('#app')
+
+// 首屏完成后再预取其余页面，让后续跳转无需等待分包下载
+router.isReady().then(() => {
+  prefetchRoutes()
+})

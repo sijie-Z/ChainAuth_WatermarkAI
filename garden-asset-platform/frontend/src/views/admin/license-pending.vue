@@ -47,7 +47,7 @@
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="审批操作" width="180" fixed="right">
+        <el-table-column label="审批操作" width="180">
           <template #default="{ row }">
             <el-button size="small" type="success" @click="openApproveDialog(row, 'approve')">
               通过
@@ -61,7 +61,7 @@
     </div>
 
     <!-- 审批对话框 -->
-    <el-dialog v-model="approveDialog.visible" :title="approveDialog.title" width="500px">
+    <el-dialog v-model="approveDialog.visible" :title="approveDialog.title" width="min(500px, 92vw)">
       <el-form :model="approveDialog.form" label-width="80px">
         <el-form-item label="申请信息">
           <el-descriptions :column="1" border size="small">

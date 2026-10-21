@@ -106,15 +106,15 @@
             </div>
             <div class="info-item">
               <span class="info-label">权利类型</span>
-              <span class="info-value">{{ certificate.right_type || '著作权' }}</span>
+              <span class="info-value">{{ certificate.right_type || '未提供' }}</span>
             </div>
             <div class="info-item">
               <span class="info-label">登记时间</span>
-              <span class="info-value">{{ formatDate(certificate.created_at) }}</span>
+              <span class="info-value">{{ formatDate(certificate.created_at) || '未提供' }}</span>
             </div>
             <div class="info-item">
               <span class="info-label">有效期</span>
-              <span class="info-value">永久有效</span>
+              <span class="info-value">{{ certificate.valid_until ? formatDate(certificate.valid_until) : '未设置' }}</span>
             </div>
           </div>
         </div>
@@ -126,10 +126,10 @@
             <CircleClose v-else />
           </el-icon>
           <div class="verify-text">
-            <div class="verify-title">{{ certificate.tx_hash ? '链上存证已确认' : '尚未生成链上存证交易' }}</div>
+            <div class="verify-title">{{ certificate.tx_hash ? '链上存证交易已生成' : '尚未生成链上存证交易' }}</div>
             <div class="verify-desc">
               {{ certificate.tx_hash
-                ? '该证书对应的存证信息已写入区块链，可通过交易哈希与区块高度在链上核验。'
+                ? '存证信息已写入区块链，可凭交易哈希与区块高度在链上复核。'
                 : '该资产尚未完成上链存证，请先完成水印嵌入与上链操作后再查看证书。' }}
             </div>
           </div>
@@ -143,14 +143,15 @@
 
         <!-- 页脚 -->
         <div class="cert-footer">
-          <p>本证书由苏州园林数字资产平台基于 FISCO BCOS 区块链技术签发</p>
-          <p>证书数据已上链存证，不可篡改，永久可追溯</p>
-          <p class="cert-footer-date">签发日期：{{ formatDate(certificate.created_at || new Date().toISOString()) }}</p>
+          <p>本证书由苏州园林数字资产平台签发，链上状态以交易哈希与区块高度为准</p>
+          <p>证书字段以平台台账记录为准，如需权属证明请联系权利人核验</p>
+          <p class="cert-footer-date">签发日期：{{ formatDate(certificate.created_at) || '未提供' }}</p>
         </div>
       </template>
 
-      <el-empty v-else-if="!loading" description="证书不存在或已失效">
-        <el-button type="primary" @click="$router.push('/home')">返回首页</el-button>
+      <el-empty v-else-if="!loading" :description="loadError ? '证书加载失败' : '证书不存在或已失效'">
+        <el-button v-if="loadError" type="primary" @click="loadCertificate">重试</el-button>
+        <el-button v-else type="primary" @click="$router.push('/home')">返回首页</el-button>
       </el-empty>
     </div>
   </div>
@@ -166,12 +167,14 @@ import { blockchainApi } from '@/api/modules'
 const route = useRoute()
 const router = useRouter()
 
-const loading = ref(false)
+const loading = ref(true)
+const loadError = ref(false)
 const certificate = ref({})
 const certBody = ref(null)
 
 async function loadCertificate() {
   loading.value = true
+  loadError.value = false
   try {
     const response = await blockchainApi.getCertificate(route.params.id)
     if (response.data.code === 200) {
@@ -191,7 +194,8 @@ async function loadCertificate() {
       certificate.value = {}
     }
   } catch {
-    ElMessage.error('加载证书失败')
+    loadError.value = true
+    certificate.value = {}
   } finally {
     loading.value = false
   }
@@ -226,7 +230,7 @@ function getTypeName(type) {
 
 function getOwnershipName(type) {
   const map = { original: '原创', authorized: '授权使用', derived: '衍生作品' }
-  return map[type] || '著作权'
+  return map[type] || '未提供'
 }
 
 function formatDate(dateStr) {

@@ -83,7 +83,7 @@
             {{ formatDate(row.confirmed_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="160">
           <template #default="{ row }">
             <el-button size="small" @click="viewCertificate(row)">查看</el-button>
             <el-button size="small" type="primary" @click="verifyAsset(row)">验证</el-button>
@@ -180,12 +180,14 @@ async function loadStatus() {
 async function loadPendingAssets() {
   try {
     const response = await assetApi.getList({
-      watermark_status: 'embedded',
       chain_status: 'none',
       per_page: 100
     })
     if (response.data?.code === 200) {
-      pendingAssets.value = response.data.data.items || []
+      const items = response.data.data.items || []
+      pendingAssets.value = items.filter(asset =>
+        ['embedded', 'verified'].includes(asset.watermark_status)
+      )
     }
   } catch (error) {
     console.error('加载待上链资产失败:', error)
@@ -224,15 +226,24 @@ async function doBatchRegister() {
 
   for (const assetId of batchRegister.value.assets) {
     try {
-      await blockchainApi.register(assetId)
-      successCount++
+      const response = await blockchainApi.register(assetId)
+      if (response.data?.code === 200) {
+        successCount++
+      } else {
+        failCount++
+      }
     } catch {
       failCount++
     }
   }
 
   batchRegister.value.loading = false
-  ElMessage.success(`批量上链完成，成功${successCount}个，失败${failCount}个`)
+  const message = `批量上链完成，成功${successCount}个，失败${failCount}个`
+  if (failCount > 0) {
+    ElMessage.warning(message)
+  } else {
+    ElMessage.success(message)
+  }
   batchRegister.value.assets = []
   loadPendingAssets()
   loadCertificates()

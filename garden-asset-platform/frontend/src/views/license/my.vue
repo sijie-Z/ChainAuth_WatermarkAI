@@ -13,12 +13,12 @@
         <div class="card-header">
           <span class="card-title">授权记录</span>
           <el-radio-group v-model="filterStatus" @change="handleFilterChange">
-            <el-radio-button label="">全部</el-radio-button>
-            <el-radio-button label="pending">审批中</el-radio-button>
-            <el-radio-button label="active">已生效</el-radio-button>
-            <el-radio-button label="rejected">已拒绝</el-radio-button>
-            <el-radio-button label="expired">已过期</el-radio-button>
-            <el-radio-button label="revoked">已撤销</el-radio-button>
+            <el-radio-button value="">全部</el-radio-button>
+            <el-radio-button value="pending">审批中</el-radio-button>
+            <el-radio-button value="active">已生效</el-radio-button>
+            <el-radio-button value="rejected">已拒绝</el-radio-button>
+            <el-radio-button value="expired">已过期</el-radio-button>
+            <el-radio-button value="revoked">已撤销</el-radio-button>
           </el-radio-group>
         </div>
       </template>
@@ -75,7 +75,7 @@
                 {{ formatDate(row.created_at) || '-' }}
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="130" fixed="right">
+            <el-table-column label="操作" width="130">
               <template #default="{ row }">
                 <el-button size="small" @click="viewDetail(row)">详情</el-button>
                 <el-button

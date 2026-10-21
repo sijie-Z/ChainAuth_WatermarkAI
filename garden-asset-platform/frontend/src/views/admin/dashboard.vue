@@ -19,6 +19,10 @@
             <el-icon><Stamp /></el-icon>
             水印处理
           </el-button>
+          <el-button class="btn-action-secondary" @click="$router.push('/guide')">
+            <el-icon><Reading /></el-icon>
+            使用指南
+          </el-button>
         </div>
       </div>
     </div>
@@ -34,9 +38,8 @@
     <div v-else class="stats-grid">
       <div
         class="stat-card"
-        v-for="(stat, index) in statCards"
+        v-for="stat in statCards"
         :key="stat.key"
-        :style="{ animationDelay: index * 0.1 + 's' }"
       >
         <div class="stat-card-header">
           <div class="stat-icon-wrapper" :style="{ background: stat.gradient }">
@@ -54,11 +57,11 @@
           </div>
           <div class="stat-label">{{ stat.label }}</div>
         </div>
-        <div class="stat-card-footer">
+        <div class="stat-card-footer" v-if="stat.showProgress">
           <div class="progress-bar">
             <div class="progress-fill" :style="{ width: stat.progress + '%', background: stat.gradient }"></div>
           </div>
-          <span class="progress-text">{{ stat.progress }}% 完成率</span>
+          <span class="progress-text">{{ stat.progress }}% {{ stat.progressLabel }}</span>
         </div>
       </div>
     </div>
@@ -72,8 +75,8 @@
           <div class="card-header">
             <h3 class="card-title">资产类型分布</h3>
             <el-radio-group v-model="chartType" size="small">
-              <el-radio-button label="week">本周</el-radio-button>
-              <el-radio-button label="month">本月</el-radio-button>
+              <el-radio-button value="week">本周</el-radio-button>
+              <el-radio-button value="month">本月</el-radio-button>
             </el-radio-group>
           </div>
           <el-skeleton v-if="loading" animated :rows="1" style="padding: 20px">
@@ -88,7 +91,7 @@
         <div class="chart-card">
           <div class="card-header">
             <h3 class="card-title">水印处理趋势</h3>
-            <el-tag size="small" type="success">实时更新</el-tag>
+            <el-tag size="small" type="success">最近 7 天</el-tag>
           </div>
           <el-skeleton v-if="loading" animated :rows="1" style="padding: 20px">
             <template #template>
@@ -181,7 +184,7 @@
             <template #default="{ row }">
               <div class="asset-info">
                 <div class="asset-thumb">
-                  <img :src="row.thumbnail || getDefaultThumb(row.type)" alt="" />
+                  <img :src="getThumbnail(row)" alt="" loading="lazy" @error="onThumbnailError($event, row)" />
                 </div>
                 <div class="asset-meta">
                   <div class="asset-code">{{ row.asset_code }}</div>
@@ -214,7 +217,7 @@
             </template>
           </el-table-column>
           <el-table-column prop="created_at" label="上传时间" width="160" />
-          <el-table-column label="操作" width="100" fixed="right">
+          <el-table-column label="操作" width="100">
             <template #default="{ row }">
               <el-button type="primary" link size="small" @click="viewAsset(row)">查看</el-button>
             </template>
@@ -232,7 +235,7 @@ import { useRouter } from 'vue-router'
 import { assetApi, licenseApi } from '@/api/modules'
 import {
   Picture, Stamp, Link, Document, Upload, Clock,
-  ArrowUp, ArrowDown, User,
+  ArrowUp, ArrowDown, User, Reading,
   CircleCheck, Timer
 } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
@@ -335,11 +338,26 @@ async function loadDashboardData() {
       statCards.value = statCardDefs.map(def => {
         let value = 0
         let progress = 0
-        if (def.key === 'totalAssets') { value = total; progress = total > 0 ? Math.round((watermarked / total) * 100) : 0 }
-        if (def.key === 'watermarkedAssets') { value = watermarked; progress = total > 0 ? Math.round((watermarked / total) * 100) : 0 }
-        if (def.key === 'chainedAssets') { value = chained; progress = total > 0 ? Math.round((chained / total) * 100) : 0 }
-        if (def.key === 'pendingLicenses') { value = pendingLicenses; progress = pendingLicenses > 0 ? Math.min(pendingLicenses * 20, 100) : 0 }
-        return { ...def, value, trend: null, progress }
+        let showProgress = true
+        let progressLabel = '水印覆盖率'
+        if (def.key === 'totalAssets') {
+          value = total
+          progress = total > 0 ? Math.round((watermarked / total) * 100) : 0
+        }
+        if (def.key === 'watermarkedAssets') {
+          value = watermarked
+          progress = total > 0 ? Math.round((watermarked / total) * 100) : 0
+        }
+        if (def.key === 'chainedAssets') {
+          value = chained
+          progress = total > 0 ? Math.round((chained / total) * 100) : 0
+          progressLabel = '上链覆盖率'
+        }
+        if (def.key === 'pendingLicenses') {
+          value = pendingLicenses
+          showProgress = false
+        }
+        return { ...def, value, trend: null, progress, showProgress, progressLabel }
       })
     }
 
@@ -347,10 +365,23 @@ async function loadDashboardData() {
     if (stats?.recent_activities?.length) {
       const actionIcons = { upload: Picture, embed: Stamp, extract: Stamp, register: Link, approve: Document, login: User }
       const actionColors = { upload: '#2f6b5a', embed: '#4c6e8a', extract: '#4c6e8a', register: '#6d5b7a', approve: '#b07a2a', login: '#5b675f' }
+      const actionNames = {
+        upload: '上传资产',
+        embed: '嵌入水印',
+        watermark_embed: '嵌入水印',
+        extract: '提取水印',
+        register: '上链存证',
+        approve: '审批授权',
+        reject: '驳回申请',
+        license_apply: '提交授权申请',
+        update: '更新资产',
+        delete: '删除资产',
+        login: '登录'
+      }
       recentActivities.value = stats.recent_activities.slice(0, 8).map((a, i) => ({
         id: a.id || i,
         icon: actionIcons[a.action] || CircleCheck,
-        title: a.action || a.module || '操作',
+        title: actionNames[a.action] || a.module || '操作',
         description: a.description || '',
         time: formatTimeAgo(a.created_at),
         color: actionColors[a.action] || '#5b675f'
@@ -407,6 +438,17 @@ function getGreeting() {
   return '晚上好'
 }
 
+function getThumbnail(row) {
+  return row.id ? `/api/assets/${row.id}/thumbnail?size=card&v=2` : getDefaultThumb(row.type)
+}
+
+function onThumbnailError(event, row) {
+  const img = event?.target
+  if (!img || img.dataset.fallbackApplied) return
+  img.dataset.fallbackApplied = '1'
+  img.src = getDefaultThumb(row.type)
+}
+
 function getDefaultThumb(type) {
   const colors = { image: '#2f6b5a', vector: '#4c6e8a', model: '#6d5b7a', document: '#b07a2a', video: '#a6402f' }
   const color = colors[type] || '#5b675f'
@@ -453,24 +495,10 @@ function formatTimeAgo(dateStr) {
   return formatDate(dateStr)
 }
 
-// 数字动画
+// 数字直接呈现，避免动画期间显示与实际不一致的中间值
 function animateNumbers() {
   statCards.value.forEach(stat => {
-    const target = stat.value
-    const duration = 1500
-    const steps = 40
-    const increment = target / steps
-    let current = 0
-
-    const timer = setInterval(() => {
-      current += increment
-      if (current >= target) {
-        animatedValues[stat.key] = target
-        clearInterval(timer)
-      } else {
-        animatedValues[stat.key] = Math.floor(current)
-      }
-    }, duration / steps)
+    animatedValues[stat.key] = stat.value
   })
 }
 
