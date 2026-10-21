@@ -32,11 +32,11 @@ jobs:
           case "$BASE_REF" in
             main)
               case "$HEAD_REF" in
-                release/*|hotfix/*)
+                release/*|hotfix/*|dependabot/*)
                   echo "✅ main ← ${HEAD_REF}"
                   ;;
                 *)
-                  echo "::error::main 只接受来自 release/* 或 hotfix/* 的 PR（当前: ${HEAD_REF}）"
+                  echo "::error::main 只接受来自 release/*、hotfix/* 或 dependabot/* 的 PR（当前: ${HEAD_REF}）"
                   exit 1
                   ;;
               esac
@@ -63,7 +63,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
+      - name: Skip semantic title check for Dependabot
+        if: github.actor == 'dependabot[bot]'
+        run: echo "Dependabot PR 使用 'Bump ...' 标题，跳过语义化标题校验"
+
       - name: Validate Conventional Commits PR title
+        if: github.actor != 'dependabot[bot]'
         uses: amannn/action-semantic-pull-request@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -89,14 +94,20 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
+        if: github.actor != 'dependabot[bot]'
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Validate commit messages
+        if: github.actor != 'dependabot[bot]'
         uses: wagoid/commitlint-github-action@v6
         with:
           configFile: commitlint.config.cjs
+
+      - name: Skip commitlint for Dependabot
+        if: github.actor == 'dependabot[bot]'
+        run: echo "Dependabot 生成的提交使用 'Bump ...'，跳过 commitlint"
 
   conflict-check:
     name: conflict-check

@@ -6,7 +6,7 @@
 
 | 分支 | 角色 | 保护规则 |
 |------|------|----------|
-| `main` | 生产分支，任何提交都应可发布 | 禁止直推、禁止强推、禁止删除；PR 必须来自 `release/*` 或 `hotfix/*`；批准要求见 §5；CI/CodeQL/Dependency Review 全绿 |
+| `main` | 生产分支，任何提交都应可发布 | 禁止直推、禁止强推、禁止删除；PR 必须来自 `release/*` 或 `hotfix/*`（Dependabot 安全更新 `dependabot/*` 例外）；批准要求见 §5；CI/CodeQL/Dependency Review 全绿 |
 | `develop` | 集成分支，下一版本的内容都先进入这里 | 禁止直推、禁止强推；PR 来源必须是允许的分支前缀；批准要求见 §5；CI 全绿 |
 
 ## 2. 生命周期
@@ -99,6 +99,8 @@ bash scripts/bootstrap-push.sh
 脚本会临时把 `protect-main` / `protect-develop` 设为 `disabled`，推送 `main`、`develop` 与两个 feature 分支后自动恢复 `active`。仅在空仓库首次推送时使用。
 
 工作流 `gitflow.yml` 会在每次 PR 时检查来源/目标分支组合，配置错误会直接红灯。
+
+> **Dependabot 安全更新**：GitHub 的安全更新 PR 固定指向默认分支 `main`，不受 `target-branch` 控制。因此 `main` 额外接受 `dependabot/*`，并跳过标题与 commit 信息检查；自动合并按目标分支选择 merge commit（main）或 squash（develop）。合并到 main 后必须回合并 `develop`。
 
 ## 6. 常见问题
 

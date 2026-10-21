@@ -25,7 +25,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
-        run: gh pr merge --auto --squash "$PR_URL"
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # main 的 Ruleset 只允许 merge commit；develop 使用 squash
+          if [ "${BASE_REF}" = "main" ]; then
+            METHOD=--merge
+          else
+            METHOD=--squash
+          fi
+          gh pr merge --auto "$METHOD" "$PR_URL"
 
       - name: Flag major updates for manual review
         if: steps.metadata.outputs.update-type == 'version-update:semver-major'
@@ -42,4 +50,4 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
         run: |
-          gh pr comment "$PR_URL" --body "🤖 已开启自动合并：CI 与所需检查通过后会自动合并（Squash）。"
+          gh pr comment "$PR_URL" --body "🤖 已开启自动合并：CI 与所需检查通过后会自动合并（main 用 merge commit，develop 用 squash）。"
