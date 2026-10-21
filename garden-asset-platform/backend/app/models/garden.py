@@ -58,7 +58,8 @@ class Garden(db.Model):
             'build_year': self.build_year,
             'heritage_level': self.heritage_level,
             'cover_image': self.cover_image,
-            'asset_count': self.asset_count,
+            # 静态 asset_count 字段可能过期，返回实时统计的已发布资产数
+            'asset_count': self.assets.filter_by(status='published').count(),
             'status': self.status
         }
 

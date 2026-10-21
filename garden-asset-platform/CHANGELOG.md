@@ -8,7 +8,7 @@
 - **机器人**：Dependabot（目标 `develop`，patch/minor 自动合并）、CodeRabbit、labeler、stale、welcome、Release Drafter、`main → develop` 回合并提醒
 - **视觉体系 v2「青绿山水 · 档案册」**：黛青/宣纸/墨/印章朱砂令牌，宋体标题 + 等宽数据字体；重做首页、登录、注册、后台壳、仪表盘、资产目录、证书、溯源与错误页
 - **前端测试基座**：Vitest + @vue/test-utils + jsdom，覆盖工具函数、状态组件与用户 store，并接入 CI
-- **后端安全回归**：新增限流 429、安全响应头、健康检查用例（后端共 87 个用例）
+- **后端安全回归**：新增限流 429、安全响应头、健康检查用例（后端共 88 个用例）
 - **鲁棒性测试**：JPEG q50、噪声、50%–150% 缩放、非 8 倍数尺寸的回归覆盖
 - **前端 E2E**：Playwright 5 个点击流用例，覆盖首页、移动端导航、溯源页、管理员登录、普通用户浏览资产，并接入 `e2e.yml`
 - **矢量水印**：新增 SHP/ZIP 上传、嵌入、提取的算法与 API 回归，包含无 vr 的溯源场景
@@ -57,7 +57,8 @@
 - **授权列表**：重排列宽，固定操作列不再遮挡申请时间
 - **CI**：`main → develop` 改为提醒 issue（GITHUB_TOKEN 建的 PR 不会触发必需检查）、Dependabot scope 前缀、GHCR 镜像名小写、Docker 构建补充依赖文件触发路径
 - **前端依赖安全**：升级 `vitest==3.2.6`，并通过 npm overrides 将 `tinypool` 固定到 2.1.2、将 `test-exclude` 的 `glob` 固定到 10.5.0，修复 GHSA-5xrq-8626-4rwp、GHSA-85c8-ppgw-ccpr、GHSA-5gmw-xhrv-c9v3、GHSA-5j98-mcp5-4vw2（critical/high）；41 个前端测试与构建保持通过
-- **CI 修复**：actionlint 的未使用循环变量、PR 标题检查补充 `statuses: write`、welcome action 输入改为下划线命名；CodeQL 路径检查改用临时目录登记表 + `commonpath` 校验
+- **园林统计**：`Garden.to_dict` 改为实时统计已发布资产数，首页园林卡片不再恒显示 0 件资产
+- **CI 修复**：actionlint 的未使用循环变量、PR 标题检查补充 `statuses: write`、welcome action 输入改为下划线命名；CodeQL 路径检查改用临时目录登记表 + `commonpath` 校验；Scorecard 增加手动触发
 
 ### Changed
 - 运行时升级：Node.js 22、Python 3.11、当前 GitHub Actions 主版本（node24 运行时）

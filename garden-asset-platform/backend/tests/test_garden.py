@@ -25,6 +25,15 @@ class TestGarden:
         assert data['code'] == 200
         assert len(data['data']) >= 1
 
+    def test_garden_list_reports_published_asset_count(self, client, sample_garden, sample_asset):
+        """园林列表返回实时统计的已发布资产数"""
+        response = client.get('/api/gardens')
+
+        assert response.status_code == 200
+        gardens = response.get_json()['data']
+        garden = next(item for item in gardens if item['id'] == sample_garden)
+        assert garden['asset_count'] >= 1
+
     def test_garden_detail(self, client, sample_garden):
         """测试园林详情"""
         response = client.get(f'/api/gardens/{sample_garden}')
