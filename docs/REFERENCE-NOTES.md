@@ -50,7 +50,7 @@
 | SonarCloud / Codecov 上传 | 需要额外账号与 Token；当前用本地覆盖率 artifact + CodeQL 替代 |
 | `anthropics/claude-code-action` AI 审查 | 需要 Anthropic API Secret；已配置 CodeRabbit 作为默认 AI 审查，如需可后续加装 |
 
-Playwright E2E 已采纳（5 个前端点击流用例，见 `.github/workflows/e2e.yml`）；后端测试为 90 个用例。
+Playwright E2E 已采纳（5 个前端点击流用例，见 `.github/workflows/e2e.yml`）；后端测试为 194 个用例。
 
 ## 4. UI 设计参考（2026-10-19 补充）
 

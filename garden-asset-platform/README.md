@@ -93,7 +93,7 @@ npm run dev                  # 启动Vite开发服务器 :5173
 ### 运行测试
 
 ```bash
-# 后端测试（90个用例，覆盖API/模型/安全）
+# 后端测试（194个用例，覆盖API/模型/安全）
 cd backend && python -m pytest tests/ -v
 
 # 前端生产构建
@@ -122,7 +122,7 @@ garden-asset-platform/
 │   ├── algorithm/                 # 水印算法库（DCT+QIM/矢量）
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
-│   ├── tests/                     # pytest测试（90个用例）
+│   ├── tests/                     # pytest测试（194个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -239,6 +239,8 @@ Docker 部署见 `garden-asset-platform/.env.example`；本地开发见 `backend
 > 多 worker 部署（4 个 gunicorn worker）默认关闭任务调度器，避免备份/授权过期任务重复执行。如需启用，设置 `SCHEDULER_ENABLED=true`，并确保只运行一个调度进程（或改用外部 cron）。
 
 > 文件默认保存在 `backend/uploads/`（Docker 中为挂载卷）。`docker-compose.yml` 中的 MinIO 服务为可选组件，当前版本尚未接入对象存储后端。
+
+> AI 对话 SDK `zhipuai` 的元数据要求 `pyjwt<2.9`，与安全版 PyJWT（≥2.11）冲突，因此不在核心依赖中。需要 GLM 对话时执行：`pip install --no-deps zhipuai==2.0.1 httpx pydantic cachetools`。
 
 ## 许可证
 
