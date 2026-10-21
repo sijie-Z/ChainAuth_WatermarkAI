@@ -20,7 +20,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, 'src')
+      '@': path.resolve(import.meta.dirname, 'src')
     }
   },
   css: {
@@ -57,10 +57,16 @@ export default defineConfig({
         chunkFileNames: 'assets/js/[name]-[hash].js',
         entryFileNames: 'assets/js/[name]-[hash].js',
         assetFileNames: 'assets/[ext]/[name]-[hash].[ext]',
-        manualChunks: {
-          vue: ['vue', 'vue-router', 'pinia'],
-          elementPlus: ['element-plus'],
-          echarts: ['echarts']
+        manualChunks(id) {
+          if (/node_modules[\\/]element-plus[\\/]/.test(id)) {
+            return 'elementPlus'
+          }
+          if (/node_modules[\\/](echarts|zrender)[\\/]/.test(id)) {
+            return 'echarts'
+          }
+          if (/node_modules[\\/](@vue|vue|vue-router|pinia)[\\/]/.test(id)) {
+            return 'vue'
+          }
         }
       }
     }
