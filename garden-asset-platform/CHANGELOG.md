@@ -59,6 +59,7 @@
 - **前端依赖安全**：升级 `vitest==3.2.6`，并通过 npm overrides 将 `tinypool` 固定到 2.1.2、将 `test-exclude` 的 `glob` 固定到 10.5.0，修复 GHSA-5xrq-8626-4rwp、GHSA-85c8-ppgw-ccpr、GHSA-5gmw-xhrv-c9v3、GHSA-5j98-mcp5-4vw2（critical/high）；41 个前端测试与构建保持通过
 - **园林统计**：`Garden.to_dict` 改为实时统计已发布资产数，首页园林卡片不再恒显示 0 件资产
 - **CI 修复**：actionlint 的未使用循环变量、PR 标题检查补充 `statuses: write`、welcome action 输入改为下划线命名；CodeQL 路径检查改用临时目录登记表 + `commonpath` 校验；Scorecard 增加手动触发
+- **Dependabot 策略**：安全更新固定指向默认分支 `main`，因此 main 接受 `dependabot/*` 并跳过其标题/commit 检查；自动合并按目标分支选择 merge commit 或 squash
 
 ### Changed
 - 运行时升级：Node.js 22、Python 3.11、当前 GitHub Actions 主版本（node24 运行时）
