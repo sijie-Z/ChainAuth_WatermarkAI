@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## [1.7.0] - 2026-10-21
+
+### Changed
+- ECharts 5.6 → 6.1（真实浏览器验证：仪表盘 2 个图表正常渲染，console/page error 为 0）
+- unplugin-vue-components 0.26 → 32.1、unplugin-auto-import 0.17 → 21.1；npm audit high 从 6 降到 0
+- pytest 8.3.4 → 9.0.3（CI 194 用例通过）
+- 前端版本号 1.7.0
+
+### Known
+- npm audit 剩余 moderate 来自 eslint-plugin-vue 9 的传递依赖，修复需升级到 10.x（独立任务）
+
 ## [1.6.0] - 2026-10-21
 
 ### Changed
