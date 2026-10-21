@@ -28,6 +28,15 @@
 
 > “上链存证”按钮在未嵌入水印时是禁用的。这是业务约束，不是页面故障。
 
+常用入口：
+
+- `/assets` 资产档案：搜索、类型/园林/状态筛选、按最新/浏览/下载排序。
+- `/assets/:id` 资产详情：收藏、复制链接、下载、申请授权、同园林相关资产、编辑著录信息。
+- `/my-assets` 我的资产：查看草稿、待审、已发布、已驳回，提交发布/重新提交/删除。
+- `/favorites` 我的收藏：集中查看收藏并取消。
+- `/license/my` 我的授权：切换“授权记录/申请记录”，查看合同、撤回申请、下载已生效资产。
+- `/admin/logs` 操作日志（管理员）：按模块、结果、日期和关键词筛选审计记录。
+
 ## 3. 角色与演示账号
 
 | 角色 | 权限 | 演示账号 |
@@ -112,13 +121,13 @@ python scripts/seed_demo_assets.py --reset
 ## 7. 测试
 
 ```bash
-# 后端 200 个用例
+# 后端 212 个用例
 cd backend && python -m pytest tests/ -q
 
 # 前端 41 个单元测试
 cd frontend && npm run test:ci
 
-# 7 个 Playwright 点击流
+# 8 个 Playwright 点击流
 cd frontend && npx playwright test
 ```
 

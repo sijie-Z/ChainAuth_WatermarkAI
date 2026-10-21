@@ -95,7 +95,7 @@ npm run dev                  # 启动Vite开发服务器 :5173
 ### 运行测试
 
 ```bash
-# 后端测试（200个用例，覆盖API/模型/安全）
+# 后端测试（212个用例，覆盖API/模型/安全）
 cd backend && python -m pytest tests/ -v
 
 # 前端生产构建
@@ -124,7 +124,7 @@ garden-asset-platform/
 │   ├── algorithm/                 # 水印算法库（DCT+QIM/矢量）
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
-│   ├── tests/                     # pytest测试（200个用例）
+│   ├── tests/                     # pytest测试（212个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -171,6 +171,10 @@ garden-asset-platform/
 | GET | `/api/assets/:id/download` | 下载资产文件 |
 | GET | `/api/assets/stats` | 资产统计（含水印趋势） |
 | GET | `/api/assets/my` | 我的资产 |
+| GET | `/api/assets/:id/thumbnail` | 资产缩略图（`?size=card` 返回列表卡片图） |
+| GET | `/api/assets/:id/related` | 同园林相关资产 |
+| GET/POST/DELETE | `/api/assets/:id/favorite` | 查询/添加/取消收藏 |
+| GET | `/api/favorites` | 我的收藏列表 |
 
 ### 水印与溯源
 
@@ -201,6 +205,13 @@ garden-asset-platform/
 | POST | `/api/ai/infringement` | 侵权检测 |
 | POST | `/api/ai/chat` | AI智能问答助手 |
 
+### 待办与审计
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/notifications` | 当前用户的待办提醒（审批、申请状态、到期） |
+| GET | `/api/logs` | 操作日志（管理员，支持模块/结果/日期/关键词筛选） |
+
 ### 授权管理
 
 | 方法 | 路径 | 说明 |
@@ -210,6 +221,9 @@ garden-asset-platform/
 | POST | `/api/license/approve/:id` | 审批（通过/拒绝） |
 | GET | `/api/license/approved` | 已审批列表 |
 | GET | `/api/license/my` | 我的授权 |
+| GET | `/api/license/my-applications` | 我的申请 |
+| POST | `/api/license/applications/:id/cancel` | 撤回申请 |
+| GET | `/api/license/:id/contract` | 查看授权合同 |
 
 ## 安全特性
 
