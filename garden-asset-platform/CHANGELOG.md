@@ -57,6 +57,7 @@
 - **授权列表**：重排列宽，固定操作列不再遮挡申请时间
 - **CI**：`main → develop` 改为提醒 issue（GITHUB_TOKEN 建的 PR 不会触发必需检查）、Dependabot scope 前缀、GHCR 镜像名小写、Docker 构建补充依赖文件触发路径
 - **前端依赖安全**：升级 `vitest==3.2.6`，并通过 npm overrides 将 `tinypool` 固定到 2.1.2、将 `test-exclude` 的 `glob` 固定到 10.5.0，修复 GHSA-5xrq-8626-4rwp、GHSA-85c8-ppgw-ccpr、GHSA-5gmw-xhrv-c9v3、GHSA-5j98-mcp5-4vw2（critical/high）；41 个前端测试与构建保持通过
+- **注册/溯源契约**：注册日志写入失败不再把已创建用户判为注册失败；溯源接口正式支持 `.webp` 并补回归测试
 - **水印缩放恢复**：小尺寸候选图容量不足时安全跳过，不再抛 `IndexError`（issue #31）
 - **园林统计**：`Garden.to_dict` 改为实时统计已发布资产数，首页园林卡片不再恒显示 0 件资产
 - **CI 修复**：actionlint 的未使用循环变量、PR 标题检查补充 `statuses: write`、welcome action 输入改为下划线命名；CodeQL 路径检查改用临时目录登记表 + `commonpath` 校验；Scorecard 增加手动触发
