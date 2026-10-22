@@ -54,6 +54,7 @@ CRITICAL_FILES = {
         'scripts/create_test_data.py',
         'scripts/create_watermark.py',
         'scripts/health_check.py',
+        'scripts/run_tests.py',
         'run.py',
         'requirements.txt',
         '.env.example',

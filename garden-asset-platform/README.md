@@ -121,6 +121,9 @@ FLASK_APP=run.py flask db upgrade
 # 后端测试（296个用例，覆盖API/模型/安全/迁移/异步任务/版本证书/通知渠道/授权范围/侵权线索）
 cd backend && python -m pytest tests/ -v
 
+# Windows 内存受限时：逐文件隔离子进程运行（推荐）
+cd backend && python scripts/run_tests.py
+
 # 前端生产构建
 cd frontend && npm run build
 ```

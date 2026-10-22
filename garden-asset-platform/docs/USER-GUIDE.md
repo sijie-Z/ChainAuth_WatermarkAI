@@ -173,6 +173,9 @@ python scripts/seed_demo_assets.py --reset
 # 后端 296 个用例
 cd backend && python -m pytest tests/ -q
 
+# Windows 内存不足时：每个测试文件独立进程运行
+cd backend && python scripts/run_tests.py
+
 # 前端 46 个单元测试
 cd frontend && npm run test:ci
 

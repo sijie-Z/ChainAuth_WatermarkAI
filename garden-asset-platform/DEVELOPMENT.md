@@ -493,7 +493,7 @@ flask reset-password user1 newpassword
 4. **AI智能分析**: GLM-4 + CLIP特征提取
 5. **向量检索**: Milvus相似度搜索
 6. **微服务架构**: Docker容器化部署
-7. **完整测试**: pytest单元测试
+7. **完整测试**: pytest 单测；Windows 内存受限时用 `scripts/run_tests.py` 逐文件隔离子进程运行
 8. **CI/CD**: GitHub Actions自动化
 
 ---

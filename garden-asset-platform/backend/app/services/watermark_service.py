@@ -7,10 +7,6 @@ import logging
 from datetime import datetime
 from flask import current_app
 
-from algorithm.vector.embed import embed_vector_watermark
-from algorithm.vector.extract import extract_vector_watermark
-from algorithm.raster.embed import embed_raster_watermark, embed_raster_watermark_color
-from algorithm.raster.extract import extract_raster_watermark
 from app.extensions import db
 from app.models.asset import Asset
 from app.models.log import OperationLog
@@ -20,6 +16,30 @@ logger = logging.getLogger(__name__)
 
 # 记录本进程创建的矢量临时解压目录：shp 路径 -> 临时目录
 _VECTOR_TEMP_DIRS = {}
+
+
+def _lazy_algorithm(name):
+    """按需导入水印算法
+
+    algorithm 包会连带加载 OpenCV/GeoPandas/Pandas 等重依赖；在 API 启动和
+    大多数测试中并不需要。保留同名包装函数，既延迟导入，也不影响测试
+    对模块级函数的 monkeypatch。
+    """
+    def wrapper(*args, **kwargs):
+        module_path, func_name = name.rsplit('.', 1)
+        module = __import__(module_path, fromlist=[func_name])
+        return getattr(module, func_name)(*args, **kwargs)
+    wrapper.__name__ = name.rsplit('.', 1)[1]
+    return wrapper
+
+
+embed_vector_watermark = _lazy_algorithm('algorithm.vector.embed.embed_vector_watermark')
+extract_vector_watermark = _lazy_algorithm('algorithm.vector.extract.extract_vector_watermark')
+embed_raster_watermark = _lazy_algorithm('algorithm.raster.embed.embed_raster_watermark')
+embed_raster_watermark_color = _lazy_algorithm(
+    'algorithm.raster.embed.embed_raster_watermark_color'
+)
+extract_raster_watermark = _lazy_algorithm('algorithm.raster.extract.extract_raster_watermark')
 
 
 class WatermarkService:
