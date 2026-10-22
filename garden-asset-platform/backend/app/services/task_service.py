@@ -7,6 +7,7 @@
 - 可重试错误按退避时间自动重试，业务性错误直接失败；
 - 进程崩溃留下的 running 任务由 reconcile_stuck 重新排队或判失败。
 """
+import hashlib
 import logging
 import os
 import socket
@@ -19,6 +20,8 @@ from sqlalchemy import or_, update
 
 from app.extensions import db
 from app.models.asset import Asset, AssetVersion
+from app.models.blockchain import Certificate
+from app.models.report import InfringementReport
 from app.models.task import AsyncTask
 from app.models.user import User
 from app.services.blockchain_service import blockchain_service
@@ -27,7 +30,7 @@ from app.services.watermark_service import WatermarkService
 
 logger = logging.getLogger(__name__)
 
-TASK_TYPES = ('watermark_embed', 'blockchain_register')
+TASK_TYPES = ('watermark_embed', 'blockchain_register', 'infringement_patrol')
 ACTIVE_STATUSES = ('queued', 'running')
 
 _worker_thread = None
@@ -125,6 +128,24 @@ def enqueue_task(task_type, asset, user=None, payload=None):
     return task, True
 
 
+def enqueue_patrol_task(user, files):
+    """批量巡检任务：文件已由接口保存到 reports/patrol 下。
+
+    巡检不做自动重试（max_attempts=1），避免同一批文件重复生成线索。
+    """
+    task = AsyncTask(
+        task_type='infringement_patrol',
+        status='queued',
+        user_id=user.id if user else None,
+        payload={'files': files},
+        attempts=0,
+        max_attempts=1,
+    )
+    db.session.add(task)
+    db.session.commit()
+    return task
+
+
 def _run_watermark(task, asset, user):
     result = WatermarkService.embed_watermark(asset, user)
     if result.get('success'):
@@ -161,9 +182,130 @@ def _run_blockchain(task, asset, user):
     raise TaskFailure(result.get('message') or '链上存证失败', retryable=True)
 
 
+def _patrol_hash(path):
+    digest = hashlib.sha256()
+    with open(path, 'rb') as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _run_patrol(task, asset, user):
+    """逐文件提取水印，匹配已发布资产并自动生成侵权线索。"""
+    files = (task.payload or {}).get('files') or []
+    results = []
+    matched = 0
+    errors = 0
+
+    for item in files:
+        path = item.get('path') or ''
+        name = item.get('name') or os.path.basename(path)
+        if not path or not os.path.isfile(path):
+            results.append({'file': name, 'matched': False, 'message': '文件不存在'})
+            errors += 1
+            continue
+
+        try:
+            trace = WatermarkService.trace_from_file(path)
+        except Exception as exc:
+            logger.warning('巡检文件提取失败 %s: %s', name, exc)
+            results.append({'file': name, 'matched': False, 'message': str(exc)[:200]})
+            errors += 1
+            continue
+
+        watermark_id = trace.get('watermark_id') if trace.get('success') else None
+        matched_asset = None
+        if watermark_id:
+            matched_asset = Asset.query.filter_by(
+                watermark_id=watermark_id, status='published'
+            ).first()
+
+        if not matched_asset:
+            # 未匹配的文件没有保留价值，及时清理，避免巡检目录膨胀
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            results.append({
+                'file': name,
+                'matched': False,
+                'watermark_id': watermark_id,
+                'message': '未匹配平台已发布资产',
+            })
+            continue
+
+        certificate = (
+            Certificate.query.filter_by(
+                certificate_id=matched_asset.certificate_id
+            ).first()
+            if matched_asset.certificate_id else None
+        )
+        try:
+            file_hash = _patrol_hash(path)
+            file_size = os.path.getsize(path)
+        except OSError as exc:
+            results.append({'file': name, 'matched': False, 'message': str(exc)[:200]})
+            errors += 1
+            continue
+
+        report = InfringementReport(
+            asset_id=matched_asset.id,
+            reporter_id=user.id if user else None,
+            reporter_name='系统巡检',
+            contact=user.email if user else None,
+            source_url=item.get('source_url') or None,
+            description='批量巡检自动匹配，请核实是否授权使用',
+            suspect_filename=name[:255],
+            suspect_file_path=path,
+            suspect_file_hash=file_hash,
+            suspect_file_size=file_size,
+            watermark_id=watermark_id,
+            certificate_id=(
+                certificate.certificate_id if certificate
+                else matched_asset.certificate_id
+            ),
+            trace_verified=True,
+            status='pending',
+        )
+        db.session.add(report)
+        db.session.flush()
+
+        owner_id = (
+            matched_asset.owner_id
+            or matched_asset.creator_id
+            or matched_asset.uploader_id
+        )
+        add_notification_event(
+            owner_id,
+            'infringement_reported',
+            f'巡检发现疑似侵权：{matched_asset.title}',
+            f'线索编号 {report.report_code}，管理员会跟进核实。',
+            f'/assets/{matched_asset.id}?tab=evidence',
+        )
+
+        matched += 1
+        results.append({
+            'file': name,
+            'matched': True,
+            'asset_id': matched_asset.id,
+            'asset_code': matched_asset.asset_code,
+            'asset_title': matched_asset.title,
+            'watermark_id': watermark_id,
+            'report_code': report.report_code,
+        })
+
+    return {
+        'total': len(files),
+        'matched': matched,
+        'errors': errors,
+        'items': results,
+    }
+
+
 HANDLERS = {
     'watermark_embed': _run_watermark,
     'blockchain_register': _run_blockchain,
+    'infringement_patrol': _run_patrol,
 }
 
 
@@ -216,9 +358,10 @@ def run_claimed_task(task):
     try:
         if not handler:
             raise TaskFailure(f'未知任务类型: {task.task_type}', retryable=False)
-        if not asset:
+        # 巡检任务不绑定单个资产；水印/存证任务必须找到资产
+        if task.task_type in ('watermark_embed', 'blockchain_register') and not asset:
             raise TaskFailure('资产不存在', retryable=False)
-        if asset.status == 'deleted':
+        if asset and asset.status == 'deleted':
             raise TaskFailure('资产已删除，任务取消', retryable=False)
 
         version = current_version(asset)

@@ -226,6 +226,88 @@ class InfringementReportResource(Resource):
         }, 200
 
 
+class InfringementPatrolResource(Resource):
+    """批量巡检：上传多个疑似副本，异步提取水印并自动生成线索"""
+
+    @rate_limit(limit=5, window=3600)
+    @jwt_required()
+    def post(self):
+        user = User.query.get(get_jwt_identity())
+        if not user or user.role not in REVIEW_ROLES:
+            return {'code': 403, 'message': '无权限执行巡检'}, 403
+
+        uploads = request.files.getlist('files')
+        if not uploads:
+            single = request.files.get('file')
+            uploads = [single] if single else []
+        uploads = [item for item in uploads if item and item.filename]
+        if not uploads:
+            return {'code': 400, 'message': '请选择要巡检的文件'}, 400
+        if len(uploads) > 20:
+            return {'code': 400, 'message': '单次最多巡检 20 个文件'}, 400
+
+        validated = []
+        for upload in uploads:
+            ext = os.path.splitext(upload.filename)[1].lower()
+            if ext not in REPORT_EXTENSIONS:
+                return {
+                    'code': 400,
+                    'message': f'{upload.filename}: 仅支持图片或 ZIP 文件'
+                }, 400
+            if not validate_magic_bytes(upload, ext.lstrip('.')):
+                return {
+                    'code': 400,
+                    'message': f'{upload.filename}: 文件内容与扩展名不匹配'
+                }, 400
+            upload.seek(0, os.SEEK_END)
+            size = upload.tell()
+            upload.seek(0)
+            if size > MAX_REPORT_FILE:
+                return {
+                    'code': 400,
+                    'message': f'{upload.filename}: 超过 20MB 限制'
+                }, 400
+            validated.append((upload, ext))
+
+        batch_dir = os.path.join(_report_dir(), 'patrol', uuid.uuid4().hex)
+        os.makedirs(batch_dir, exist_ok=True)
+        source_url = (request.form.get('source_url') or '').strip()[:500]
+        files = []
+        try:
+            for upload, ext in validated:
+                filename = f'{uuid.uuid4().hex}{ext}'
+                path = os.path.join(batch_dir, filename)
+                upload.save(path)
+                files.append({
+                    'path': path,
+                    'name': upload.filename[:255],
+                    'source_url': source_url,
+                })
+        except Exception:
+            for item in files:
+                try:
+                    os.remove(item['path'])
+                except OSError:
+                    pass
+            current_app.logger.exception('保存巡检文件失败')
+            return {'code': 500, 'message': '巡检文件保存失败'}, 500
+
+        from app.services.task_service import enqueue_patrol_task
+        task = enqueue_patrol_task(user, files)
+        return {
+            'code': 202,
+            'message': '巡检任务已提交，可在任务队列查看进度',
+            'data': {
+                'task_id': task.id,
+                'file_count': len(files),
+                'worker_enabled': bool(
+                    current_app.config.get('TASK_WORKER_ENABLED', False)
+                ),
+                'task': task.to_dict(),
+            }
+        }, 202
+
+
 class MyInfringementListResource(Resource):
     """当前用户提交的线索"""
 

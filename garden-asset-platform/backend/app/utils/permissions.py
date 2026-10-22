@@ -48,6 +48,7 @@ API_PERMISSIONS = {
         '/api/infringements/<id>',
         '/api/infringements/<id>/review',
         '/api/infringements/<id>/file',
+        '/api/infringements/patrol',
     ],
 }
 

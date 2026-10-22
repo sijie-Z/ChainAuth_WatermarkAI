@@ -317,9 +317,11 @@ def register_api_resources(app):
     from app.resources.infringements import (
         InfringementReportResource, MyInfringementListResource,
         InfringementListResource, InfringementResource,
-        InfringementReviewResource, InfringementFileResource
+        InfringementReviewResource, InfringementFileResource,
+        InfringementPatrolResource
     )
     api.add_resource(InfringementReportResource, '/infringements/report')
+    api.add_resource(InfringementPatrolResource, '/infringements/patrol')
     api.add_resource(MyInfringementListResource, '/infringements/mine')
     api.add_resource(InfringementListResource, '/infringements')
     api.add_resource(InfringementResource, '/infringements/<int:report_id>')

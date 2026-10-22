@@ -118,7 +118,7 @@ FLASK_APP=run.py flask db upgrade
 ### 运行测试
 
 ```bash
-# 后端测试（296个用例，覆盖API/模型/安全/迁移/异步任务/版本证书/通知渠道/授权范围/侵权线索）
+# 后端测试（300个用例，覆盖API/模型/安全/迁移/异步任务/版本证书/通知渠道/授权范围/侵权线索/批量巡检）
 cd backend && python -m pytest tests/ -v
 
 # Windows 内存受限时：逐文件隔离子进程运行（推荐）
@@ -153,7 +153,7 @@ garden-asset-platform/
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
 │   ├── migrations/                # Alembic 迁移（baseline + versions）
-│   ├── tests/                     # pytest测试（296个用例）
+│   ├── tests/                     # pytest测试（300个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -282,6 +282,7 @@ garden-asset-platform/
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | `/api/infringements/report` | 提交疑似侵权线索（可匿名；文件可选，服务端尝试水印匹配） |
+| POST | `/api/infringements/patrol` | 批量巡检：上传多个疑似副本，异步提取水印并自动生成线索 |
 | GET | `/api/infringements/mine` | 我提交的线索与处理状态 |
 | GET | `/api/infringements` | 后台线索列表（状态/关键词/日期筛选与计数） |
 | GET | `/api/infringements/:id` | 线索详情与可处理状态 |

@@ -13,8 +13,11 @@ from algorithm.raster.image_io import load_image_array
 from algorithm.raster.embed import (
     DEFAULT_ALPHA,
     EMBED_POSITIONS,
-    ID_TOTAL_BITS,
+    ID_BITS,
+    ID_REPEAT,
+    ID_REPEAT_CANDIDATES,
     bits_to_id,
+    choose_id_repeat,
     payload_geometry,
 )
 
@@ -52,15 +55,30 @@ def _extract_bits(image_array, watermark_length, method='dct', alpha=DEFAULT_ALP
     return voted
 
 
+def _detect_id(image_array, alpha=DEFAULT_ALPHA):
+    """解码 ID 并返回 (id, 重复份数)；兼容不同重复份数的历史编码。"""
+    height, width = image_array.shape[:2]
+    try:
+        preferred = choose_id_repeat(height, width)
+    except ValueError:
+        preferred = ID_REPEAT
+    # 现行编码的重复份数由图像容量决定，优先尝试；再回退历史 5/8/12 等
+    repeats = [preferred] + [
+        repeat for repeat in ID_REPEAT_CANDIDATES if repeat != preferred
+    ]
+    bits = _extract_bits(
+        image_array, ID_BITS * max(repeats), 'dct', alpha
+    )
+    for repeat in repeats:
+        watermark_id = bits_to_id(bits[:ID_BITS * repeat], repeat)
+        if watermark_id and ID_PATTERN.match(watermark_id):
+            return watermark_id, repeat
+    return None, None
+
+
 def _decode_valid_id(image_array, alpha=DEFAULT_ALPHA):
     """只解码 ID 位并用格式校验，避免把随机比特误判为水印 ID"""
-    bits = _extract_bits(image_array, ID_TOTAL_BITS, 'dct', alpha)
-    if len(bits) < ID_TOTAL_BITS:
-        return None
-    watermark_id = bits_to_id(bits)
-    if watermark_id and ID_PATTERN.match(watermark_id):
-        return watermark_id
-    return None
+    return _detect_id(image_array, alpha)[0]
 
 
 def _resolve_scaled_image(image, alpha=DEFAULT_ALPHA):
@@ -209,28 +227,49 @@ def extract_raster_watermark(watermarked_path, original_watermark_path, output_f
     height, width = image_array.shape[:2]
 
     # 先尝试直接解码 ID；失败则尝试常见缩放比例（缩放攻击恢复）
-    watermark_id = _decode_valid_id(image_array, alpha) if method == 'dct' else None
-    if method == 'dct' and not watermark_id:
-        restored_image, restored_id = _resolve_scaled_image(watermarked_image, alpha)
-        if restored_image is not None:
-            image_array = np.array(restored_image.convert('RGB' if use_color else 'L'))
-            height, width = image_array.shape[:2]
-            watermark_id = restored_id
+    id_repeat = ID_REPEAT
+    watermark_id = None
+    if method == 'dct':
+        watermark_id, id_repeat = _detect_id(image_array, alpha)
+        if not watermark_id:
+            restored_image, _ = _resolve_scaled_image(
+                watermarked_image, alpha
+            )
+            if restored_image is not None:
+                image_array = np.array(
+                    restored_image.convert('RGB' if use_color else 'L')
+                )
+                height, width = image_array.shape[:2]
+                watermark_id, id_repeat = _detect_id(image_array, alpha)
+                id_repeat = id_repeat or ID_REPEAT
 
-    watermark_side, capacity = payload_geometry(height, width)
-    total_bits = ID_TOTAL_BITS + watermark_side * watermark_side
+    id_total_bits = ID_BITS * (id_repeat or ID_REPEAT)
+    try:
+        watermark_side, capacity = payload_geometry(
+            height, width, id_total_bits
+        )
+    except ValueError:
+        # 极小图片或 ID 未解出时，退到 1 份重复，尽量完成提取
+        id_repeat = 1
+        id_total_bits = ID_BITS
+        watermark_side, capacity = payload_geometry(
+            height, width, id_total_bits
+        )
+    total_bits = id_total_bits + watermark_side * watermark_side
 
     logger.info(
         f"图像 {width}x{height}, 容量 {capacity} bit, "
         f"水印 {watermark_side}x{watermark_side}, 读取 {total_bits} bit"
     )
 
-    # 提取比特：前 ID_BITS 位是水印 ID，其余是水印图像（彩色图逐通道多数表决）
+    # 提取比特：前 id_total_bits 位是水印 ID，其余是水印图像
     bits = _extract_bits(image_array, total_bits, method, alpha)
 
-    watermark_id = watermark_id or bits_to_id(bits[:ID_TOTAL_BITS])
+    watermark_id = watermark_id or bits_to_id(
+        bits[:id_total_bits], id_repeat or ID_REPEAT
+    )
     extracted_watermark = bits_to_watermark(
-        bits[ID_TOTAL_BITS:ID_TOTAL_BITS + watermark_side * watermark_side],
+        bits[id_total_bits:id_total_bits + watermark_side * watermark_side],
         (watermark_side, watermark_side)
     )
 

@@ -5,7 +5,10 @@
         <h1 class="page-title">侵权线索</h1>
         <p class="page-subtitle">核实公开提交的疑似盗用文件与来源，确认或驳回后通知相关方</p>
       </div>
-      <el-button :loading="loading" @click="loadAll">刷新</el-button>
+      <div class="head-actions">
+        <el-button type="primary" plain @click="openPatrol">批量巡检</el-button>
+        <el-button :loading="loading" @click="loadAll">刷新</el-button>
+      </div>
     </header>
 
     <section class="summary-grid">
@@ -213,14 +216,95 @@
         </div>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="patrolVisible"
+      title="批量侵权巡检"
+      width="min(680px, 94vw)"
+      :close-on-click-modal="false"
+    >
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        class="patrol-alert"
+        title="上传疑似副本，系统批量提取水印"
+        description="最多 20 个图片或 ZIP，每个不超过 20MB。匹配到已发布资产会自动生成待处理线索；未匹配文件不会被保留。"
+      />
+      <el-upload
+        ref="patrolUploadRef"
+        multiple
+        :auto-upload="false"
+        :limit="20"
+        :on-change="handlePatrolChange"
+        :on-remove="handlePatrolChange"
+        accept="image/*,.zip"
+      >
+        <el-button plain>选择巡检文件</el-button>
+        <template #tip>
+          <span class="patrol-tip">支持 JPG、PNG、BMP、TIFF、WebP、ZIP</span>
+        </template>
+      </el-upload>
+      <el-input
+        v-model="patrolSourceUrl"
+        placeholder="来源链接（可选，应用到本批全部文件）"
+        class="patrol-source"
+        maxlength="500"
+      />
+
+      <div v-if="patrolRunning" class="patrol-progress">
+        <el-icon class="is-loading"><Loading /></el-icon>
+        <span>正在提取水印并匹配资产，请稍候…</span>
+      </div>
+
+      <template v-if="patrolResult">
+        <div class="patrol-summary">
+          共 {{ patrolResult.total }} 个文件，匹配 {{ patrolResult.matched }} 个，
+          异常 {{ patrolResult.errors || 0 }} 个
+        </div>
+        <el-table :data="patrolResult.items" size="small" class="patrol-table">
+          <el-table-column prop="file" label="文件" min-width="160" show-overflow-tooltip />
+          <el-table-column label="结果" min-width="200">
+            <template #default="{ row }">
+              <router-link v-if="row.matched" :to="`/assets/${row.asset_id}`" class="asset-link">
+                {{ row.asset_title || row.asset_code }}
+              </router-link>
+              <span v-else class="muted">{{ row.message || '未匹配' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="线索编号" width="190">
+            <template #default="{ row }">
+              <span v-if="row.report_code" class="mono">{{ row.report_code }}</span>
+              <span v-else class="muted">—</span>
+            </template>
+          </el-table-column>
+        </el-table>
+      </template>
+
+      <template #footer>
+        <el-button @click="patrolVisible = false">
+          {{ patrolResult ? '关闭' : '取消' }}
+        </el-button>
+        <el-button
+          v-if="!patrolResult"
+          type="primary"
+          :loading="patrolRunning"
+          :disabled="patrolFiles.length === 0 || patrolQueued"
+          @click="startPatrol"
+        >
+          {{ patrolQueued ? '已提交' : '开始巡检' }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Loading } from '@element-plus/icons-vue'
 import { parseBackendDate } from '@/utils'
-import { infringementApi } from '@/api/modules'
+import { infringementApi, taskApi } from '@/api/modules'
 
 const reports = ref([])
 const loading = ref(false)
@@ -238,6 +322,14 @@ const reviewComment = ref('')
 const reviewing = ref(false)
 const previewUrl = ref('')
 const previewNotImage = ref(false)
+
+const patrolVisible = ref(false)
+const patrolRunning = ref(false)
+const patrolFiles = ref([])
+const patrolUploadRef = ref()
+const patrolSourceUrl = ref('')
+const patrolResult = ref(null)
+const patrolQueued = ref(false)
 
 const summaryItems = computed(() => [
   { key: 'pending', label: '待处理', value: counts.value.pending || 0, tone: 'pending' },
@@ -411,6 +503,80 @@ async function review(action) {
   }
 }
 
+function openPatrol() {
+  patrolVisible.value = true
+  patrolFiles.value = []
+  patrolSourceUrl.value = ''
+  patrolResult.value = null
+  patrolQueued.value = false
+  patrolUploadRef.value?.clearFiles()
+}
+
+function handlePatrolChange(file, fileList) {
+  const allowed = /\.(jpe?g|png|bmp|tiff?|webp|zip)$/i
+  const valid = fileList.filter(item => item.raw && allowed.test(item.name))
+  if (valid.length !== fileList.length) {
+    ElMessage.warning('仅支持图片或 ZIP，其他文件不会提交巡检')
+  }
+  if (valid.length > 20) {
+    ElMessage.warning('单次最多巡检 20 个文件')
+  }
+  patrolFiles.value = valid.slice(0, 20)
+}
+
+async function waitPatrolTask(taskId) {
+  for (let attempt = 0; attempt < 180; attempt += 1) {
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    try {
+      const response = await taskApi.get(taskId)
+      const task = response.data?.data
+      if (!task) continue
+      if (task.status === 'succeeded') return task
+      if (['failed', 'cancelled'].includes(task.status)) {
+        throw new Error(task.error_message || '巡检任务失败')
+      }
+    } catch (error) {
+      if (error.message && !error.response) throw error
+    }
+  }
+  throw new Error('巡检任务超时，请稍后在任务队列查看')
+}
+
+async function startPatrol() {
+  if (patrolFiles.value.length === 0 || patrolRunning.value) return
+  patrolRunning.value = true
+  patrolResult.value = null
+  try {
+    const form = new FormData()
+    patrolFiles.value.forEach(item => {
+      if (item.raw) form.append('files', item.raw)
+    })
+    form.append('source_url', patrolSourceUrl.value.trim())
+    const response = await infringementApi.patrol(form)
+    if (response.data?.code !== 202) {
+      ElMessage.error(response.data?.message || '巡检提交失败')
+      return
+    }
+    const data = response.data.data || {}
+    patrolQueued.value = true
+    if (!data.worker_enabled) {
+      ElMessage.warning('巡检任务已排队，但后台 worker 未启用')
+      patrolRunning.value = false
+      return
+    }
+    const task = await waitPatrolTask(data.task_id)
+    patrolResult.value = task.result || { total: 0, matched: 0, items: [] }
+    ElMessage.success(
+      `巡检完成：匹配 ${patrolResult.value.matched || 0} 个文件`
+    )
+    await loadReports()
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || error.message || '巡检失败')
+  } finally {
+    patrolRunning.value = false
+  }
+}
+
 onMounted(loadAll)
 onBeforeUnmount(clearPreview)
 </script>
@@ -442,6 +608,47 @@ onBeforeUnmount(clearPreview)
     font-size: 13px;
     color: $text-secondary;
   }
+}
+
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.patrol-alert {
+  margin-bottom: 14px;
+}
+
+.patrol-tip {
+  font-size: 12px;
+  color: $text-placeholder;
+}
+
+.patrol-source {
+  margin-top: 12px;
+}
+
+.patrol-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 13px;
+  color: $primary-dark;
+}
+
+.patrol-summary {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: $radius-sm;
+  background: $bg-secondary;
+  font-size: 13px;
+  color: $text-secondary;
+}
+
+.patrol-table {
+  margin-top: 10px;
 }
 
 .summary-grid {

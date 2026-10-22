@@ -189,6 +189,7 @@ export const logApi = {
 // 疑似侵权线索
 export const infringementApi = {
   report: (formData) => api.post('/infringements/report', formData, { timeout: 0 }),
+  patrol: (formData) => api.post('/infringements/patrol', formData, { timeout: 0 }),
   mine: (params) => api.get('/infringements/mine', { params }),
   list: (params) => api.get('/infringements', { params }),
   get: (id) => api.get(`/infringements/${id}`),

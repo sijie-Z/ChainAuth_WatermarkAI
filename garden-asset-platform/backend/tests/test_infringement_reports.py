@@ -6,8 +6,9 @@ from PIL import Image
 
 from app.extensions import db
 from app.models import (
-    Asset, InfringementReport, NotificationEvent, User
+    Asset, AsyncTask, InfringementReport, NotificationEvent, User
 )
+from app.services import task_service
 from app.services.watermark_service import WatermarkService
 
 
@@ -200,3 +201,99 @@ def test_report_rejects_unsupported_file_type(client, app):
 def test_report_list_requires_admin(client, auth_header):
     response = client.get('/api/infringements', headers=auth_header)
     assert response.status_code == 403
+
+
+def test_patrol_enqueues_task_and_creates_reports(
+    client, app, tmp_path, auth_header, admin_header, monkeypatch
+):
+    asset_id = upload_published_asset(
+        client, app, tmp_path, auth_header, watermark_id='WM-PATROL-1'
+    )
+    monkeypatch.setattr(
+        WatermarkService,
+        'trace_from_file',
+        lambda path: {
+            'success': True,
+            'watermark_id': 'WM-PATROL-1',
+            'nc_value': 0.88,
+        },
+    )
+
+    response = client.post(
+        '/api/infringements/patrol',
+        data={
+            'files': (make_jpeg((11, 22, 33)), 'patrol-a.jpg'),
+            'source_url': 'https://example.com/patrol',
+        },
+        headers=admin_header,
+        content_type='multipart/form-data',
+    )
+    assert response.status_code == 202, response.get_json()
+    task_id = response.get_json()['data']['task_id']
+
+    with app.app_context():
+        task = task_service.process_next()
+        assert task.status == 'succeeded'
+        assert task.result['matched'] == 1
+        assert task.result['items'][0]['asset_id'] == asset_id
+        assert task.result['items'][0]['report_code'].startswith('IR-')
+
+        report = InfringementReport.query.filter_by(asset_id=asset_id).one()
+        assert report.reporter_name == '系统巡检'
+        assert report.status == 'pending'
+        assert report.trace_verified is True
+        assert os.path.isfile(report.suspect_file_path)
+
+    listing = client.get('/api/infringements', headers=admin_header)
+    assert listing.get_json()['data']['counts']['pending'] == 1
+
+
+def test_patrol_unmatched_file_is_removed(
+    client, app, tmp_path, auth_header, admin_header, monkeypatch
+):
+    upload_published_asset(
+        client, app, tmp_path, auth_header, watermark_id='WM-PATROL-2'
+    )
+    monkeypatch.setattr(
+        WatermarkService,
+        'trace_from_file',
+        lambda path: {'success': False, 'watermark_id': None},
+    )
+    response = client.post(
+        '/api/infringements/patrol',
+        data={'files': (make_jpeg((90, 10, 10)), 'patrol-none.jpg')},
+        headers=admin_header,
+        content_type='multipart/form-data',
+    )
+    task_id = response.get_json()['data']['task_id']
+
+    with app.app_context():
+        task = db.session.get(AsyncTask, task_id)
+        patrol_path = task.payload['files'][0]['path']
+        assert os.path.isfile(patrol_path)
+
+        processed = task_service.process_next()
+        assert processed.status == 'succeeded'
+        assert processed.result['matched'] == 0
+        assert not os.path.exists(patrol_path)
+        assert InfringementReport.query.count() == 0
+
+
+def test_patrol_requires_review_role(client, auth_header, tmp_path, app):
+    response = client.post(
+        '/api/infringements/patrol',
+        data={'files': (make_jpeg(), 'patrol.jpg')},
+        headers=auth_header,
+        content_type='multipart/form-data',
+    )
+    assert response.status_code == 403
+
+
+def test_patrol_rejects_unsupported_file(client, admin_header):
+    response = client.post(
+        '/api/infringements/patrol',
+        data={'files': (BytesIO(b'#!/bin/sh'), 'patrol.sh')},
+        headers=admin_header,
+        content_type='multipart/form-data',
+    )
+    assert response.status_code == 400

@@ -11,7 +11,8 @@ vi.mock('@/api/index', () => ({
 
 import api from '@/api/index'
 import {
-  assetApi, blockchainApi, licenseApi, notificationApi, taskApi, userApi
+  assetApi, blockchainApi, infringementApi, licenseApi, notificationApi,
+  taskApi, userApi
 } from '@/api/modules'
 
 describe('api modules', () => {
@@ -91,6 +92,15 @@ describe('api modules', () => {
       email_groups: ['license']
     })
     expect(notificationApi.streamUrl(12)).toContain('/notifications/stream?since_id=12')
+  })
+
+  it('infringementApi submits patrol batches', () => {
+    const form = new FormData()
+    infringementApi.patrol(form)
+
+    expect(api.post).toHaveBeenCalledWith(
+      '/infringements/patrol', form, { timeout: 0 }
+    )
   })
 
   it('keeps the existing method signatures', () => {

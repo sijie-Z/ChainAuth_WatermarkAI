@@ -40,7 +40,7 @@
 - `/collections` 我的合集：按主题组织资产，可在资产详情“加入合集”；合集可设为公开或私有。
 - `/downloads` 下载记录：查看授权下载过的资产、授权编号与时间；管理员可切换全平台台账，并按授权下载/匿名分享渠道筛选。
 - `/trace` 溯源查询：上传图片或输入水印编号核验来源；发现盗用时可提交侵权线索（文件、链接或说明）。
-- `/admin/infringements` 侵权线索（管理员）：查看疑似盗用线索、举报文件与匹配资产，受理、确认或驳回。
+- `/admin/infringements` 侵权线索（管理员）：查看疑似盗用线索、举报文件与匹配资产，受理、确认或驳回；支持一次上传最多 20 个文件批量巡检。
 - `/license/my` 我的授权：切换“授权记录/申请记录”，查看合同、撤回申请、下载已生效资产；下载时按授权范围申报用途与地域。
 - `/settings` 账号设置：维护邮箱、修改密码、开启站内实时通知与邮件通知分组。
 - `/admin/gardens` 园林档案（管理员）：新建、编辑园林名称、历史、坐标与文保信息。
@@ -170,13 +170,13 @@ python scripts/seed_demo_assets.py --reset
 ## 7. 测试
 
 ```bash
-# 后端 296 个用例
+# 后端 300 个用例
 cd backend && python -m pytest tests/ -q
 
 # Windows 内存不足时：每个测试文件独立进程运行
 cd backend && python scripts/run_tests.py
 
-# 前端 46 个单元测试
+# 前端 47 个单元测试（单 worker，降低内存占用）
 cd frontend && npm run test:ci
 
 # 16 个 Playwright 点击流

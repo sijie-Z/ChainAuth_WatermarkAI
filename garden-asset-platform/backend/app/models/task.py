@@ -13,6 +13,7 @@ from app.extensions import db
 TASK_TYPE_LABELS = {
     'watermark_embed': '水印嵌入',
     'blockchain_register': '链上存证',
+    'infringement_patrol': '批量侵权巡检',
 }
 
 TASK_STATUS_LABELS = {
