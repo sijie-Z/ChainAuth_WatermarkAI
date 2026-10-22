@@ -4,7 +4,9 @@
 
 ## 项目简介
 
-本系统面向苏州园林数字资产（图片、3D模型、矢量图纸等）的版权保护与安全分发需求，构建了**水印嵌入 → 区块链存证 → AI侵权检测 → 溯源追踪**四位一体的全链路保护体系。
+本系统面向苏州园林数字资产（图片、3D模型、矢量图纸等）的版权保护与安全分发需求，构建了**水印嵌入 → 存证记录 → 可选 AI 辅助 → 溯源追踪**的保护链路。默认使用本地模拟链与关闭 AI；正式接入 FISCO BCOS、模型与 OCR 需按部署文档额外配置。
+
+> 哪些能力已真实可用、哪些仍是演示，以及下一阶段的重构计划，见 [能力完整性审计](docs/COMPLETENESS-AUDIT.md)。
 
 ### 核心功能
 
@@ -12,10 +14,10 @@
 |------|------|----------|
 | 资产管理 | 数字资产上传、浏览、分类、检索、下载 | Vue3 + Flask + MinIO |
 | 数字水印 | DCT + QIM 盲水印嵌入与提取，抗 JPEG 压缩、噪声与 50%–150% 缩放 | Python OpenCV + NumPy |
-| 区块链存证 | 资产+水印双上链，FISCO BCOS智能合约 | FISCO BCOS + Python SDK |
-| AI溯源 | 以图搜图、侵权检测、智能问答 | 智谱GLM-4V + Milvus |
+| 区块链存证 | 文件哈希与水印编号生成存证记录与证书；默认本地模拟，可配置接入 FISCO BCOS | FISCO BCOS + Python SDK（可选） |
+| AI 辅助（可选） | 以图搜图、侵权辅助检测、智能问答；默认关闭，需安装模型与 API Key | CLIP + Milvus + 智谱 GLM（可选） |
 | 授权分发 | 在线申请→双重审批→合同管理→下载控制 | Flask + JWT |
-| OCR识别 | 百度OCR提取图片文字，辅助溯源 | 百度OCR API |
+| 协作与版本 | 评论/回复、影像区域标注、版本上传/恢复 | Vue3 + Flask |
 
 ### 技术架构
 
@@ -37,8 +39,8 @@
 | 前端 | Vue 3.4, Vite 5, Pinia, Element Plus, ECharts |
 | 后端 | Flask 3.0, Flask-RESTful, SQLAlchemy, Flask-JWT-Extended |
 | 存储 | PostgreSQL, Redis, Milvus；MinIO 为可选服务（当前默认本地磁盘） |
-| 区块链 | FISCO BCOS 3.x |
-| AI | 智谱GLM-4V, CLIP, DINOv2, 百度OCR |
+| 区块链 | FISCO BCOS 3.x（可选，默认本地模拟存证） |
+| AI | CLIP / 智谱 GLM（可选，需自行安装与配置） |
 | 部署 | Docker Compose, Gunicorn, Nginx |
 
 ## 快速开始
@@ -95,7 +97,7 @@ npm run dev                  # 启动Vite开发服务器 :5173
 ### 运行测试
 
 ```bash
-# 后端测试（235个用例，覆盖API/模型/安全）
+# 后端测试（249个用例，覆盖API/模型/安全）
 cd backend && python -m pytest tests/ -v
 
 # 前端生产构建
@@ -126,7 +128,7 @@ garden-asset-platform/
 │   ├── algorithm/                 # 水印算法库（DCT+QIM/矢量）
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
-│   ├── tests/                     # pytest测试（235个用例）
+│   ├── tests/                     # pytest测试（249个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -179,6 +181,10 @@ garden-asset-platform/
 | GET/POST | `/api/assets/:id/versions` | 版本历史 / 上传新版本（文件替换并重置水印） |
 | GET | `/api/assets/:id/versions/:version_id/download` | 下载指定历史版本 |
 | POST | `/api/assets/:id/versions/:version_id/restore` | 恢复历史版本（生成新版本，不删除历史） |
+| GET/POST | `/api/assets/:id/comments` | 评论列表 / 发表评论或回复 |
+| PUT/DELETE | `/api/assets/:id/comments/:comment_id` | 编辑 / 删除评论 |
+| GET/POST | `/api/assets/:id/annotations` | 区域标注列表 / 新增标注 |
+| PUT/DELETE | `/api/assets/:id/annotations/:annotation_id` | 更新状态或内容 / 删除标注 |
 | GET/POST | `/api/assets/:id/shares` | 查询/创建公开分享链接（有效期、访问码、下载权限） |
 | GET | `/api/shares/:token` | 公开分享页数据（免登录，返回资产与证据链） |
 | GET | `/api/shares/:token/download` | 通过分享链接下载（受分享设置限制） |
@@ -231,6 +237,7 @@ garden-asset-platform/
 | GET | `/api/notifications` | 当前用户的待办提醒（审批、申请状态、到期），含未读数与已读状态 |
 | POST | `/api/notifications/read` | 标记单条或全部待办为已读 |
 | GET | `/api/logs` | 操作日志（管理员，支持模块/结果/日期/关键词筛选） |
+| GET | `/api/system/status` | 系统能力状态（管理员：AI/链/Redis/调度器真实启用情况） |
 
 ### 授权管理
 

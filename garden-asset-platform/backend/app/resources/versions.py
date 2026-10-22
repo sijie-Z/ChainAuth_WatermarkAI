@@ -127,6 +127,14 @@ def _create_version(asset, user_id, file_path, file_name, file_format,
     _apply_version_file(
         asset, file_path, file_hash, file_size, file_format, thumbnail_path
     )
+
+    # 新文件未经水印与审核，不能继续以已发布/待审状态对外分发。
+    # 退回草稿，要求重新水印 → 提交发布 → 审核。
+    if asset.status in ('published', 'pending', 'rejected'):
+        asset.status = 'draft'
+        asset.publish_at = None
+        asset.reject_reason = None
+
     return version
 
 

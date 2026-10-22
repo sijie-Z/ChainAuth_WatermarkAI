@@ -327,15 +327,21 @@ class BlockchainService:
             )
             checks['certificate'] = certificate.status == 'valid' and not expired
 
-        # 重新计算当前文件指纹，确认文件没有被替换；
-        # 没有文件时不做“通过”判定，明确返回“无法比对”。
-        file_path = asset.watermarked_path or asset.storage_path
-        if file_path and os.path.exists(file_path) and certificate and certificate.file_hash:
+        # 证书记录的是原始文件指纹；水印文件是派生副本。
+        # 因此原始文件或水印文件任一与证书指纹一致，都视为文件未被替换。
+        candidate_paths = [asset.storage_path, asset.watermarked_path]
+        candidate_hashes = []
+        for file_path in candidate_paths:
+            if not file_path or not os.path.exists(file_path):
+                continue
             sha256 = hashlib.sha256()
             with open(file_path, 'rb') as file_obj:
                 for chunk in iter(lambda: file_obj.read(8192), b''):
                     sha256.update(chunk)
-            checks['file_hash'] = sha256.hexdigest() == certificate.file_hash
+            candidate_hashes.append(sha256.hexdigest())
+
+        if candidate_hashes and certificate and certificate.file_hash:
+            checks['file_hash'] = certificate.file_hash in candidate_hashes
 
         simulated = not (self.enabled and self._web3 and self._contract)
         verified = all(value is True for value in checks.values())

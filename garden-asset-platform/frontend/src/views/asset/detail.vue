@@ -451,7 +451,8 @@
           :close-on-click-modal="false"
         >
           <el-alert type="warning" :closable="false" show-icon class="version-warning">
-            新版本会替换当前文件并重置水印状态；历史存证仍对应旧版本，需要重新核验或存证。
+            新版本会替换当前文件并重置水印状态；已发布/待审资产会退回草稿，需要重新水印、提交发布并通过审核。
+            历史存证仍对应旧版本，需要重新核验或存证。
           </el-alert>
           <el-upload
             drag
@@ -499,37 +500,58 @@
           </template>
         </el-dialog>
 
-        <!-- 溯源证据链 -->
-        <section class="evidence-section">
-          <header class="related-head">
-            <div>
-              <h2 class="related-title">溯源证据链</h2>
-              <p class="related-subtitle">上传登记、水印、链上存证与业务台账按时间排列</p>
-            </div>
-            <el-button
-              v-if="canManage && asset.status === 'published'"
-              type="primary"
-              plain
-              size="small"
-              @click="openShareDialog"
-            >
-              分享核验
-            </el-button>
-          </header>
-          <el-skeleton v-if="evidenceLoading" animated :rows="4" />
-          <div v-else-if="evidenceError" class="evidence-error">
-            <span>证据链加载失败，可能影响对资产状态的判断。</span>
-            <el-button type="primary" link @click="loadEvidence">重新加载</el-button>
-          </div>
-          <EvidenceChain
-            v-else
-            :items="evidence.items"
-            :summary="evidence.summary"
-          />
-        </section>
+        <!-- 证据、标注、版本与讨论 -->
+        <section class="collab-tabs-card">
+          <el-tabs v-model="activeDetailTab" class="collab-tabs">
+            <el-tab-pane label="证据链" name="evidence">
+              <div class="collab-panel">
+                <section class="evidence-section">
+                  <header class="related-head">
+                    <div>
+                      <h2 class="related-title">溯源证据链</h2>
+                      <p class="related-subtitle">上传登记、水印、链上存证与业务台账按时间排列</p>
+                    </div>
+                    <el-button
+                      v-if="canManage && asset.status === 'published'"
+                      type="primary"
+                      plain
+                      size="small"
+                      @click="openShareDialog"
+                    >
+                      分享核验
+                    </el-button>
+                  </header>
+                  <el-skeleton v-if="evidenceLoading" animated :rows="4" />
+                  <div v-else-if="evidenceError" class="evidence-error">
+                    <span>证据链加载失败，可能影响对资产状态的判断。</span>
+                    <el-button type="primary" link @click="loadEvidence">重新加载</el-button>
+                  </div>
+                  <EvidenceChain
+                    v-else
+                    :items="evidence.items"
+                    :summary="evidence.summary"
+                  />
+                </section>
+              </div>
+            </el-tab-pane>
 
-        <!-- 版本历史 -->
-        <section class="version-section">
+            <el-tab-pane label="标注" name="annotations">
+              <div class="collab-panel">
+                <AnnotationBoard
+                  v-if="['image', 'vector'].includes(asset.asset_type)"
+                  :asset-id="asset.id"
+                  :asset-type="asset.asset_type"
+                  :image-url="getAssetUrl(asset)"
+                  :version-id="currentVersionId"
+                  :version-no="currentVersionNo"
+                />
+              </div>
+            </el-tab-pane>
+
+            <el-tab-pane label="版本" name="versions">
+              <div class="collab-panel">
+                <!-- 版本历史 -->
+                <section class="version-section">
           <header class="related-head">
             <div>
               <h2 class="related-title">版本历史</h2>
@@ -602,6 +624,16 @@
               </div>
             </article>
           </div>
+                </section>
+              </div>
+            </el-tab-pane>
+
+            <el-tab-pane label="讨论" name="comments">
+              <div class="collab-panel">
+                <CommentSection :asset-id="asset.id" />
+              </div>
+            </el-tab-pane>
+          </el-tabs>
         </section>
 
         <!-- 同园林相关资产 -->
@@ -636,7 +668,7 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -647,6 +679,8 @@ import { assetApi, collectionApi, licenseApi, watermarkApi, blockchainApi } from
 import { useUserStore } from '@/stores/user'
 import { copyToClipboard, parseBackendDate } from '@/utils'
 import EvidenceChain from '@/components/common/EvidenceChain.vue'
+import AnnotationBoard from '@/components/asset/AnnotationBoard.vue'
+import CommentSection from '@/components/asset/CommentSection.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -669,6 +703,7 @@ const tags = ref([])
 const related = ref([])
 const myLicenses = ref([])
 const myApplications = ref([])
+const activeDetailTab = ref('evidence')
 const evidence = ref({ items: [], summary: null })
 const evidenceLoading = ref(false)
 const evidenceError = ref(false)
@@ -711,6 +746,10 @@ const versionAccept = computed(() => VERSION_ACCEPT[asset.value.asset_type] || '
 const currentVersionNo = computed(() => {
   const current = versions.value.find(item => item.is_current)
   return current?.version_no || versions.value[0]?.version_no || 1
+})
+const currentVersionId = computed(() => {
+  const current = versions.value.find(item => item.is_current)
+  return current?.id || versions.value[0]?.id || null
 })
 const watermarkReady = computed(() =>
   ['embedded', 'verified'].includes(asset.value.watermark_status)
@@ -1350,7 +1389,17 @@ function formatDate(dateStr) {
 }
 
 onMounted(() => {
+  const tab = route.query.tab
+  if (['evidence', 'annotations', 'versions', 'comments'].includes(tab)) {
+    activeDetailTab.value = tab
+  }
   loadAsset()
+})
+
+watch(() => route.query.tab, tab => {
+  if (['evidence', 'annotations', 'versions', 'comments'].includes(tab)) {
+    activeDetailTab.value = tab
+  }
 })
 </script>
 
@@ -1659,6 +1708,53 @@ onMounted(() => {
   color: $text-secondary;
 }
 
+// ========== 证据 / 标注 / 版本 / 讨论 ==========
+.collab-tabs-card {
+  margin-top: $spacing-3xl;
+  padding: 0 $spacing-xl $spacing-xl;
+  border: 1px solid $border-light;
+  border-radius: $radius-lg;
+  background: $bg-card;
+  box-shadow: $shadow-card;
+}
+
+.collab-tabs {
+  :deep(.el-tabs__header) {
+    margin-bottom: 0;
+  }
+
+  :deep(.el-tabs__nav-wrap::after) {
+    height: 1px;
+    background: $border-light;
+  }
+
+  :deep(.el-tabs__item) {
+    font-size: 14px;
+    color: $text-secondary;
+  }
+
+  :deep(.el-tabs__item.is-active) {
+    color: $primary-color;
+    font-weight: 600;
+  }
+}
+
+.collab-panel {
+  padding-top: $spacing-lg;
+
+  :deep(.evidence-section),
+  :deep(.annotation-section),
+  :deep(.version-section),
+  :deep(.comment-section) {
+    margin-top: 0;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+}
+
 // ========== 证据链 ==========
 .evidence-section {
   margin-top: $spacing-3xl;
@@ -1889,6 +1985,10 @@ onMounted(() => {
 
   .version-section {
     padding: 16px;
+  }
+
+  .collab-tabs-card {
+    padding: 0 16px 16px;
   }
 
   .version-item {

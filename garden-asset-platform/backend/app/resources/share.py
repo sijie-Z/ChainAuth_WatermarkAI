@@ -18,7 +18,8 @@ from app.models.log import OperationLog
 from app.services.evidence_service import build_evidence
 from app.utils.middleware import rate_limit
 
-ADMIN_ROLES = ('admin', 'asset_admin', 'license_admin', 'adm1', 'adm2')
+# 分享属于资产分发操作，只允许资产所有者或资产管理角色
+ADMIN_ROLES = ('admin', 'asset_admin')
 MAX_EXPIRES_DAYS = 90
 MIN_ACCESS_CODE_LENGTH = 4
 MAX_ACCESS_CODE_LENGTH = 32
@@ -314,8 +315,10 @@ class PublicShareDownloadResource(Resource):
             extra_data={'share_id': share.id}
         )
 
+        actual_ext = os.path.splitext(file_path)[1].lstrip('.').lower()
+        download_ext = actual_ext or (asset.file_format or '').lower()
         download_name = (
-            f"{asset.asset_code}.{asset.file_format.lower()}"
-            if asset.file_format else asset.asset_code
+            f"{asset.asset_code}.{download_ext}"
+            if download_ext else asset.asset_code
         )
         return send_file(file_path, as_attachment=True, download_name=download_name)

@@ -36,6 +36,19 @@ export const assetApi = {
   removeFavorite: (id) => api.delete(`/assets/${id}/favorite`),
   getFavorites: (params) => api.get('/favorites', { params }),
   getEvidence: (id) => api.get(`/assets/${id}/evidence`),
+  getComments: (id, params) => api.get(`/assets/${id}/comments`, { params }),
+  createComment: (id, data) => api.post(`/assets/${id}/comments`, data),
+  updateComment: (id, commentId, data) => api.put(`/assets/${id}/comments/${commentId}`, data),
+  deleteComment: (id, commentId) => api.delete(`/assets/${id}/comments/${commentId}`),
+  getAnnotations: (id, params) => api.get(`/assets/${id}/annotations`, { params }),
+  createAnnotation: (id, data) => api.post(`/assets/${id}/annotations`, data),
+  updateAnnotation: (id, annotationId, data) => api.put(
+    `/assets/${id}/annotations/${annotationId}`,
+    data
+  ),
+  deleteAnnotation: (id, annotationId) => api.delete(
+    `/assets/${id}/annotations/${annotationId}`
+  ),
   getVersions: (id) => api.get(`/assets/${id}/versions`),
   uploadVersion: (id, formData, config) => api.post(
     `/assets/${id}/versions`,
@@ -145,6 +158,11 @@ export const notificationApi = {
 // 操作日志
 export const logApi = {
   getList: (params) => api.get('/logs', { params })
+}
+
+// 系统能力状态
+export const systemApi = {
+  getStatus: () => api.get('/system/status')
 }
 
 // 用户管理API

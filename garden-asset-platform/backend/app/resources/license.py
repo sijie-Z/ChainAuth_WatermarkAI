@@ -264,6 +264,10 @@ class LicenseApproveResource(Resource):
         if not application:
             return {'code': 404, 'message': '申请不存在'}, 404
 
+        # 审批人不能审批自己提交的申请，避免自批自用
+        if application.applicant_id == current_user_id:
+            return {'code': 403, 'message': '不能审批自己的授权申请'}, 403
+
         action = data.get('action')
         if action not in ('approve', 'reject'):
             return {'code': 400, 'message': 'action 必须是 approve 或 reject'}, 400

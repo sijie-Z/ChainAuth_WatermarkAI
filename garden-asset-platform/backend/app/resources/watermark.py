@@ -179,8 +179,10 @@ class WatermarkTraceResource(Resource):
             result = WatermarkService.trace_from_file(temp_path)
 
             if result['success'] and result.get('watermark_id'):
-                # 查找对应资产
-                asset = Asset.query.filter_by(watermark_id=result['watermark_id']).first()
+                # 公开溯源只能命中已发布资产，避免通过水印编号探测草稿
+                asset = Asset.query.filter_by(
+                    watermark_id=result['watermark_id'], status='published'
+                ).first()
 
                 if asset:
                     # 查找区块链存证记录

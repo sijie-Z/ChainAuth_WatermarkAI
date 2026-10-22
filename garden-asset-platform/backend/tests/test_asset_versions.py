@@ -352,3 +352,26 @@ def test_version_permissions_and_visibility(
     assert upload_version(
         client, admin_header, asset_id, (30, 30, 30)
     ).status_code == 400
+
+
+def test_new_version_on_published_asset_returns_to_draft(
+    client, app, tmp_path, auth_header
+):
+    """替换已发布文件必须重新走水印、发布与审核，不能继续对外分发。"""
+    asset_id = upload_asset(client, app, tmp_path, auth_header)
+    update_asset(app, asset_id, status='published', publish_at=datetime.utcnow())
+
+    response = upload_version(client, auth_header, asset_id, (90, 40, 30), '发布后修订')
+    assert response.status_code == 200
+
+    with app.app_context():
+        asset = db.session.get(Asset, asset_id)
+        assert asset.status == 'draft'
+        assert asset.publish_at is None
+        assert asset.watermark_status == 'none'
+        assert asset.reject_reason is None
+
+    # 已退回草稿后，授权用户也不能继续下载新文件
+    detail = client.get(f'/api/assets/{asset_id}', headers=auth_header)
+    assert detail.status_code == 200
+    assert detail.get_json()['data']['status'] == 'draft'

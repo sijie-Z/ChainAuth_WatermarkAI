@@ -96,7 +96,7 @@
           </h1>
 
           <p class="hero-subtitle">
-            数字水印嵌入，区块链存证，AI 侵权检测与全链路溯源——
+            数字水印嵌入、存证证书与全链路溯源，可选接入联盟链与 AI 辅助检测——
             为苏州园林的影像、图纸与三维资产建立可验证的权属档案。
           </p>
 
@@ -377,14 +377,14 @@ const features = [
   {
     mark: '链',
     title: '区块链存证',
-    description: '资产与授权信息写入 FISCO BCOS 联盟链，形成不可篡改的存证记录与电子证书。',
-    tags: ['联盟链', '存证证书', '哈希校验']
+    description: '文件指纹、水印编号与权利人写入存证记录并签发证书；默认使用本地模拟链，配置节点后可接入 FISCO BCOS。',
+    tags: ['存证证书', '哈希校验', '可接联盟链']
   },
   {
     mark: '检',
-    title: 'AI 侵权检测',
-    description: '基于 CLIP 特征与向量检索，在海量图像中定位相似资产，辅助人工判定侵权。',
-    tags: ['CLIP 特征', 'Milvus 检索', '相似度评分']
+    title: 'AI 辅助检测（可选）',
+    description: '配置模型与 API Key 后可启用 CLIP 相似检索与问答；默认关闭，接口不会伪造“无侵权”结论。',
+    tags: ['可选部署', 'CLIP 特征', '人工复核']
   },
   {
     mark: '溯',
@@ -397,7 +397,7 @@ const features = [
 const workflowSteps = [
   { title: '上传资产', description: '影像、三维模型或矢量图纸进入档案库，生成唯一资产编码。' },
   { title: '嵌入水印', description: '按资产类型选择 DCT 或坐标扰动算法，写入可提取的水印标识。' },
-  { title: '链上存证', description: '文件哈希与水印信息写入联盟链，签发可验证的存证证书。' },
+  { title: '存证记录', description: '文件哈希与水印信息生成存证记录与证书；接入 FISCO BCOS 后同步写入联盟链。' },
   { title: '授权分发', description: '双重审批通过后发放授权，下载与使用记录持续回流台账。' }
 ]
 
@@ -405,8 +405,8 @@ const techStack = [
   { name: 'Vue 3 + Vite', description: '响应式前端与按需构建', role: '展示层' },
   { name: 'Flask + SQLAlchemy', description: 'REST API 与业务服务', role: '服务层' },
   { name: 'PostgreSQL / Redis', description: '主数据与缓存限流', role: '数据层' },
-  { name: 'FISCO BCOS', description: '国产联盟链存证与合约', role: '信任层' },
-  { name: 'GLM-4V / CLIP / Milvus', description: '视觉理解与向量检索', role: '智能层' },
+  { name: 'FISCO BCOS', description: '可接入的联盟链存证（默认本地模拟）', role: '信任层' },
+  { name: 'CLIP / 智谱 GLM', description: '可选 AI 能力，需安装模型并配置 Key', role: '智能层' },
   { name: 'Docker Compose', description: '一键部署与健康检查', role: '运行层' }
 ]
 

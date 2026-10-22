@@ -53,7 +53,7 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    assetsDir: 'assets',
+    assetsDir: 'static',
     sourcemap: false,
     minify: 'terser',
     terserOptions: {
@@ -64,9 +64,9 @@ export default defineConfig({
     },
     rollupOptions: {
       output: {
-        chunkFileNames: 'assets/js/[name]-[hash].js',
-        entryFileNames: 'assets/js/[name]-[hash].js',
-        assetFileNames: 'assets/[ext]/[name]-[hash].[ext]',
+        chunkFileNames: 'static/js/[name]-[hash].js',
+        entryFileNames: 'static/js/[name]-[hash].js',
+        assetFileNames: 'static/[ext]/[name]-[hash].[ext]',
         manualChunks(id) {
           if (/node_modules[\\/]element-plus[\\/]/.test(id)) {
             return 'elementPlus'

@@ -39,6 +39,7 @@ test.describe('资产版本', () => {
     }, uniquePng(PNG_V1).toString('base64'))
 
     await page.goto(`/assets/${assetId}`)
+    await page.getByRole('tab', { name: '版本' }).click()
     await expect(page.locator('.version-item')).toHaveCount(1)
     await expect(page.locator('.version-item .version-no')).toHaveText('v1')
 

@@ -9,6 +9,8 @@ from app.models.extra import (
     Favorite, DownloadRecord, AssetShare, NotificationRead,
     Collection, CollectionAsset, SystemConfig
 )
+from app.models.comment import AssetComment
+from app.models.annotation import AssetAnnotation
 
 __all__ = [
     'User', 'UserToken',
@@ -18,5 +20,6 @@ __all__ = [
     'BlockchainTransaction', 'Certificate',
     'OperationLog',
     'Favorite', 'DownloadRecord', 'AssetShare', 'NotificationRead',
-    'Collection', 'CollectionAsset', 'SystemConfig'
+    'Collection', 'CollectionAsset', 'SystemConfig',
+    'AssetComment', 'AssetAnnotation'
 ]

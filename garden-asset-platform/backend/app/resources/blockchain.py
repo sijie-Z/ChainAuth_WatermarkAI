@@ -123,6 +123,10 @@ class BlockchainCertificateResource(Resource):
             'code': 200,
             'data': {
                 'certificate': certificate.to_dict(),
+                'simulated': not blockchain_service.enabled,
+                'chain_mode': (
+                    'simulated' if not blockchain_service.enabled else 'fisco-bcos'
+                ),
                 'asset': {
                     'asset_code': asset.asset_code if asset else None,
                     'title': asset.title if asset else None,

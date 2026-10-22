@@ -73,8 +73,14 @@
           <div class="blockchain-card">
             <el-icon class="bc-icon"><Link /></el-icon>
             <div class="bc-info">
-              <div class="bc-name">FISCO BCOS 联盟链</div>
-              <div class="bc-desc">国产自主可控区块链底层平台</div>
+              <div class="bc-name">
+                {{ certificate.simulated ? '本地模拟存证（演示环境）' : 'FISCO BCOS 联盟链' }}
+              </div>
+              <div class="bc-desc">
+                {{ certificate.simulated
+                  ? '未连接链节点，交易哈希与区块为本地模拟数据'
+                  : '国产自主可控区块链底层平台' }}
+              </div>
             </div>
           </div>
           <div class="info-grid">
@@ -126,10 +132,16 @@
             <CircleClose v-else />
           </el-icon>
           <div class="verify-text">
-            <div class="verify-title">{{ certificate.tx_hash ? '链上存证交易已生成' : '尚未生成链上存证交易' }}</div>
+            <div class="verify-title">
+              {{ certificate.tx_hash
+                ? (certificate.simulated ? '本地存证记录已生成（演示环境）' : '链上存证交易已生成')
+                : '尚未生成存证交易' }}
+            </div>
             <div class="verify-desc">
               {{ certificate.tx_hash
-                ? '存证信息已写入区块链，可凭交易哈希与区块高度在链上复核。'
+                ? (certificate.simulated
+                  ? '当前未连接 FISCO BCOS 节点，交易哈希与区块为本地模拟数据，不能用于链上复核。'
+                  : '存证信息已写入区块链，可凭交易哈希与区块高度在链上复核。')
                 : '该资产尚未完成上链存证，请先完成水印嵌入与上链操作后再查看证书。' }}
             </div>
           </div>
@@ -186,6 +198,7 @@ async function loadCertificate() {
       certificate.value = {
         ...assetData,
         ...certificateData,
+        simulated: payload.simulated === true,
         asset_title: assetData.title || certificateData.asset_title || '',
         owner_name: certificateData.creator_name || assetData.owner_name || '',
         confirmed_at: certificateData.confirmed_at || certificateData.created_at,

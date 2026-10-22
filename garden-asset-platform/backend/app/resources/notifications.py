@@ -11,7 +11,10 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restful import Resource
 
 from app.extensions import db
-from app.models import Asset, License, LicenseApplication, NotificationRead, User
+from app.models import (
+    Asset, AssetComment, License, LicenseApplication, NotificationRead, User
+)
+from sqlalchemy import or_
 
 ADMIN_ROLES = ('admin', 'asset_admin', 'license_admin', 'adm1', 'adm2')
 
@@ -107,6 +110,39 @@ def _build_items(user):
             'link': '/license/my',
             'count': 1,
             'time': license.end_time.isoformat()
+        })
+
+    # 自己拥有的资产收到新评论（排除自己发的评论）
+    owned_asset_ids = db.session.query(Asset.id).filter(
+        or_(
+            Asset.owner_id == user_id,
+            Asset.creator_id == user_id,
+            Asset.uploader_id == user_id
+        ),
+        Asset.status != 'deleted'
+    ).subquery()
+    recent_comments = AssetComment.query.filter(
+        AssetComment.asset_id.in_(db.session.query(owned_asset_ids.c.id)),
+        AssetComment.user_id != user_id,
+        AssetComment.is_deleted.is_(False)
+    ).order_by(AssetComment.created_at.desc()).limit(5).all()
+
+    for comment in recent_comments:
+        asset = comment.asset
+        author = comment.user
+        author_name = (author.nickname or author.username) if author else '用户'
+        snippet = (comment.content or '').strip().replace('\n', ' ')
+        if len(snippet) > 60:
+            snippet = snippet[:60] + '…'
+        items.append({
+            'id': f'comment-{comment.id}',
+            'key': f'comment-{comment.id}',
+            'type': 'info',
+            'title': f'{author_name} 评论了你的资产',
+            'description': f'{asset.title if asset else "资产"} · {snippet}',
+            'link': f'/assets/{comment.asset_id}?tab=comments',
+            'count': 1,
+            'time': comment.created_at.isoformat() if comment.created_at else None
         })
 
     keys = [item['key'] for item in items]

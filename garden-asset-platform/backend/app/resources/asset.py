@@ -20,6 +20,9 @@ from sqlalchemy import func, or_
 
 
 ADMIN_ROLES = ('admin', 'asset_admin', 'license_admin', 'adm1', 'adm2')
+# 资产写操作（编辑、删除、标签）只允许超级管理员与资产管理员；
+# 审批员可查看/审核，但不应该能改删他人资产。
+ASSET_MANAGE_ROLES = ('admin', 'asset_admin')
 ASSET_STATUSES = ('draft', 'pending', 'published', 'rejected', 'deleted')
 
 
@@ -269,7 +272,7 @@ class AssetResource(Resource):
 
         # 权限检查
         is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
-        if not is_owner and user.role not in ADMIN_ROLES:
+        if not is_owner and user.role not in ASSET_MANAGE_ROLES:
             return {'code': 403, 'message': '无权限修改'}, 403
 
         data = request.get_json()
@@ -310,7 +313,7 @@ class AssetResource(Resource):
 
         # 权限检查
         is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
-        if not is_owner and user.role not in ADMIN_ROLES:
+        if not is_owner and user.role not in ASSET_MANAGE_ROLES:
             return {'code': 403, 'message': '无权限删除'}, 403
 
         asset.status = 'deleted'
@@ -628,7 +631,10 @@ class AssetDownloadResource(Resource):
 
         from flask import send_file as flask_send_file
 
-        download_name = f"{asset.asset_code}.{asset.file_format.lower()}" if asset.file_format else asset.asset_code
+        # 水印副本可能被转成 PNG；下载名必须跟随实际文件，而不是原始扩展名
+        actual_ext = os.path.splitext(file_path)[1].lstrip('.').lower()
+        download_ext = actual_ext or (asset.file_format or '').lower()
+        download_name = f"{asset.asset_code}.{download_ext}" if download_ext else asset.asset_code
 
         return flask_send_file(
             file_path,
@@ -899,7 +905,7 @@ class AssetTagsResource(Resource):
             return {'code': 404, 'message': '资产不存在'}, 404
 
         is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
-        if not is_owner and user.role not in ADMIN_ROLES:
+        if not is_owner and user.role not in ASSET_MANAGE_ROLES:
             return {'code': 403, 'message': '无权限修改标签'}, 403
 
         data = request.get_json() or {}

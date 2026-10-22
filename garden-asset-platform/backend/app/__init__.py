@@ -175,6 +175,30 @@ def register_api_resources(app):
         '/assets/<string:asset_id>/versions/<int:version_id>/restore'
     )
 
+    # 资产评论（讨论）
+    from app.resources.comments import (
+        AssetCommentListResource, AssetCommentResource
+    )
+    api.add_resource(
+        AssetCommentListResource, '/assets/<string:asset_id>/comments'
+    )
+    api.add_resource(
+        AssetCommentResource,
+        '/assets/<string:asset_id>/comments/<int:comment_id>'
+    )
+
+    # 图纸/影像区域标注
+    from app.resources.annotations import (
+        AssetAnnotationListResource, AssetAnnotationResource
+    )
+    api.add_resource(
+        AssetAnnotationListResource, '/assets/<string:asset_id>/annotations'
+    )
+    api.add_resource(
+        AssetAnnotationResource,
+        '/assets/<string:asset_id>/annotations/<int:annotation_id>'
+    )
+
     # 证据链与公开分享
     from app.resources.evidence import AssetEvidenceResource
     from app.resources.share import (
@@ -272,6 +296,10 @@ def register_api_resources(app):
     # 操作日志
     from app.resources.logs import LogListResource
     api.add_resource(LogListResource, '/logs')
+
+    # 系统能力状态（管理员）
+    from app.resources.system import SystemStatusResource
+    api.add_resource(SystemStatusResource, '/system/status')
 
 
 def init_services(app):

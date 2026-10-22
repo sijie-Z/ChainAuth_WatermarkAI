@@ -121,6 +121,25 @@
           </div>
         </div>
 
+        <!-- 系统能力状态 -->
+        <div class="system-card">
+          <div class="card-header">
+            <h3 class="card-title">系统能力</h3>
+            <el-button link type="primary" size="small" @click="loadSystemStatus">刷新</el-button>
+          </div>
+          <el-skeleton v-if="systemLoading" animated :rows="3" style="padding: 12px 16px" />
+          <div v-else class="system-list">
+            <div v-for="item in systemItems" :key="item.key" class="system-row">
+              <div class="system-text">
+                <strong>{{ item.name }}</strong>
+                <span>{{ item.description }}</span>
+              </div>
+              <el-tag size="small" :type="item.type" effect="plain">{{ item.label }}</el-tag>
+            </div>
+            <p class="system-note">演示环境不会把未启用能力伪装成可用状态。</p>
+          </div>
+        </div>
+
         <!-- 最近活动 -->
         <div class="activity-card">
           <div class="card-header">
@@ -237,7 +256,7 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick, shall
 import { parseBackendDate } from '@/utils'
 import { useUserStore } from '@/stores/user'
 import { useRouter } from 'vue-router'
-import { assetApi, licenseApi } from '@/api/modules'
+import { assetApi, licenseApi, systemApi } from '@/api/modules'
 import {
   Picture, Stamp, Link, Document, Upload, Clock,
   ArrowUp, ArrowDown, User, Reading,
@@ -314,6 +333,57 @@ const recentActivities = shallowRef([])
 const todoList = ref([])
 
 const pendingCount = computed(() => todoList.value.length)
+
+const systemStatus = ref(null)
+const systemLoading = ref(false)
+const systemItems = computed(() => {
+  const data = systemStatus.value
+  if (!data) return []
+  return [
+    {
+      key: 'blockchain',
+      name: '区块链存证',
+      label: data.blockchain?.label || '未知',
+      description: data.blockchain?.description || '',
+      type: data.blockchain?.enabled ? 'success' : 'warning'
+    },
+    {
+      key: 'ai',
+      name: 'AI 辅助',
+      label: data.ai?.label || '未知',
+      description: data.ai?.description || '',
+      type: data.ai?.enabled ? 'success' : 'info'
+    },
+    {
+      key: 'redis',
+      name: '缓存与限流',
+      label: data.redis?.label || '未知',
+      description: data.redis?.description || '',
+      type: data.redis?.enabled ? 'success' : 'warning'
+    },
+    {
+      key: 'scheduler',
+      name: '定时任务',
+      label: data.scheduler?.label || '未知',
+      description: data.scheduler?.description || '',
+      type: data.scheduler?.enabled ? 'success' : 'info'
+    }
+  ]
+})
+
+async function loadSystemStatus() {
+  systemLoading.value = true
+  try {
+    const response = await systemApi.getStatus()
+    if (response.data?.code === 200) {
+      systemStatus.value = response.data.data
+    }
+  } catch {
+    // 状态读取失败不影响仪表盘其他区块
+  } finally {
+    systemLoading.value = false
+  }
+}
 
 // 最近资产
 const recentAssets = ref([])
@@ -661,6 +731,7 @@ function goToPendingLicenses() {
 
 onMounted(() => {
   loadDashboardData()
+  loadSystemStatus()
   window.addEventListener('resize', handleResize)
 })
 
@@ -900,7 +971,7 @@ onUnmounted(() => {
 }
 
 // 卡片通用样式
-.chart-card, .quick-actions-card, .activity-card, .todo-card, .table-card {
+.chart-card, .quick-actions-card, .activity-card, .todo-card, .table-card, .system-card {
   background: $bg-card;
   border-radius: $radius-lg;
   padding: 20px;
@@ -920,6 +991,50 @@ onUnmounted(() => {
   font-size: 17px;
   font-weight: 600;
   color: $text-primary;
+}
+
+.system-card {
+  .card-header {
+    margin-bottom: 12px;
+  }
+}
+
+.system-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.system-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.system-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+
+  strong {
+    font-size: 12px;
+    color: $text-primary;
+  }
+
+  span {
+    margin-top: 2px;
+    font-size: 11px;
+    line-height: 1.5;
+    color: $text-placeholder;
+  }
+}
+
+.system-note {
+  margin: 12px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: $text-placeholder;
 }
 
 .chart-container {
