@@ -89,16 +89,29 @@ def run_file(test_file):
         '-q', '--basetemp', str(basetemp), '-p', 'no:cacheprovider',
     ]
     started = time.time()
-    proc = subprocess.Popen(
-        command,
-        cwd=str(BACKEND_DIR),
-        env=child_env(),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        encoding='utf-8',
-        errors='replace',
-    )
+    try:
+        proc = subprocess.Popen(
+            command,
+            cwd=str(BACKEND_DIR),
+            env=child_env(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+        )
+    except OSError as exc:
+        return {
+            'name': name,
+            'returncode': -1,
+            'passed': 0,
+            'failed': 0,
+            'errors': 1,
+            'duration': time.time() - started,
+            'peak_mb': 0,
+            'killed': True,
+            'output': f'无法启动测试子进程（通常是可用内存不足）：{exc}',
+        }
     result = {'peak': 0}
     if psutil is not None:
         import threading
