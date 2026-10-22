@@ -136,6 +136,18 @@ def make_asset(photo, meta, admin, index):
     asset.thumbnail_path, _ = generate_thumbnail_set(photo_path, asset.id)
     db.session.add(asset)
     ensure_initial_version(asset)
+
+    tag_pool = ['古典建筑', '山水景观', '园林植物', '文物古迹', '历史文献']
+    for tag_name in {
+        tag_pool[index % len(tag_pool)],
+        tag_pool[(index + 2) % len(tag_pool)]
+    }:
+        exists = AssetTag.query.filter_by(
+            asset_id=asset.id, name=tag_name
+        ).first()
+        if not exists:
+            db.session.add(AssetTag(asset_id=asset.id, name=tag_name))
+
     return asset
 
 

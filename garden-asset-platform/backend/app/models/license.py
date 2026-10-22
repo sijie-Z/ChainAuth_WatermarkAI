@@ -60,6 +60,13 @@ class License(db.Model):
     contracts = db.relationship('LicenseContract', backref='license', lazy='dynamic')
 
     def to_dict(self):
+        now = datetime.utcnow()
+        status = self.status
+        is_expired = bool(
+            status == 'active' and self.end_time and self.end_time <= now
+        )
+        if is_expired:
+            status = 'expired'
         return {
             'id': self.id,
             'license_code': self.license_code,
@@ -70,7 +77,8 @@ class License(db.Model):
             'start_time': self.start_time.isoformat() if self.start_time else None,
             'end_time': self.end_time.isoformat() if self.end_time else None,
             'is_exclusive': self.is_exclusive,
-            'status': self.status,
+            'status': status,
+            'is_expired': is_expired,
             'tx_hash': self.tx_hash,
             'asset_code': self.asset.asset_code if self.asset else None,
             'asset_title': self.asset.title if self.asset else None,

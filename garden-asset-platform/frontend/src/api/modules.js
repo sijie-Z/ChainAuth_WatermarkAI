@@ -3,7 +3,8 @@ import api from './index'
 // 公开API
 export const publicApi = {
   // 首页/目录页会自行降级展示，静默失败避免刷屏
-  getStats: () => api.get('/stats', { silent: true })
+  getStats: () => api.get('/stats', { silent: true }),
+  getTags: () => api.get('/tags', { silent: true })
 }
 
 // 认证相关API
@@ -144,6 +145,8 @@ export const licenseApi = {
   getApproved: (params) => api.get('/license/approved', { params }),
   approve: (applicationId, data) => api.post(`/license/approve/${applicationId}`, data),
   cancelApplication: (applicationId) => api.post(`/license/applications/${applicationId}/cancel`),
+  revoke: (licenseId, data) => api.post(`/license/${licenseId}/revoke`, data || {}),
+  renew: (licenseId, data) => api.post(`/license/${licenseId}/renew`, data),
   getContract: (licenseId) => api.get(`/license/${licenseId}/contract`),
   getMyLicenses: (params) => api.get('/license/my', { params }),
   myApplications: (params) => api.get('/license/my-applications', { params })

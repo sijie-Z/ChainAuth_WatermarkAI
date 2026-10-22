@@ -143,9 +143,11 @@ def register_api_resources(app):
         AssetListResource, AssetResource, AssetUploadResource,
         AssetDownloadResource, AssetFavoriteResource, AssetStatsResource,
         MyAssetsResource, AssetTagsResource, AssetPublishResource, AssetApproveResource,
-        AssetThumbnailResource, AssetRelatedResource, FavoriteListResource, PublicStatsResource
+        AssetThumbnailResource, AssetRelatedResource, FavoriteListResource,
+        PublicStatsResource, TagListResource
     )
     api.add_resource(PublicStatsResource, '/stats')
+    api.add_resource(TagListResource, '/tags')
     api.add_resource(AssetListResource, '/assets')
     api.add_resource(AssetResource, '/assets/<string:asset_id>')
     api.add_resource(AssetThumbnailResource, '/assets/<string:asset_id>/thumbnail')
@@ -277,12 +279,15 @@ def register_api_resources(app):
         LicenseApplyResource, LicensePendingResource,
         LicenseApproveResource, LicenseApprovedResource,
         MyLicenseResource, MyApplicationsResource,
-        LicenseCancelResource, LicenseContractResource
+        LicenseCancelResource, LicenseContractResource,
+        LicenseRevokeResource, LicenseRenewResource
     )
     api.add_resource(LicenseApplyResource, '/license/apply')
     api.add_resource(LicensePendingResource, '/license/pending')
     api.add_resource(LicenseCancelResource, '/license/applications/<int:application_id>/cancel')
     api.add_resource(LicenseContractResource, '/license/<int:license_id>/contract')
+    api.add_resource(LicenseRevokeResource, '/license/<int:license_id>/revoke')
+    api.add_resource(LicenseRenewResource, '/license/<int:license_id>/renew')
     api.add_resource(LicenseApproveResource, '/license/approve/<int:application_id>')
     api.add_resource(LicenseApprovedResource, '/license/approved')
     api.add_resource(MyLicenseResource, '/license/my')

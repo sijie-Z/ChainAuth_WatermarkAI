@@ -96,6 +96,25 @@
             </el-select>
           </div>
           <div class="filter-item">
+            <el-select v-model="search.tag" placeholder="标签" clearable size="large" style="width: 150px" @change="handleSearch">
+              <el-option label="全部标签" value="" />
+              <el-option v-for="tag in tags" :key="tag.name" :label="`${tag.name}（${tag.count}）`" :value="tag.name" />
+            </el-select>
+          </div>
+          <div class="filter-item">
+            <el-date-picker
+              v-model="search.dateRange"
+              type="daterange"
+              range-separator="至"
+              start-placeholder="上传开始"
+              end-placeholder="上传结束"
+              value-format="YYYY-MM-DD"
+              size="large"
+              style="width: 240px"
+              @change="handleSearch"
+            />
+          </div>
+          <div class="filter-item">
             <el-select v-model="search.status" placeholder="状态" clearable size="large" style="width: 120px" @change="handleSearch">
               <el-option label="全部状态" value="" />
               <el-option label="已发布" value="published" />
@@ -310,18 +329,24 @@ const showGuideTip = ref(localStorage.getItem('hideAssetGuideTip') !== '1')
 const assets = ref([])
 const gardens = ref([])
 const gardensOffline = ref(false)
+const tags = ref([])
 const viewMode = ref('grid')
 
 const search = reactive({
   keyword: '',
   asset_type: '',
   garden_id: '',
+  tag: '',
+  dateRange: [],
   status: '',
   sort: 'newest'
 })
 
 const hasFilters = computed(() =>
-  Boolean(search.keyword || search.asset_type || search.garden_id || search.status)
+  Boolean(
+    search.keyword || search.asset_type || search.garden_id
+    || search.tag || search.dateRange?.length || search.status
+  )
 )
 
 const pagination = reactive({
@@ -372,6 +397,9 @@ async function loadAssets() {
       keyword: search.keyword || undefined,
       asset_type: search.asset_type || undefined,
       garden_id: search.garden_id || undefined,
+      tag: search.tag || undefined,
+      date_from: search.dateRange?.[0] || undefined,
+      date_to: search.dateRange?.[1] || undefined,
       status: search.status || undefined,
       sort: search.sort || undefined
     }
@@ -427,10 +455,23 @@ function clearFilters() {
   search.keyword = ''
   search.asset_type = ''
   search.garden_id = ''
+  search.tag = ''
+  search.dateRange = []
   search.status = ''
   search.sort = 'newest'
   pagination.page = 1
   loadAssets()
+}
+
+async function loadTags() {
+  try {
+    const response = await publicApi.getTags()
+    if (response.data?.code === 200) {
+      tags.value = response.data.data || []
+    }
+  } catch {
+    tags.value = []
+  }
 }
 
 function dismissGuideTip() {
@@ -502,6 +543,7 @@ onMounted(() => {
   loadStats()
   loadAssets()
   loadGardens()
+  loadTags()
 })
 
 // 首页园林卡会在已打开资产中心时只改 query，需要重新筛选

@@ -155,6 +155,38 @@ class ShareDownload(db.Model):
     )
 
 
+class NotificationEvent(db.Model):
+    """事件型通知
+
+    审核结果、授权撤销/续期等需要留下正文的事件写在这里；
+    纯状态待办仍由 NotificationsResource 实时计算。
+    """
+    __tablename__ = 'notification_events'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    event_type = db.Column(db.String(40), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.String(500), nullable=True)
+    link = db.Column(db.String(300), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    user = db.relationship(
+        'User', backref=db.backref('notification_events', lazy='dynamic')
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'event_type': self.event_type,
+            'title': self.title,
+            'description': self.description,
+            'link': self.link,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
 class NotificationRead(db.Model):
     """通知已读状态
 

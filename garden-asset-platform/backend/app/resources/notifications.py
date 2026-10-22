@@ -12,7 +12,8 @@ from flask_restful import Resource
 
 from app.extensions import db
 from app.models import (
-    Asset, AssetComment, License, LicenseApplication, NotificationRead, User
+    Asset, AssetComment, License, LicenseApplication, NotificationEvent,
+    NotificationRead, User
 )
 from sqlalchemy import or_
 
@@ -23,6 +24,23 @@ def _build_items(user):
     items = []
     now = datetime.utcnow()
     user_id = user.id
+
+    # 事件型通知：审核结果、授权撤销/续期等，保留正文
+    recent_events = NotificationEvent.query.filter_by(user_id=user_id).order_by(
+        NotificationEvent.created_at.desc()
+    ).limit(10).all()
+    for event in recent_events:
+        warning = any(token in event.event_type for token in ('rejected', 'revoked'))
+        items.append({
+            'id': f'event-{event.id}',
+            'key': f'event-{event.id}',
+            'type': 'warning' if warning else 'info',
+            'title': event.title,
+            'description': event.description or '',
+            'link': event.link or '/home',
+            'count': 1,
+            'time': event.created_at.isoformat() if event.created_at else None
+        })
 
     if user.role in ADMIN_ROLES:
         pending_licenses = LicenseApplication.query.filter(

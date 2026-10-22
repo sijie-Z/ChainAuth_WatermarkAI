@@ -113,7 +113,7 @@ FLASK_APP=run.py flask db upgrade
 ### 运行测试
 
 ```bash
-# 后端测试（251个用例，覆盖API/模型/安全/迁移）
+# 后端测试（261个用例，覆盖API/模型/安全/迁移）
 cd backend && python -m pytest tests/ -v
 
 # 前端生产构建
@@ -145,7 +145,7 @@ garden-asset-platform/
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
 │   ├── migrations/                # Alembic 迁移（baseline + versions）
-│   ├── tests/                     # pytest测试（251个用例）
+│   ├── tests/                     # pytest测试（261个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -208,6 +208,7 @@ garden-asset-platform/
 | DELETE | `/api/shares/:id` | 撤销分享链接 |
 | GET/POST/DELETE | `/api/assets/:id/favorite` | 查询/添加/取消收藏 |
 | GET | `/api/favorites` | 我的收藏列表 |
+| GET | `/api/tags` | 已发布资产的标签及数量分面 |
 | GET | `/api/downloads/my` | 我的下载记录 |
 | GET | `/api/downloads` | 全平台下载台账（管理员，支持筛选与汇总） |
 | GET | `/api/assets/:id/downloads` | 单件资产下载摘要（所有者/管理员） |
@@ -267,6 +268,8 @@ garden-asset-platform/
 | GET | `/api/license/my` | 我的授权 |
 | GET | `/api/license/my-applications` | 我的申请 |
 | POST | `/api/license/applications/:id/cancel` | 撤回申请 |
+| POST | `/api/license/:id/revoke` | 撤销授权（授权方/资产所有者/授权管理员） |
+| POST | `/api/license/:id/renew` | 授权续期 |
 | GET | `/api/license/:id/contract` | 查看授权合同 |
 
 ## 安全特性

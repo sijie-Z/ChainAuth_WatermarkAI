@@ -5,7 +5,7 @@ import os
 import uuid
 import hashlib
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import request, current_app
 from flask_restful import Resource
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -16,6 +16,7 @@ from app.models.garden import Garden
 from app.models.license import LicenseApplication, License
 from app.models.log import OperationLog
 from app.utils.middleware import rate_limit
+from app.services.notification_service import add_notification_event
 from sqlalchemy import func, or_
 
 
@@ -149,6 +150,29 @@ def generate_asset_code(garden_code, asset_type):
     return f"{garden_code}-{type_code}-{timestamp}-{random_suffix}"
 
 
+class TagListResource(Resource):
+    """已发布资产的标签分面"""
+
+    def get(self):
+        rows = db.session.query(
+            AssetTag.name, func.count(Asset.id)
+        ).join(
+            Asset, AssetTag.asset_id == Asset.id
+        ).filter(
+            Asset.status == 'published',
+            AssetTag.name.isnot(None)
+        ).group_by(AssetTag.name).order_by(
+            func.count(Asset.id).desc(), AssetTag.name.asc()
+        ).all()
+        return {
+            'code': 200,
+            'data': [
+                {'name': name, 'count': count}
+                for name, count in rows if name
+            ]
+        }, 200
+
+
 class AssetListResource(Resource):
     """资产列表"""
 
@@ -168,6 +192,11 @@ class AssetListResource(Resource):
         watermark_status = (request.args.get('watermark_status') or '').strip()
         chain_status = (request.args.get('chain_status') or '').strip()
         keyword = request.args.get('keyword')
+        tag = (request.args.get('tag') or '').strip()
+        file_format = (request.args.get('file_format') or '').strip().lower()
+        uploader_id = request.args.get('uploader_id', type=int)
+        date_from = (request.args.get('date_from') or '').strip()
+        date_to = (request.args.get('date_to') or '').strip()
 
         query = Asset.query
 
@@ -199,6 +228,29 @@ class AssetListResource(Resource):
                 Asset.asset_code.ilike(like),
                 Asset.description.ilike(like),
             ))
+        if tag:
+            query = query.filter(Asset.tags.any(AssetTag.name == tag))
+        if file_format:
+            query = query.filter(func.lower(Asset.file_format) == file_format)
+        if uploader_id:
+            query = query.filter(Asset.uploader_id == uploader_id)
+        if date_from:
+            try:
+                query = query.filter(
+                    Asset.created_at >= datetime.fromisoformat(date_from)
+                )
+            except ValueError:
+                return {'code': 400, 'message': '开始日期格式无效'}, 400
+        if date_to:
+            try:
+                end = datetime.fromisoformat(date_to)
+                if len(date_to) == 10:
+                    end += timedelta(days=1)
+                    query = query.filter(Asset.created_at < end)
+                else:
+                    query = query.filter(Asset.created_at <= end)
+            except ValueError:
+                return {'code': 400, 'message': '结束日期格式无效'}, 400
 
         # 排序
         sort = (request.args.get('sort') or 'newest').strip()
@@ -595,6 +647,7 @@ class AssetDownloadResource(Resource):
             License.asset_id == asset_id,
             License.licensee_id == user_id,
             License.status == 'active',
+            License.start_time <= now,
             or_(License.end_time.is_(None), License.end_time > now),
         ).first()
 
@@ -953,10 +1006,21 @@ class AssetPublishResource(Resource):
 
         asset.status = 'pending'
         asset.reject_reason = None
-        db.session.commit()
 
-        # 发送通知给审核人员
-        # TODO: 实现通知机制
+        reviewers = User.query.filter(
+            User.role.in_(('admin', 'asset_admin')),
+            User.status == 'active'
+        ).all()
+        for reviewer in reviewers:
+            add_notification_event(
+                reviewer.id,
+                'asset_pending',
+                '有新的资产待审核',
+                f'{asset.asset_code} · {asset.title}',
+                '/admin/assets?status=pending'
+            )
+
+        db.session.commit()
 
         return {'code': 200, 'message': '提交发布成功，等待审核'}, 200
 
@@ -998,6 +1062,24 @@ class AssetApproveResource(Resource):
             asset.reject_reason = reason
         else:
             return {'code': 400, 'message': '无效操作'}, 400
+
+        recipient_id = asset.uploader_id or asset.creator_id or asset.owner_id
+        if action == 'approve':
+            add_notification_event(
+                recipient_id,
+                'asset_approved',
+                '资产审核通过',
+                f'《{asset.title}》已发布到资产档案',
+                f'/assets/{asset_id}'
+            )
+        else:
+            add_notification_event(
+                recipient_id,
+                'asset_rejected',
+                '资产审核未通过',
+                f'《{asset.title}》 · {reason or "请查看资产详情"}',
+                f'/assets/{asset_id}'
+            )
 
         db.session.commit()
 

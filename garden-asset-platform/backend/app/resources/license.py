@@ -13,6 +13,7 @@ from app.models.license import License, LicenseApplication, LicenseContract
 from app.models.asset import Asset
 from app.models.user import User
 from app.models.log import OperationLog
+from app.services.notification_service import add_notification_event
 
 
 class LicenseApplyResource(Resource):
@@ -247,6 +248,26 @@ class LicenseContractResource(Resource):
         return {'code': 200, 'data': data}, 200
 
 
+def _exclusive_conflict(asset_id, wants_exclusive, license_type):
+    """独家授权互斥检查：返回冲突的 active 授权，或 None"""
+    now = datetime.utcnow()
+    active = License.query.filter(
+        License.asset_id == asset_id,
+        License.status == 'active',
+        or_(License.end_time.is_(None), License.end_time > now)
+    ).all()
+    if not active:
+        return None
+
+    request_exclusive = wants_exclusive or license_type == 'exclusive'
+    if request_exclusive:
+        return active[0]
+    for license_row in active:
+        if license_row.is_exclusive or license_row.license_type == 'exclusive':
+            return license_row
+    return None
+
+
 class LicenseApproveResource(Resource):
     """审批授权申请"""
 
@@ -307,6 +328,22 @@ class LicenseApproveResource(Resource):
         ):
             if application.adm2_reviewer_id not in (None, current_user_id):
                 return {'code': 403, 'message': '该申请已分配给其他审批人'}, 403
+
+            if action == 'approve':
+                conflict = _exclusive_conflict(
+                    application.asset_id,
+                    bool(application.is_exclusive),
+                    application.license_type
+                )
+                if conflict:
+                    return {
+                        'code': 409,
+                        'message': (
+                            f'授权冲突：该资产已有生效授权 '
+                            f'{conflict.license_code}，独家授权不能与其他授权并存'
+                        )
+                    }, 409
+
             application.adm2_reviewer_id = current_user_id
             application.adm2_review_time = datetime.utcnow()
             application.adm2_review_comment = comment
@@ -322,6 +359,32 @@ class LicenseApproveResource(Resource):
 
         if not acted:
             return {'code': 400, 'message': '当前状态不可审批，或不属于你的审批阶段'}, 400
+
+        asset_title = application.asset.title if application.asset else '资产'
+        if action == 'approve':
+            if application.status == 'approved':
+                event_type = 'license_approved'
+                event_title = '授权申请已通过'
+                event_desc = f'《{asset_title}》的授权已生效'
+                event_link = '/license/my?tab=approved'
+            else:
+                event_type = 'license_adm1_approved'
+                event_title = '授权申请已通过一级审批'
+                event_desc = f'《{asset_title}》等待二级复核'
+                event_link = '/license/my?tab=pending'
+        else:
+            event_type = 'license_rejected'
+            event_title = '授权申请未通过'
+            event_desc = f'《{asset_title}》 · {comment or "请查看申请详情"}'
+            event_link = '/license/my?tab=rejected'
+
+        add_notification_event(
+            application.applicant_id,
+            event_type,
+            event_title,
+            event_desc,
+            event_link
+        )
 
         try:
             db.session.commit()
@@ -442,6 +505,12 @@ class LicenseApprovedResource(Resource):
                 lic_dict['usage_purpose'] = application.usage_purpose
             contract = LicenseContract.query.filter_by(license_id=lic.id).first()
             lic_dict['contract_code'] = contract.contract_code if contract else None
+            lic_dict['can_revoke'] = bool(
+                _can_manage_license(user, lic) and lic.status != 'revoked'
+            )
+            lic_dict['can_renew'] = bool(
+                _can_manage_license(user, lic) and lic.status in ('active', 'expired')
+            )
             result.append(lic_dict)
 
         return {
@@ -529,3 +598,137 @@ class MyApplicationsResource(Resource):
                 'total': pagination.total
             }
         }
+
+
+def _can_manage_license(user, license_row):
+    """授权撤销/续期：授权方、资产所有者或授权管理员"""
+    if not user or not license_row:
+        return False
+    if user.role in ('admin', 'license_admin'):
+        return True
+    if user.id == license_row.licensor_id:
+        return True
+    asset = license_row.asset
+    return bool(asset and user.id in (
+        asset.owner_id, asset.creator_id, asset.uploader_id
+    ))
+
+
+class LicenseRevokeResource(Resource):
+    """撤销已生效授权"""
+
+    @jwt_required()
+    def post(self, license_id):
+        user = User.query.get(get_jwt_identity())
+        license_row = License.query.get(license_id)
+        if not license_row:
+            return {'code': 404, 'message': '授权不存在'}, 404
+        if not _can_manage_license(user, license_row):
+            return {'code': 403, 'message': '无权撤销该授权'}, 403
+        if license_row.status == 'revoked':
+            return {'code': 400, 'message': '授权已撤销'}, 400
+
+        data = request.get_json(silent=True) or {}
+        reason = (data.get('reason') or '').strip()
+        if len(reason) > 500:
+            return {'code': 400, 'message': '撤销原因不能超过 500 字'}, 400
+
+        license_row.status = 'revoked'
+        LicenseContract.query.filter_by(license_id=license_row.id).update(
+            {'status': 'terminated'}, synchronize_session=False
+        )
+        add_notification_event(
+            license_row.licensee_id,
+            'license_revoked',
+            '授权已被撤销',
+            (
+                f'{license_row.license_code}'
+                + (f' · {reason}' if reason else '')
+            ),
+            '/license/my'
+        )
+        db.session.commit()
+
+        OperationLog.log(
+            user=user,
+            action='license_revoke',
+            module='license',
+            description=(
+                f'撤销授权: {license_row.license_code}'
+                + (f'（{reason}）' if reason else '')
+            ),
+            target_type='license',
+            target_id=str(license_row.id),
+            request=request
+        )
+        return {
+            'code': 200,
+            'message': '授权已撤销',
+            'data': license_row.to_dict()
+        }, 200
+
+
+class LicenseRenewResource(Resource):
+    """授权续期"""
+
+    @jwt_required()
+    def post(self, license_id):
+        user = User.query.get(get_jwt_identity())
+        license_row = License.query.get(license_id)
+        if not license_row:
+            return {'code': 404, 'message': '授权不存在'}, 404
+        if not _can_manage_license(user, license_row):
+            return {'code': 403, 'message': '无权续期该授权'}, 403
+        if license_row.status == 'revoked':
+            return {'code': 400, 'message': '已撤销的授权不能续期'}, 400
+
+        data = request.get_json(silent=True) or {}
+        end_time_raw = str(data.get('end_time') or '').strip()
+        if not end_time_raw:
+            return {'code': 400, 'message': '请选择新的到期时间'}, 400
+        try:
+            end_time = datetime.fromisoformat(end_time_raw.replace('Z', '+00:00'))
+        except ValueError:
+            return {'code': 400, 'message': '到期时间格式无效'}, 400
+        if end_time.tzinfo is not None:
+            end_time = end_time.astimezone(timezone.utc).replace(tzinfo=None)
+
+        now = datetime.utcnow()
+        if end_time <= now:
+            return {'code': 400, 'message': '新的到期时间必须晚于当前时间'}, 400
+        if license_row.end_time and end_time <= license_row.end_time:
+            return {'code': 400, 'message': '新的到期时间必须晚于当前授权到期时间'}, 400
+
+        license_row.end_time = end_time
+        if license_row.status == 'expired':
+            license_row.status = 'active'
+        LicenseContract.query.filter_by(license_id=license_row.id).update(
+            {'expiry_time': end_time, 'status': 'effective'},
+            synchronize_session=False
+        )
+        add_notification_event(
+            license_row.licensee_id,
+            'license_renewed',
+            '授权已续期',
+            f'{license_row.license_code} · 有效期至 {end_time:%Y-%m-%d}',
+            '/license/my'
+        )
+        db.session.commit()
+
+        OperationLog.log(
+            user=user,
+            action='license_renew',
+            module='license',
+            description=(
+                f'授权续期: {license_row.license_code} -> '
+                f'{end_time:%Y-%m-%d}'
+            ),
+            target_type='license',
+            target_id=str(license_row.id),
+            request=request
+        )
+        return {
+            'code': 200,
+            'message': '授权已续期',
+            'data': license_row.to_dict()
+        }, 200

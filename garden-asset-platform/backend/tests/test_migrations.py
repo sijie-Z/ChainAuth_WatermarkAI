@@ -14,7 +14,7 @@ EXPECTED_TABLES = {
     'favorites', 'download_records', 'licenses', 'license_applications',
     'license_contracts', 'certificates', 'blockchain_transactions',
     'operation_logs', 'system_configs', 'notification_reads',
-    'alembic_version',
+    'notification_events', 'alembic_version',
 }
 
 
