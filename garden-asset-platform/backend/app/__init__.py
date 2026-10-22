@@ -57,6 +57,9 @@ def create_app(config_name='default'):
     # 初始化任务调度器
     init_scheduler(app)
 
+    # 启动异步任务 worker（水印/存证）
+    init_task_worker(app)
+
     # 创建必要的目录
     create_folders(app)
 
@@ -80,7 +83,8 @@ def create_app(config_name='default'):
             'redis': 'connected' if app.extensions.get('redis') else 'memory-fallback',
             'blockchain': 'enabled' if app.config.get('BLOCKCHAIN_ENABLED') else 'simulated',
             'ai': 'enabled' if app.config.get('AI_ENABLED') else 'disabled',
-            'scheduler': 'enabled' if app.config.get('SCHEDULER_ENABLED') else 'disabled'
+            'scheduler': 'enabled' if app.config.get('SCHEDULER_ENABLED') else 'disabled',
+            'task_worker': 'enabled' if app.config.get('TASK_WORKER_ENABLED') else 'disabled'
         }
         return jsonify(status), 200 if status['status'] == 'healthy' else 503
 
@@ -306,6 +310,15 @@ def register_api_resources(app):
     from app.resources.system import SystemStatusResource
     api.add_resource(SystemStatusResource, '/system/status')
 
+    # 异步任务（水印/存证）
+    from app.resources.tasks import (
+        TaskListResource, TaskResource, TaskRetryResource, TaskCancelResource
+    )
+    api.add_resource(TaskListResource, '/tasks')
+    api.add_resource(TaskResource, '/tasks/<string:task_id>')
+    api.add_resource(TaskRetryResource, '/tasks/<string:task_id>/retry')
+    api.add_resource(TaskCancelResource, '/tasks/<string:task_id>/cancel')
+
 
 def init_services(app):
     """初始化业务服务"""
@@ -328,6 +341,19 @@ def init_scheduler(app):
         _init(app)
     except Exception as e:
         logging.getLogger(__name__).warning(f'调度器初始化失败（非致命）: {e}')
+
+
+def init_task_worker(app):
+    """启动进程内异步任务 worker（可被 TASK_WORKER_ENABLED 关闭）"""
+    if app.config.get('TESTING') or not app.config.get('TASK_WORKER_ENABLED', False):
+        return
+    try:
+        import atexit
+        from app.services.task_service import start_worker, stop_worker
+        start_worker(app)
+        atexit.register(stop_worker)
+    except Exception as e:
+        logging.getLogger(__name__).warning(f'异步任务 worker 启动失败（非致命）: {e}')
 
 
 def create_folders(app):

@@ -185,10 +185,11 @@
                 v-if="canManage && !watermarkReady"
                 type="primary"
                 class="side-action"
-                :loading="watermarking"
+                :loading="watermarking || asset.watermark_status === 'pending'"
+                :disabled="asset.watermark_status === 'pending'"
                 @click="embedWatermark"
               >
-                嵌入水印
+                {{ asset.watermark_status === 'pending' ? '水印处理中…' : '嵌入水印' }}
               </el-button>
               <el-button
                 v-else-if="canManage"
@@ -198,7 +199,13 @@
               >
                 提取并校验水印
               </el-button>
-              <p v-else class="side-hint">仅上传者或资产管理员可操作水印。</p>
+              <p v-if="asset.watermark_status === 'pending'" class="side-hint task-hint">
+                后台水印任务处理中，可以离开此页，稍后回来查看结果。
+              </p>
+              <p v-if="asset.watermark_status === 'failed'" class="side-hint task-hint error">
+                上次水印任务失败，可重新提交。
+              </p>
+              <p v-else-if="!canManage" class="side-hint">仅上传者或资产管理员可操作水印。</p>
             </section>
 
             <section class="side-block">
@@ -224,11 +231,11 @@
                 v-if="canManage && asset.chain_status !== 'confirmed'"
                 type="primary"
                 class="side-action"
-                :disabled="!watermarkReady"
-                :loading="chaining"
+                :disabled="!watermarkReady || asset.chain_status === 'pending'"
+                :loading="chaining || asset.chain_status === 'pending'"
                 @click="registerChain"
               >
-                上链存证
+                {{ asset.chain_status === 'pending' ? '存证处理中…' : '上链存证' }}
               </el-button>
               <el-button v-else-if="canManage" class="side-action" @click="viewCertificate">
                 查看存证证书
@@ -236,6 +243,18 @@
               <p v-if="!canManage" class="side-hint">存证操作由上传者或资产管理员完成。</p>
               <p v-else-if="asset.chain_status !== 'confirmed' && !watermarkReady" class="side-hint">
                 上链前需先完成水印嵌入
+              </p>
+              <p v-else-if="asset.chain_status === 'pending'" class="side-hint task-hint">
+                后台存证任务处理中，完成后会自动签发当前版本证书。
+              </p>
+              <p v-else-if="asset.chain_status === 'failed'" class="side-hint task-hint error">
+                上次存证任务失败，可重新提交。
+              </p>
+              <p
+                v-if="canManage && !asset.certificate_id && hasHistoricalCertificates"
+                class="side-hint"
+              >
+                当前版本未存证；历史版本证书可在“版本”页签查看。
               </p>
             </section>
 
@@ -599,6 +618,23 @@
                 <p v-if="version.file_hash" class="version-hash" :title="version.file_hash">
                   SHA-256 {{ version.file_hash.slice(0, 16) }}…{{ version.file_hash.slice(-8) }}
                 </p>
+                <div v-if="version.certificate" class="version-proof">
+                  <el-icon><Link /></el-icon>
+                  <router-link
+                    :to="`/certificate/${version.certificate.certificate_id}`"
+                    class="version-proof-link"
+                  >
+                    {{ version.certificate.certificate_id }}
+                  </router-link>
+                  <el-tag
+                    size="small"
+                    :type="version.certificate.is_current ? 'success' : 'info'"
+                    effect="plain"
+                  >
+                    {{ version.certificate.is_current ? '当前版本存证' : '历史版本存证' }}
+                  </el-tag>
+                </div>
+                <p v-else class="version-proof muted">该版本未存证</p>
               </div>
               <div class="version-actions">
                 <el-button
@@ -668,14 +704,14 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive, onMounted, watch } from 'vue'
+import { ref, computed, reactive, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowLeft, Collection, CopyDocument, Document, Link, Picture, Star, StarFilled, Share,
   Download, UploadFilled
 } from '@element-plus/icons-vue'
-import { assetApi, collectionApi, licenseApi, watermarkApi, blockchainApi } from '@/api/modules'
+import { assetApi, collectionApi, licenseApi, watermarkApi, blockchainApi, taskApi } from '@/api/modules'
 import { useUserStore } from '@/stores/user'
 import { copyToClipboard, parseBackendDate } from '@/utils'
 import EvidenceChain from '@/components/common/EvidenceChain.vue'
@@ -734,6 +770,8 @@ const versionUploading = ref(false)
 const versionProgress = ref(0)
 const versionDownloadingId = ref(null)
 const versionRestoringId = ref(null)
+const activeTask = ref(null)
+let taskPollTimer = null
 
 const VERSION_ACCEPT = {
   image: 'image/*',
@@ -753,6 +791,9 @@ const currentVersionId = computed(() => {
 })
 const watermarkReady = computed(() =>
   ['embedded', 'verified'].includes(asset.value.watermark_status)
+)
+const hasHistoricalCertificates = computed(() =>
+  versions.value.some(version => Boolean(version.certificate))
 )
 const requiresWatermark = computed(() =>
   ['image', 'vector'].includes(asset.value.asset_type)
@@ -1297,11 +1338,83 @@ function onRelatedImageError(event) {
   img.src = placeholderImage('image')
 }
 
+function stopTaskPolling() {
+  if (taskPollTimer) {
+    clearTimeout(taskPollTimer)
+    taskPollTimer = null
+  }
+}
+
+function pollTask(taskId, { interval = 1500, timeout = 120000 } = {}) {
+  return new Promise((resolve) => {
+    const startedAt = Date.now()
+    const tick = async () => {
+      if (Date.now() - startedAt > timeout) {
+        stopTaskPolling()
+        resolve(activeTask.value || { status: 'timeout' })
+        return
+      }
+      try {
+        const response = await taskApi.get(taskId)
+        const task = response.data?.data
+        if (task) {
+          activeTask.value = task
+          if (['succeeded', 'failed', 'cancelled'].includes(task.status)) {
+            stopTaskPolling()
+            resolve(task)
+            return
+          }
+        }
+      } catch {
+        // 网络抖动时继续轮询，最终由超时兜底
+      }
+      taskPollTimer = setTimeout(tick, interval)
+    }
+    tick()
+  })
+}
+
+async function refreshAssetState() {
+  if (!asset.value.id) return
+  try {
+    const response = await assetApi.getDetail(asset.value.id)
+    if (response.data?.code === 200) {
+      asset.value = response.data.data
+    }
+  } catch {
+    // 保留当前展示，证据链与版本列表仍会尝试刷新
+  }
+  await Promise.all([loadVersions(), loadEvidence()])
+}
+
+async function awaitAcceptedTask(response, startMessage) {
+  const payload = response.data?.data || {}
+  if (!payload.task) return
+  activeTask.value = payload.task
+  ElMessage.success(startMessage)
+  if (!payload.worker_enabled) {
+    ElMessage.warning('任务已排队，但后台 worker 未启用；请运行 flask tasks run')
+    return
+  }
+  const task = await pollTask(payload.task.id)
+  await refreshAssetState()
+  if (task.status === 'succeeded') {
+    ElMessage.success('后台任务已完成')
+  } else if (task.status === 'timeout') {
+    ElMessage.info('任务仍在处理，可以稍后刷新查看')
+  } else {
+    ElMessage.error(task.error_message || '后台任务失败')
+  }
+}
+
 async function embedWatermark() {
   watermarking.value = true
   try {
-    const response = await watermarkApi.embed(asset.value.id)
-    if (response.data.code === 200) {
+    const response = await watermarkApi.embed(asset.value.id, { async: true })
+    if (response.data.code === 202) {
+      asset.value.watermark_status = 'pending'
+      await awaitAcceptedTask(response, '水印任务已提交')
+    } else if (response.data.code === 200) {
       ElMessage.success('水印嵌入成功')
       loadAsset()
     }
@@ -1329,8 +1442,11 @@ async function extractWatermark() {
 async function registerChain() {
   chaining.value = true
   try {
-    const response = await blockchainApi.register(asset.value.id)
-    if (response.data.code === 200) {
+    const response = await blockchainApi.register(asset.value.id, { async: true })
+    if (response.data.code === 202) {
+      asset.value.chain_status = 'pending'
+      await awaitAcceptedTask(response, '存证任务已提交')
+    } else if (response.data.code === 200) {
       ElMessage.success('存证成功')
       loadAsset()
     }
@@ -1340,6 +1456,8 @@ async function registerChain() {
     chaining.value = false
   }
 }
+
+onBeforeUnmount(stopTaskPolling)
 
 function viewCertificate() {
   router.push(`/certificate/${asset.value.certificate_id}`)
@@ -2082,6 +2200,35 @@ watch(() => route.query.tab, tab => {
   color: $text-placeholder;
 }
 
+.version-proof {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: $text-secondary;
+
+  .el-icon {
+    color: $primary-color;
+  }
+
+  &.muted {
+    margin: 6px 0 0;
+    color: $text-placeholder;
+  }
+}
+
+.version-proof-link {
+  font-family: $font-mono;
+  color: $primary-dark;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
 .version-actions {
   flex: 0 0 auto;
   display: flex;
@@ -2278,6 +2425,14 @@ watch(() => route.query.tab, tab => {
   font-size: $font-size-xs;
   line-height: 1.6;
   color: $text-placeholder;
+}
+
+.task-hint {
+  color: $primary-dark;
+
+  &.error {
+    color: $accent-color;
+  }
 }
 
 .side-actions {

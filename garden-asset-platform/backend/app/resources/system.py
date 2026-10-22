@@ -10,6 +10,7 @@ from flask_restful import Resource
 from app.models import User
 from app.services.ai_service import ai_service
 from app.services.blockchain_service import blockchain_service
+from app.services.task_service import task_counts
 
 ADMIN_ROLES = ('admin', 'asset_admin', 'license_admin', 'adm1', 'adm2')
 
@@ -27,6 +28,8 @@ class SystemStatusResource(Resource):
         chain_enabled = bool(getattr(blockchain_service, 'enabled', False))
         redis_client = current_app.extensions.get('redis')
         scheduler_enabled = bool(current_app.config.get('SCHEDULER_ENABLED', False))
+        worker_enabled = bool(current_app.config.get('TASK_WORKER_ENABLED', False))
+        counts = task_counts()
 
         return {
             'code': 200,
@@ -67,6 +70,16 @@ class SystemStatusResource(Resource):
                         if scheduler_enabled else
                         '备份/过期检查需要手动执行或由外部 cron 触发'
                     )
+                },
+                'tasks': {
+                    'enabled': worker_enabled,
+                    'label': '异步 worker 运行中' if worker_enabled else '异步 worker 未启用',
+                    'description': (
+                        '水印与存证任务由后台 worker 领取执行'
+                        if worker_enabled else
+                        '任务会留在队列，需运行 flask tasks run 或开启 TASK_WORKER_ENABLED'
+                    ),
+                    'counts': counts
                 }
             }
         }, 200

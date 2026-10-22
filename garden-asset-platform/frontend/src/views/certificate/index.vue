@@ -32,6 +32,16 @@
           <div class="cert-id">证书编号：{{ certificate.certificate_id }}</div>
         </div>
 
+        <el-alert
+          v-if="certificate.hasNewerVersion"
+          class="cert-version-alert no-print"
+          type="warning"
+          :closable="false"
+          show-icon
+          title="该证书对应历史版本"
+          :description="`本证书签发给 v${certificate.versionNo || '未知'}，资产当前为 v${certificate.currentVersionNo}。当前版本需要重新水印并存证后才会签发新证书。`"
+        />
+
         <div class="cert-divider" aria-hidden="true"></div>
 
         <!-- 存证信息 -->
@@ -49,6 +59,24 @@
             <div class="info-item full">
               <span class="info-label">资产标题</span>
               <span class="info-value">{{ certificate.asset_title || '-' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">资产版本</span>
+              <span class="info-value">
+                v{{ certificate.versionNo || '未记录' }}
+                <el-tag
+                  v-if="certificate.versionNo"
+                  size="small"
+                  :type="certificate.hasNewerVersion ? 'info' : 'success'"
+                  effect="plain"
+                >
+                  {{ certificate.hasNewerVersion ? '历史版本' : '当前版本' }}
+                </el-tag>
+              </span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">证书编号</span>
+              <span class="info-value mono">{{ certificate.certificate_id }}</span>
             </div>
             <div class="info-item full">
               <span class="info-label">文件哈希 (SHA256)</span>
@@ -202,7 +230,13 @@ async function loadCertificate() {
         asset_title: assetData.title || certificateData.asset_title || '',
         owner_name: certificateData.creator_name || assetData.owner_name || '',
         confirmed_at: certificateData.confirmed_at || certificateData.created_at,
-        right_type: getOwnershipName(certificateData.ownership_type)
+        right_type: getOwnershipName(certificateData.ownership_type),
+        versionNo: payload.version?.version_no ?? certificateData.version_no,
+        currentVersionNo: payload.current_version_no,
+        hasNewerVersion: payload.has_newer_version === true,
+        isCurrentVersion: payload.is_current_version !== false,
+        certificateCount: payload.certificate_count || 1,
+        versionFileName: payload.version?.file_name || ''
       }
     } else {
       certificate.value = {}
@@ -340,6 +374,10 @@ onMounted(() => {
   color: $text-secondary;
 }
 
+.cert-version-alert {
+  margin-bottom: 20px;
+}
+
 .cert-divider {
   margin: 28px 0;
   border-top: 1px solid $border-color;
@@ -384,6 +422,12 @@ onMounted(() => {
     font-size: 13px;
     font-weight: 500;
     color: $text-primary;
+
+    &.mono {
+      font-family: $font-mono;
+      font-size: 12px;
+      word-break: break-all;
+    }
 
     &.hash {
       font-family: $font-mono;

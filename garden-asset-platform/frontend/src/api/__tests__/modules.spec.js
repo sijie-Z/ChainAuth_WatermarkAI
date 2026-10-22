@@ -10,7 +10,7 @@ vi.mock('@/api/index', () => ({
 }))
 
 import api from '@/api/index'
-import { assetApi, licenseApi, userApi } from '@/api/modules'
+import { assetApi, blockchainApi, licenseApi, taskApi, userApi } from '@/api/modules'
 
 describe('api modules', () => {
   beforeEach(() => {
@@ -53,6 +53,23 @@ describe('api modules', () => {
     userApi.create(payload)
 
     expect(api.post).toHaveBeenCalledWith('/users', payload)
+  })
+
+  it('blockchainApi.register forwards the async option', () => {
+    blockchainApi.register('asset-1', { async: true })
+
+    expect(api.post).toHaveBeenCalledWith(
+      '/blockchain/register',
+      { asset_id: 'asset-1', async: true }
+    )
+  })
+
+  it('taskApi retries and cancels background tasks', () => {
+    taskApi.retry('task-1')
+    taskApi.cancel('task-1')
+
+    expect(api.post).toHaveBeenCalledWith('/tasks/task-1/retry')
+    expect(api.post).toHaveBeenCalledWith('/tasks/task-1/cancel')
   })
 
   it('keeps the existing method signatures', () => {

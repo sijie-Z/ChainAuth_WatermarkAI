@@ -241,7 +241,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Files, UploadFilled } from '@element-plus/icons-vue'
-import { assetApi, gardenApi, watermarkApi, blockchainApi } from '@/api/modules'
+import { assetApi, gardenApi, watermarkApi, blockchainApi, taskApi } from '@/api/modules'
 import { formatFileSize } from '@/utils'
 
 const router = useRouter()
@@ -446,6 +446,26 @@ function errorText(error, fallback) {
   return error.response?.data?.message || error.message || fallback
 }
 
+async function waitForTask(taskId, onProgress) {
+  for (let attempt = 0; attempt < 160; attempt += 1) {
+    await new Promise(resolve => setTimeout(resolve, 1500))
+    let task = null
+    try {
+      const response = await taskApi.get(taskId)
+      task = response.data?.data
+    } catch {
+      continue
+    }
+    if (!task) continue
+    onProgress?.(task)
+    if (task.status === 'succeeded') return task
+    if (['failed', 'cancelled'].includes(task.status)) {
+      throw new Error(task.error_message || '后台任务失败')
+    }
+  }
+  throw new Error('任务处理超时，请稍后在资产详情页查看')
+}
+
 async function processItem(item) {
   item.status = 'uploading'
   item.progress = 1
@@ -492,7 +512,17 @@ async function processItem(item) {
       item.progress = 65
       recalcOverall()
       try {
-        await watermarkApi.embed(assetId)
+        const response = await watermarkApi.embed(assetId, { async: true })
+        if (response.data?.code === 202) {
+          const taskData = response.data.data || {}
+          if (!taskData.worker_enabled) {
+            throw new Error('后台 worker 未启用，任务已排队')
+          }
+          await waitForTask(taskData.task_id, (task) => {
+            item.progress = 65 + Math.round((task.progress || 0) * 0.15)
+            recalcOverall()
+          })
+        }
         item.watermarkReady = true
         item.progress = 80
       } catch (error) {
@@ -512,7 +542,17 @@ async function processItem(item) {
       item.progress = 85
       recalcOverall()
       try {
-        await blockchainApi.register(assetId)
+        const response = await blockchainApi.register(assetId, { async: true })
+        if (response.data?.code === 202) {
+          const taskData = response.data.data || {}
+          if (!taskData.worker_enabled) {
+            throw new Error('后台 worker 未启用，任务已排队')
+          }
+          await waitForTask(taskData.task_id, (task) => {
+            item.progress = 85 + Math.round((task.progress || 0) * 0.11)
+            recalcOverall()
+          })
+        }
         item.progress = 96
       } catch (error) {
         item.warning = [item.warning, `上链存证失败：${errorText(error, '可稍后在资产详情页重试')}`]

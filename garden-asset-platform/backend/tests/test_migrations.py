@@ -14,7 +14,7 @@ EXPECTED_TABLES = {
     'favorites', 'download_records', 'licenses', 'license_applications',
     'license_contracts', 'certificates', 'blockchain_transactions',
     'operation_logs', 'system_configs', 'notification_reads',
-    'notification_events', 'alembic_version',
+    'notification_events', 'async_tasks', 'alembic_version',
 }
 
 
@@ -51,3 +51,24 @@ def test_flask_db_upgrade_creates_full_schema(tmp_path):
 
     missing = EXPECTED_TABLES - tables
     assert not missing, f'missing tables: {sorted(missing)}'
+
+    connection = sqlite3.connect(db_path)
+    try:
+        certificate_columns = {
+            row[1] for row in connection.execute('PRAGMA table_info(certificates)')
+        }
+        assert {'version_id', 'version_no'} <= certificate_columns
+        for index in connection.execute('PRAGMA index_list(certificates)').fetchall():
+            name, unique = index[1], index[2]
+            if not unique:
+                continue
+            columns = [
+                row[2] for row in connection.execute(
+                    f'PRAGMA index_info("{name}")'
+                )
+            ]
+            assert columns != ['asset_id'], (
+                'certificates.asset_id 仍带唯一约束，无法按版本签发多份证书'
+            )
+    finally:
+        connection.close()

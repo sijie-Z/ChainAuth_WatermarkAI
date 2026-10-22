@@ -14,7 +14,8 @@
 |------|------|----------|
 | 资产管理 | 数字资产上传、浏览、分类、检索、下载 | Vue3 + Flask + MinIO |
 | 数字水印 | DCT + QIM 盲水印嵌入与提取，抗 JPEG 压缩、噪声与 50%–150% 缩放 | Python OpenCV + NumPy |
-| 区块链存证 | 文件哈希与水印编号生成存证记录与证书；默认本地模拟，可配置接入 FISCO BCOS | FISCO BCOS + Python SDK（可选） |
+| 区块链存证 | 按文件版本签发存证证书，支持历史版本证书追溯；默认本地模拟，可配置接入 FISCO BCOS | FISCO BCOS + Python SDK（可选） |
+| 异步任务 | 水印/存证任务持久化入队，后台 worker 执行，支持进度查询、失败重试与超时对账 | Flask + 数据库队列 + 进程内/独立 worker |
 | AI 辅助（可选） | 以图搜图、侵权辅助检测、智能问答；默认关闭，需安装模型与 API Key | CLIP + Milvus + 智谱 GLM（可选） |
 | 授权分发 | 在线申请→双重审批→合同管理→下载控制 | Flask + JWT |
 | 协作与版本 | 评论/回复、影像区域标注、版本上传/恢复 | Vue3 + Flask |
@@ -28,6 +29,8 @@
                       │                    ├──→ Redis (缓存/限流)
                       │                    ├──→ MinIO (可选对象存储，当前默认本地磁盘)
                       │                    └──→ Milvus (向量检索)
+                      │
+                      ├──→ 异步任务 worker（水印/存证）──→ 同一数据库/上传目录
                       │
                       └──→ FISCO BCOS (区块链存证)
 ```
@@ -59,8 +62,8 @@
 cp .env.example .env
 # 编辑 .env，填入数据库密码等 Docker Compose 变量
 
-# 启动所有服务（后端、前端、PostgreSQL、Redis、MinIO）
-docker-compose up -d
+# 启动所有服务（后端、任务 worker、前端、PostgreSQL、Redis、MinIO）
+docker compose up -d
 
 # 初始化数据库
 docker exec garden-backend python scripts/init_db.py
@@ -113,7 +116,7 @@ FLASK_APP=run.py flask db upgrade
 ### 运行测试
 
 ```bash
-# 后端测试（261个用例，覆盖API/模型/安全/迁移）
+# 后端测试（274个用例，覆盖API/模型/安全/迁移/异步任务/版本证书）
 cd backend && python -m pytest tests/ -v
 
 # 前端生产构建
@@ -145,7 +148,7 @@ garden-asset-platform/
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
 │   ├── migrations/                # Alembic 迁移（baseline + versions）
-│   ├── tests/                     # pytest测试（261个用例）
+│   ├── tests/                     # pytest测试（274个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -195,7 +198,7 @@ garden-asset-platform/
 | GET | `/api/assets/:id/thumbnail` | 资产缩略图（`?size=card` 返回列表卡片图） |
 | GET | `/api/assets/:id/related` | 同园林相关资产 |
 | GET | `/api/assets/:id/evidence` | 资产证据链（上传/水印/存证/证书/发布/授权/下载） |
-| GET/POST | `/api/assets/:id/versions` | 版本历史 / 上传新版本（文件替换并重置水印） |
+| GET/POST | `/api/assets/:id/versions` | 版本历史（含各版本证书）/ 上传新版本（文件替换并重置水印与当前存证） |
 | GET | `/api/assets/:id/versions/:version_id/download` | 下载指定历史版本 |
 | POST | `/api/assets/:id/versions/:version_id/restore` | 恢复历史版本（生成新版本，不删除历史） |
 | GET/POST | `/api/assets/:id/comments` | 评论列表 / 发表评论或回复 |
@@ -223,7 +226,7 @@ garden-asset-platform/
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/watermark/embed` | 嵌入水印 |
+| POST | `/api/watermark/embed` | 嵌入水印（`async: true` 时入队并返回任务 ID） |
 | POST | `/api/watermark/extract` | 提取水印 |
 | POST | `/api/watermark/verify` | 验证水印ID |
 | POST | `/api/watermark/trace` | 图片溯源查询 |
@@ -233,11 +236,22 @@ garden-asset-platform/
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/blockchain/register` | 资产上链存证 |
+| POST | `/api/blockchain/register` | 资产上链存证（按当前文件版本签发证书；`async: true` 时入队） |
 | POST | `/api/blockchain/verify` | 链上验证 |
-| GET | `/api/blockchain/certificate/:id` | 获取存证证书 |
+| GET | `/api/blockchain/certificate/:id` | 获取存证证书（含对应版本与是否为当前版本） |
 | GET | `/api/blockchain/history/:id` | 存证历史追溯 |
 | GET | `/api/blockchain/status` | 区块链连接状态 |
+
+### 异步任务
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/tasks` | 任务列表（`asset_id`/`status` 筛选；非管理员仅看自己的任务） |
+| GET | `/api/tasks/:id` | 任务详情与进度 |
+| POST | `/api/tasks/:id/retry` | 重试失败/已取消任务 |
+| POST | `/api/tasks/:id/cancel` | 取消排队中的任务 |
+
+> 生产部署由 `worker` 容器执行 `flask tasks run`；开发环境默认启动进程内 worker。可用 `flask tasks list` 与 `flask tasks reconcile` 排查队列。
 
 ### AI能力
 
@@ -300,8 +314,14 @@ Docker 部署见 `garden-asset-platform/.env.example`；本地开发见 `backend
 | `BAIDU_OCR_API_KEY` | 百度OCR密钥 | - |
 | `ADMIN_INITIAL_PASSWORD` | 初始化脚本创建 admin 时使用的密码 | `admin123`（仅演示） |
 | `TRUST_PROXY_HEADERS` | 是否信任反向代理的 `X-Forwarded-For`（仅在后端不直接暴露时开启） | `false` |
+| `TASK_WORKER_ENABLED` | 是否在 API 进程内启动异步任务 worker（开发默认开，生产建议关） | `false` |
+| `TASK_MAX_ATTEMPTS` | 异步任务最大尝试次数 | `3` |
+| `TASK_STUCK_TIMEOUT_MINUTES` | 多久未完成的 running 任务视为超时并重新排队 | `15` |
+| `TASK_WORKER_POLL_INTERVAL` | worker 空闲轮询间隔（秒） | `1.0` |
 
 > 多 worker 部署（4 个 gunicorn worker）默认关闭任务调度器，避免备份/授权过期任务重复执行。如需启用，设置 `SCHEDULER_ENABLED=true`，并确保只运行一个调度进程（或改用外部 cron）。
+
+> 水印与存证任务默认进入 `async_tasks` 表，由 `docker compose` 中的 `worker` 服务执行；开发环境由 API 进程内 worker 执行。任务领取使用条件更新，多 worker 并发也不会重复处理。
 
 > 文件默认保存在 `backend/uploads/`（Docker 中为挂载卷）。`docker-compose.yml` 中的 MinIO 服务为可选组件，当前版本尚未接入对象存储后端。
 

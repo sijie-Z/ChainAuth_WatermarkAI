@@ -125,10 +125,27 @@ class Config:
     # 任务调度器：多 worker 部署（gunicorn 4 workers）会各自启动一份，默认关闭避免重复执行
     SCHEDULER_ENABLED = os.environ.get('SCHEDULER_ENABLED', 'false').lower() == 'true'
 
+    # 异步任务队列：开发环境默认启动进程内 worker；
+    # 生产环境建议保持关闭并用 `flask tasks run` 单独跑 worker，
+    # 避免多个 gunicorn worker 各自轮询（任务领取有原子保护，但会浪费连接）。
+    TASK_WORKER_ENABLED = os.environ.get(
+        'TASK_WORKER_ENABLED', 'false'
+    ).lower() == 'true'
+    TASK_WORKER_POLL_INTERVAL = float(
+        os.environ.get('TASK_WORKER_POLL_INTERVAL', '1.0')
+    )
+    TASK_MAX_ATTEMPTS = int(os.environ.get('TASK_MAX_ATTEMPTS', '3'))
+    TASK_STUCK_TIMEOUT_MINUTES = int(
+        os.environ.get('TASK_STUCK_TIMEOUT_MINUTES', '15')
+    )
+
 
 class DevelopmentConfig(Config):
     """开发环境配置"""
     DEBUG = True
+    TASK_WORKER_ENABLED = os.environ.get(
+        'TASK_WORKER_ENABLED', 'true'
+    ).lower() == 'true'
 
 
 class ProductionConfig(Config):
@@ -152,6 +169,7 @@ class TestingConfig(Config):
     AI_ENABLED = False
     BLOCKCHAIN_ENABLED = False
     SCHEDULER_ENABLED = False
+    TASK_WORKER_ENABLED = False
 
 
 config = {

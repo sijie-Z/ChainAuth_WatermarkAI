@@ -21,7 +21,7 @@ class WatermarkEmbedResource(Resource):
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
 
-        data = request.get_json()
+        data = request.get_json() or {}
         asset_id = data.get('asset_id')
 
         if not asset_id:
@@ -35,6 +35,28 @@ class WatermarkEmbedResource(Resource):
         is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
         if not is_owner and user.role not in ('admin', 'asset_admin'):
             return {'code': 403, 'message': '无权限操作'}, 403
+
+        if asset.watermark_status in ('embedded', 'verified'):
+            return {'code': 400, 'message': '资产已嵌入水印'}, 400
+        if asset.asset_type not in ('image', 'vector'):
+            return {'code': 400, 'message': f'不支持的资产类型: {asset.asset_type}'}, 400
+
+        # 异步模式：任务落库后立即返回，由 worker 执行
+        if data.get('async') or request.args.get('async') in ('1', 'true', 'yes'):
+            from app.services import task_service
+            task, created = task_service.enqueue_task('watermark_embed', asset, user)
+            return {
+                'code': 202,
+                'message': '水印任务已提交' if created else '已有相同水印任务在处理',
+                'data': {
+                    'task_id': task.id,
+                    'created': created,
+                    'worker_enabled': bool(
+                        current_app.config.get('TASK_WORKER_ENABLED', False)
+                    ),
+                    'task': task.to_dict()
+                }
+            }, 202
 
         # 调用服务嵌入水印
         result = WatermarkService.embed_watermark(asset, user)
@@ -185,9 +207,17 @@ class WatermarkTraceResource(Resource):
                 ).first()
 
                 if asset:
-                    # 查找区块链存证记录
+                    # 查找当前版本的区块链存证证书；历史证书不再作为当前证据
                     from app.models.blockchain import Certificate
-                    certificate = Certificate.query.filter_by(asset_id=asset.id).first()
+                    certificate = (
+                        Certificate.query.filter_by(
+                            certificate_id=asset.certificate_id
+                        ).first()
+                        if asset.certificate_id else
+                        Certificate.query.filter_by(
+                            asset_id=asset.id
+                        ).order_by(Certificate.id.desc()).first()
+                    )
 
                     return {
                         'code': 200,
@@ -201,6 +231,7 @@ class WatermarkTraceResource(Resource):
                             'created_at': asset.created_at.isoformat() if asset.created_at else None,
                             'nc_value': result.get('nc_value', 0),
                             'certificate_id': certificate.certificate_id if certificate else None,
+                            'version_no': certificate.version_no if certificate else None,
                             'tx_hash': certificate.tx_hash if certificate else None,
                             'confirmed_at': certificate.created_at.isoformat() if certificate and certificate.created_at else None
                         }

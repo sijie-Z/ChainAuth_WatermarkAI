@@ -84,6 +84,21 @@ def init_scheduler(app):
             db.session.commit()
             app.logger.info(f'已清理{deleted}条过期 Token 记录')
 
+    @scheduler.scheduled_job('interval', minutes=5)
+    def reconcile_async_tasks():
+        """每 5 分钟回收超时的异步任务"""
+        with app.app_context():
+            try:
+                from app.services.task_service import reconcile_stuck
+                result = reconcile_stuck()
+                if result['requeued'] or result['failed']:
+                    app.logger.warning(
+                        f"异步任务对账: 重新排队 {result['requeued']}, "
+                        f"失败 {result['failed']}"
+                    )
+            except Exception as exc:
+                app.logger.error(f'异步任务对账失败: {exc}')
+
     scheduler.start()
     app.logger.info('任务调度器已启动')
 

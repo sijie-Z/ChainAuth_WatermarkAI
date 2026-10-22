@@ -367,6 +367,17 @@ const systemItems = computed(() => {
       label: data.scheduler?.label || '未知',
       description: data.scheduler?.description || '',
       type: data.scheduler?.enabled ? 'success' : 'info'
+    },
+    {
+      key: 'tasks',
+      name: '异步任务',
+      label: data.tasks?.label || '未知',
+      description: data.tasks
+        ? `排队 ${data.tasks.counts?.queued || 0} · 处理中 ${data.tasks.counts?.running || 0} · 失败 ${data.tasks.counts?.failed || 0}`
+        : '',
+      type: (data.tasks?.counts?.failed || 0) > 0
+        ? 'danger'
+        : (data.tasks?.enabled ? 'success' : 'warning')
     }
   ]
 })

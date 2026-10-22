@@ -190,6 +190,12 @@ const routes = [
         meta: { title: '存证管理', roles: ['admin', 'asset_admin'] }
       },
       {
+        path: 'tasks',
+        name: 'AdminTasks',
+        component: page(() => import('@/views/admin/tasks.vue'), false),
+        meta: { title: '任务队列', roles: ['admin', 'asset_admin'] }
+      },
+      {
         path: 'gardens',
         name: 'AdminGardens',
         component: page(() => import('@/views/admin/gardens.vue'), false),

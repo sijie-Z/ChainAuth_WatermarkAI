@@ -118,12 +118,23 @@ export const watermarkApi = {
 
 // 区块链相关API
 export const blockchainApi = {
-  register: (assetId) => api.post('/blockchain/register', { asset_id: assetId }),
+  register: (assetId, options = {}) => api.post(
+    '/blockchain/register',
+    { asset_id: assetId, ...options }
+  ),
   verify: (assetId) => api.get(`/blockchain/verify/${assetId}`),
   verifyByWatermark: (watermarkId) => api.post('/blockchain/verify', { watermark_id: watermarkId }),
   getCertificate: (certificateId) => api.get(`/blockchain/certificate/${certificateId}`),
   getHistory: (assetId) => assetId ? api.get(`/blockchain/history/${assetId}`) : api.get('/blockchain/history'),
   getStatus: () => api.get('/blockchain/status')
+}
+
+// 异步任务（水印/存证）
+export const taskApi = {
+  get: (taskId) => api.get(`/tasks/${taskId}`, { silent: true }),
+  list: (params) => api.get('/tasks', { params, silent: true }),
+  retry: (taskId) => api.post(`/tasks/${taskId}/retry`),
+  cancel: (taskId) => api.post(`/tasks/${taskId}/cancel`)
 }
 
 // AI相关API

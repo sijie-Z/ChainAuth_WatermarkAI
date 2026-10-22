@@ -216,7 +216,7 @@ import { useUserStore } from '@/stores/user'
 import {
   DataLine, Picture, Stamp, Document, Link, User, Setting,
   Menu, HomeFilled, ArrowDown, Expand, SwitchButton,
-  FullScreen, Close, Reading, Bell, Download, Place
+  FullScreen, Close, Reading, Bell, Download, Place, Timer
 } from '@element-plus/icons-vue'
 import { notificationApi } from '@/api/modules'
 
@@ -259,6 +259,7 @@ const menuItems = shallowRef([
   { path: '/admin/assets', label: '资产管理', icon: Picture, roles: ASSET_ROLES },
   { path: '/admin/watermark', label: '水印管理', icon: Stamp, roles: WATERMARK_ROLES },
   { path: '/admin/blockchain', label: '存证管理', icon: Link, roles: WATERMARK_ROLES },
+  { path: '/admin/tasks', label: '任务队列', icon: Timer, roles: WATERMARK_ROLES },
   {
     path: 'license',
     label: '授权审批',

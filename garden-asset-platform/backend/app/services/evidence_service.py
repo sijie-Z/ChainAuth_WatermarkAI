@@ -13,7 +13,7 @@ from datetime import datetime
 
 from flask import current_app
 
-from app.models.asset import Asset
+from app.models.asset import Asset, AssetVersion
 from app.models.blockchain import BlockchainTransaction, Certificate
 from app.models.extra import DownloadRecord
 from app.models.license import License
@@ -91,21 +91,45 @@ def _watermark_item(asset):
     )
 
 
+def _current_version(asset):
+    return AssetVersion.query.filter_by(asset_id=asset.id).order_by(
+        AssetVersion.version_no.desc()
+    ).first()
+
+
+def _current_certificate(asset):
+    if asset.certificate_id:
+        certificate = Certificate.query.filter_by(
+            certificate_id=asset.certificate_id
+        ).first()
+        if certificate:
+            return certificate
+    return Certificate.query.filter_by(asset_id=asset.id).order_by(
+        Certificate.id.desc()
+    ).first()
+
+
 def _certificate_outdated(asset, certificate):
-    """资产已有版本记录，且证书指纹与当前文件不一致时，视为证书对应历史版本"""
-    if not certificate or not certificate.file_hash:
+    """证书是否对应历史版本：优先按版本绑定判断，旧数据退回文件指纹比对"""
+    if not certificate:
+        return False
+    version = _current_version(asset)
+    if certificate.version_id:
+        return not version or certificate.version_id != version.id
+    if not certificate.file_hash:
         return False
     if certificate.file_hash == asset.file_hash:
         return False
-    return asset.versions.count() > 0
+    return version is not None
 
 
 def _chain_item(asset):
     tx = BlockchainTransaction.query.filter_by(
         asset_id=asset.id, tx_type='asset_register'
     ).order_by(BlockchainTransaction.id.desc()).first()
-    certificate = Certificate.query.filter_by(asset_id=asset.id).first()
+    certificate = _current_certificate(asset)
     file_changed = _certificate_outdated(asset, certificate)
+    certificate_count = Certificate.query.filter_by(asset_id=asset.id).count()
 
     status = asset.chain_status or 'none'
     if status == 'confirmed':
@@ -117,10 +141,13 @@ def _chain_item(asset):
             description = '文件指纹与水印编号已写入链上存证记录'
     elif status == 'pending':
         state = STATE_PENDING
-        description = '存证交易等待确认'
+        description = '存证任务排队或处理中'
     elif status == 'failed':
         state = STATE_WARNING
         description = '存证失败，可重新提交'
+    elif certificate_count:
+        state = STATE_WARNING
+        description = '当前版本尚未存证，历史版本存证记录仍保留在版本历史'
     else:
         state = STATE_MISSING
         description = '尚未上链存证'
@@ -132,6 +159,10 @@ def _chain_item(asset):
         fields['区块高度'] = str(tx.block_number)
     if asset.chain_timestamp:
         fields['确认时间'] = asset.chain_timestamp.strftime('%Y-%m-%d %H:%M:%S')
+    if certificate and certificate.version_no:
+        fields['存证版本'] = f'v{certificate.version_no}'
+    if certificate_count > 1:
+        fields['历史证书'] = f'{certificate_count} 份'
     if file_changed and certificate and certificate.file_hash:
         fields['存证文件指纹'] = certificate.file_hash
     if not current_app.config.get('BLOCKCHAIN_ENABLED', False):
@@ -142,15 +173,19 @@ def _chain_item(asset):
 
 
 def _certificate_item(asset):
-    certificate = Certificate.query.filter_by(asset_id=asset.id).first()
+    certificate = _current_certificate(asset)
     if not certificate:
         return _item(
             'certificate', '存证证书', STATE_MISSING,
             description='存证确认后才会签发证书'
         )
 
+    outdated = _certificate_outdated(asset, certificate)
     expired = bool(certificate.valid_until and certificate.valid_until <= datetime.utcnow())
-    if certificate.status == 'valid' and not expired:
+    if outdated:
+        state = STATE_WARNING
+        description = '当前版本未存证，以下为历史版本证书；重新水印存证后会签发新证书'
+    elif certificate.status == 'valid' and not expired:
         state = STATE_DONE
         description = '证书在有效期内'
     elif expired:
@@ -163,17 +198,14 @@ def _certificate_item(asset):
         state = STATE_WARNING
         description = '证书当前不可用'
 
-    # 当前文件已被新版本替换时，证书仍指向历史版本，明确提示但不隐藏旧证据
-    if _certificate_outdated(asset, certificate):
-        state = STATE_WARNING
-        description = '当前文件已更新，证书对应历史版本'
-
     fields = {
         '证书编号': certificate.certificate_id,
         '状态': {'valid': '有效', 'revoked': '已撤销', 'expired': '已过期'}.get(
             certificate.status, certificate.status or '未知'
         )
     }
+    if certificate.version_no:
+        fields['对应版本'] = f'v{certificate.version_no}'
     if certificate.valid_until:
         fields['有效期至'] = certificate.valid_until.strftime('%Y-%m-%d')
     if certificate.file_hash:
@@ -324,8 +356,29 @@ def build_evidence(asset, include_private=False):
         label = '尚未存证'
         description = '该资产还未完成水印与链上存证。'
 
+    current_version = _current_version(asset)
+    certificates = Certificate.query.filter_by(asset_id=asset.id).order_by(
+        Certificate.id.desc()
+    ).all()
+    certificate_history = [
+        {
+            'certificate_id': certificate.certificate_id,
+            'version_id': certificate.version_id,
+            'version_no': certificate.version_no,
+            'tx_hash': certificate.tx_hash,
+            'status': certificate.status,
+            'created_at': _iso(certificate.created_at),
+            'is_current': bool(
+                current_version and certificate.version_id == current_version.id
+            ),
+            'link': f'/certificate/{certificate.certificate_id}'
+        }
+        for certificate in certificates
+    ]
+
     return {
         'items': items,
+        'certificates': certificate_history,
         'summary': {
             'level': level,
             'label': label,
@@ -335,6 +388,8 @@ def build_evidence(asset, include_private=False):
             'chain': states.get('chain'),
             'certificate': states.get('certificate'),
             'file_hash': asset.file_hash,
+            'current_version_no': current_version.version_no if current_version else None,
+            'certificate_count': len(certificates),
             'generated_at': datetime.utcnow().isoformat()
         }
     }

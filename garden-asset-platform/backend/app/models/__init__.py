@@ -11,6 +11,7 @@ from app.models.extra import (
 )
 from app.models.comment import AssetComment
 from app.models.annotation import AssetAnnotation
+from app.models.task import AsyncTask
 
 __all__ = [
     'User', 'UserToken',
@@ -22,5 +23,5 @@ __all__ = [
     'Favorite', 'DownloadRecord', 'AssetShare', 'ShareDownload',
     'NotificationRead', 'NotificationEvent',
     'Collection', 'CollectionAsset', 'SystemConfig',
-    'AssetComment', 'AssetAnnotation'
+    'AssetComment', 'AssetAnnotation', 'AsyncTask'
 ]

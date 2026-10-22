@@ -36,6 +36,35 @@ services:
       retries: 3
       start_period: 15s
 
+  # 异步任务 worker（水印/链上存证）；与后端共享上传与数据库
+  worker:
+    build: ./backend
+    container_name: garden-worker
+    restart: unless-stopped
+    command: ["python", "-m", "flask", "tasks", "run"]
+    environment:
+      - FLASK_ENV=production
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-garden_asset}
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - BLOCKCHAIN_ENABLED=${BLOCKCHAIN_ENABLED:-false}
+      - AI_ENABLED=${AI_ENABLED:-false}
+      - TASK_WORKER_ENABLED=false
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/watermarks:/app/watermarks
+      - ./backend/extracted:/app/extracted
+      - ./backend/instance:/app/instance
+      - ./backend/data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - garden-network
+
   # 前端服务
   frontend:
     build: ./frontend

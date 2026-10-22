@@ -65,14 +65,28 @@ class BlockchainTransaction(db.Model):
 
 
 class Certificate(db.Model):
-    """存证证书表"""
+    """存证证书表
+
+    证书按文件版本签发：同一资产的不同版本各自拥有证书，asset_id 不再唯一。
+    资产主表的 certificate_id 只指向当前版本的最新证书；历史证书保留在
+    asset.certificates 中，证书页会标注对应版本。
+    """
     __tablename__ = 'certificates'
+    __table_args__ = (
+        db.UniqueConstraint('version_id', name='uq_certificate_version'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     certificate_id = db.Column(db.String(64), unique=True, nullable=False, index=True)
 
-    # 关联资产
-    asset_id = db.Column(db.String(36), db.ForeignKey('assets.id'), unique=True, nullable=False)
+    # 关联资产与版本（旧数据 version_id 可能为空）
+    asset_id = db.Column(
+        db.String(36), db.ForeignKey('assets.id'), nullable=False, index=True
+    )
+    version_id = db.Column(
+        db.Integer, db.ForeignKey('asset_versions.id'), nullable=True
+    )
+    version_no = db.Column(db.Integer, nullable=True)
 
     # 区块链信息
     tx_hash = db.Column(db.String(66), nullable=True)
@@ -106,13 +120,20 @@ class Certificate(db.Model):
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    asset = db.relationship('Asset', backref='certificate', uselist=False)
+    asset = db.relationship(
+        'Asset', backref=db.backref('certificates', lazy='dynamic')
+    )
+    version = db.relationship(
+        'AssetVersion', backref=db.backref('certificates', lazy='dynamic')
+    )
 
     def to_dict(self):
         return {
             'id': self.id,
             'certificate_id': self.certificate_id,
             'asset_id': self.asset_id,
+            'version_id': self.version_id,
+            'version_no': self.version_no,
             'tx_hash': self.tx_hash,
             'block_number': self.block_number,
             'watermark_id': self.watermark_id,

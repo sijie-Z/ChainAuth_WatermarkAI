@@ -147,17 +147,17 @@ def test_upload_new_version_updates_asset_and_resets_watermark(
     with app.app_context():
         asset = db.session.get(Asset, asset_id)
         assert asset.file_hash == data['version']['file_hash']
-        # 新文件替换后水印重置
+        # 新文件替换后旧水印与旧存证都不再代表当前文件
         assert asset.watermark_status == 'none'
         assert asset.watermark_id is None
         assert asset.watermarked_path is None
         assert asset.watermark_embedded_at is None
         assert asset.vr_value is None
-        # 链上存证字段保持不变
-        assert asset.chain_status == 'confirmed'
-        assert asset.chain_tx_hash == '0x' + 'ab' * 32
-        assert asset.chain_timestamp == datetime(2026, 1, 2, 3, 4, 5)
-        assert asset.certificate_id == 'CERT-TEST-0001'
+        # 资产主表回到未存证；历史证书与交易仍保留
+        assert asset.chain_status == 'none'
+        assert asset.chain_tx_hash is None
+        assert asset.chain_timestamp is None
+        assert asset.certificate_id is None
 
         version = AssetVersion.query.filter_by(asset_id=asset_id, version_no=2).first()
         assert version.file_path == asset.storage_path
@@ -297,9 +297,9 @@ def test_evidence_marks_certificate_for_previous_version(
     assert response.status_code == 200
     items = {item['key']: item for item in response.get_json()['data']['items']}
     assert items['chain']['state'] == 'warning'
-    assert '当前文件已更新' in items['chain']['description']
+    assert '当前版本尚未存证' in items['chain']['description']
     assert items['certificate']['state'] == 'warning'
-    assert '当前文件已更新' in items['certificate']['description']
+    assert '当前版本未存证' in items['certificate']['description']
     # 旧证书信息仍然展示，不被隐藏
     assert items['certificate']['fields']['证书文件指纹']
 
