@@ -20,7 +20,7 @@ from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
-EMAIL_GROUPS = ('asset', 'license', 'task')
+EMAIL_GROUPS = ('asset', 'license', 'task', 'infringement')
 
 
 def notification_group(event_type):
@@ -29,6 +29,8 @@ def notification_group(event_type):
         return 'license'
     if value.startswith('asset_task_'):
         return 'task'
+    if value.startswith('infringement_'):
+        return 'infringement'
     if value.startswith('asset_'):
         return 'asset'
     if value.startswith('comment'):
@@ -142,7 +144,7 @@ def dispatch_pending_emails(limit=20):
         groups = (
             preference.email_groups
             if preference and preference.email_groups is not None
-            else ['asset', 'license', 'task']
+            else ['asset', 'license', 'task', 'infringement']
         )
         if (
             not preference

@@ -664,6 +664,9 @@ class AssetDownloadResource(Resource):
         ).order_by(License.id.asc()).all()
 
         bypass_scope = is_owner or user.role in ADMIN_ROLES
+        current_version = AssetVersion.query.filter_by(
+            asset_id=asset_id
+        ).order_by(AssetVersion.version_no.desc()).first()
         selected_license = None
         denial_reason = None
         if not bypass_scope:
@@ -677,6 +680,8 @@ class AssetDownloadResource(Resource):
                         source_format=asset.file_format,
                         purpose=purpose,
                         territory=territory,
+                        current_version_id=current_version.id if current_version else None,
+                        current_version_no=current_version.version_no if current_version else None,
                     )
                     if not reason:
                         selected_license = license_row

@@ -13,6 +13,7 @@ from app.models.extra import (
 from app.models.comment import AssetComment
 from app.models.annotation import AssetAnnotation
 from app.models.task import AsyncTask
+from app.models.report import InfringementReport
 
 __all__ = [
     'User', 'UserToken',
@@ -25,5 +26,5 @@ __all__ = [
     'NotificationRead', 'NotificationEvent',
     'NotificationPreference', 'NotificationDelivery',
     'Collection', 'CollectionAsset', 'SystemConfig',
-    'AssetComment', 'AssetAnnotation', 'AsyncTask'
+    'AssetComment', 'AssetAnnotation', 'AsyncTask', 'InfringementReport'
 ]

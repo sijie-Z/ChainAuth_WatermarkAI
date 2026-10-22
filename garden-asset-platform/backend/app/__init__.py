@@ -313,6 +313,23 @@ def register_api_resources(app):
     api.add_resource(NotificationTestEmailResource, '/notifications/test-email')
     api.add_resource(NotificationStreamResource, '/notifications/stream')
 
+    # 疑似侵权线索
+    from app.resources.infringements import (
+        InfringementReportResource, MyInfringementListResource,
+        InfringementListResource, InfringementResource,
+        InfringementReviewResource, InfringementFileResource
+    )
+    api.add_resource(InfringementReportResource, '/infringements/report')
+    api.add_resource(MyInfringementListResource, '/infringements/mine')
+    api.add_resource(InfringementListResource, '/infringements')
+    api.add_resource(InfringementResource, '/infringements/<int:report_id>')
+    api.add_resource(
+        InfringementReviewResource, '/infringements/<int:report_id>/review'
+    )
+    api.add_resource(
+        InfringementFileResource, '/infringements/<int:report_id>/file'
+    )
+
     # 操作日志
     from app.resources.logs import LogListResource
     api.add_resource(LogListResource, '/logs')

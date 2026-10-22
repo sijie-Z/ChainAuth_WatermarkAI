@@ -121,19 +121,111 @@
           <EmptyState :description="traceResult.message || '未找到对应的资产记录，可能为未授权使用'" />
         </template>
       </section>
+
+      <!-- 侵权线索入口 -->
+      <section class="report-card">
+        <div class="report-copy">
+          <h2>发现未授权使用？</h2>
+          <p>
+            可以提交疑似盗用的图片、网页链接或文字说明。系统会尝试提取水印并匹配平台登记资产，
+            管理员核实后会通知权利人与举报人。
+          </p>
+        </div>
+        <el-button type="primary" plain @click="openReportDialog">提交侵权线索</el-button>
+      </section>
     </div>
+
+    <el-dialog
+      v-model="reportVisible"
+      title="提交侵权线索"
+      width="min(600px, 94vw)"
+      :close-on-click-modal="false"
+    >
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        class="report-alert"
+        title="线索会进入后台研判"
+        description="请尽量提供原始文件或来源链接；匿名提交也可以，但留下联系方式便于反馈处理结果。"
+      />
+      <el-form label-width="90px" class="report-form">
+        <el-form-item v-if="traceResult?.asset_id" label="匹配资产">
+          <span class="report-asset">
+            {{ traceResult.title }} · {{ traceResult.asset_code }}
+          </span>
+        </el-form-item>
+        <el-form-item label="线索文件">
+          <div class="report-file-block">
+            <el-checkbox v-if="uploadedFile" v-model="reportForm.useTraceFile">
+              使用本次溯源的图片（{{ uploadedFile.name }}）
+            </el-checkbox>
+            <el-upload
+              v-if="!uploadedFile || !reportForm.useTraceFile"
+              ref="reportUploadRef"
+              :auto-upload="false"
+              :limit="1"
+              :on-change="handleReportFile"
+              accept="image/*,.zip"
+            >
+              <el-button plain>选择图片或 ZIP</el-button>
+              <template #tip>
+                <span class="report-file-tip">
+                  {{ reportFile ? reportFile.name : '不超过 20MB，支持 JPG/PNG/BMP/TIFF/WebP/ZIP' }}
+                </span>
+              </template>
+            </el-upload>
+          </div>
+        </el-form-item>
+        <el-form-item label="来源链接">
+          <el-input
+            v-model="reportForm.source_url"
+            placeholder="https://..."
+            maxlength="500"
+          />
+        </el-form-item>
+        <el-form-item label="情况说明">
+          <el-input
+            v-model="reportForm.description"
+            type="textarea"
+            :rows="3"
+            maxlength="2000"
+            show-word-limit
+            placeholder="在哪个页面或场景发现、与平台资产的关系等"
+          />
+        </el-form-item>
+        <el-form-item label="联系人">
+          <el-input v-model="reportForm.reporter_name" placeholder="称呼（可选）" maxlength="100" />
+        </el-form-item>
+        <el-form-item label="联系方式">
+          <el-input
+            v-model="reportForm.contact"
+            placeholder="邮箱或电话（可选）"
+            maxlength="200"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="reportVisible = false">取消</el-button>
+        <el-button type="primary" :loading="reportSubmitting" @click="submitReport">
+          提交线索
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowRight, CopyDocument, Search, UploadFilled } from '@element-plus/icons-vue'
-import { watermarkApi, blockchainApi } from '@/api/modules'
+import { watermarkApi, blockchainApi, infringementApi } from '@/api/modules'
 import { copyToClipboard, parseBackendDate } from '@/utils'
+import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
+const userStore = useUserStore()
 
 const activeTab = ref('upload')
 const loading = ref(false)
@@ -143,6 +235,18 @@ const uploadRef = ref()
 const traceResult = ref(null)
 const MAX_TRACE_SIZE = 20 * 1024 * 1024
 const IMAGE_PATTERN = /\.(jpe?g|png|bmp|tiff?|webp)$/i
+
+const reportVisible = ref(false)
+const reportSubmitting = ref(false)
+const reportUploadRef = ref()
+const reportFile = ref(null)
+const reportForm = reactive({
+  useTraceFile: true,
+  source_url: '',
+  description: '',
+  reporter_name: '',
+  contact: ''
+})
 
 function handleFileChange(file) {
   const raw = file.raw
@@ -236,6 +340,74 @@ function shortHash(value) {
 async function copyHash() {
   const ok = await copyToClipboard(traceResult.value?.tx_hash || '')
   ElMessage[ok ? 'success' : 'error'](ok ? '交易哈希已复制' : '复制失败')
+}
+
+function openReportDialog() {
+  reportForm.useTraceFile = Boolean(uploadedFile.value)
+  reportForm.source_url = ''
+  reportForm.description = ''
+  reportForm.reporter_name = userStore.user?.nickname || userStore.username || ''
+  reportForm.contact = userStore.user?.email || ''
+  reportFile.value = null
+  reportUploadRef.value?.clearFiles()
+  reportVisible.value = true
+}
+
+function handleReportFile(file) {
+  const raw = file.raw
+  if (!raw) return
+  const allowed = /\.(jpe?g|png|bmp|tiff?|webp|zip)$/i
+  if (!allowed.test(raw.name)) {
+    ElMessage.error('仅支持图片或 ZIP 文件')
+    reportFile.value = null
+    reportUploadRef.value?.clearFiles()
+    return
+  }
+  if (raw.size > MAX_TRACE_SIZE) {
+    ElMessage.error('线索文件不能超过 20MB')
+    reportFile.value = null
+    reportUploadRef.value?.clearFiles()
+    return
+  }
+  reportFile.value = raw
+}
+
+async function submitReport() {
+  if (reportSubmitting.value) return
+  const hasTraceFile = reportForm.useTraceFile && uploadedFile.value
+  if (!hasTraceFile && !reportFile.value && !reportForm.source_url.trim()
+    && !reportForm.description.trim() && !traceResult.value?.asset_id) {
+    ElMessage.warning('请至少提供文件、匹配资产、来源链接或情况说明')
+    return
+  }
+
+  reportSubmitting.value = true
+  try {
+    const form = new FormData()
+    const file = hasTraceFile ? uploadedFile.value : reportFile.value
+    if (file) form.append('file', file)
+    if (traceResult.value?.asset_id) form.append('asset_id', traceResult.value.asset_id)
+    if (traceResult.value?.watermark_id) {
+      form.append('watermark_id', traceResult.value.watermark_id)
+    }
+    form.append('source_url', reportForm.source_url.trim())
+    form.append('description', reportForm.description.trim())
+    form.append('reporter_name', reportForm.reporter_name.trim())
+    form.append('contact', reportForm.contact.trim())
+
+    const response = await infringementApi.report(form)
+    if (response.data?.code === 200) {
+      const data = response.data.data || {}
+      ElMessage.success(`线索已提交：${data.report_code}`)
+      reportVisible.value = false
+    } else {
+      ElMessage.error(response.data?.message || '线索提交失败')
+    }
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '线索提交失败')
+  } finally {
+    reportSubmitting.value = false
+  }
 }
 
 function escapeHtml(value) {
@@ -509,6 +681,56 @@ function formatDate(dateStr) {
   color: $text-primary;
 }
 
+.report-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 20px;
+  padding: 22px 24px;
+  background: $bg-card;
+  border: 1px solid $border-color;
+  border-radius: $radius-lg;
+}
+
+.report-copy {
+  h2 {
+    margin: 0 0 6px;
+    font-family: $font-display;
+    font-size: 17px;
+    color: $text-primary;
+  }
+
+  p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.7;
+    color: $text-secondary;
+  }
+}
+
+.report-alert {
+  margin-bottom: 16px;
+}
+
+.report-asset {
+  font-family: $font-mono;
+  font-size: 12px;
+  color: $text-secondary;
+}
+
+.report-file-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.report-file-tip {
+  font-size: 12px;
+  color: $text-placeholder;
+}
+
 @media (max-width: 576px) {
   .trace-page {
     padding: 24px 16px 48px;
@@ -527,6 +749,11 @@ function formatDate(dateStr) {
 
   .result-actions {
     flex-direction: column;
+  }
+
+  .report-card {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 </style>

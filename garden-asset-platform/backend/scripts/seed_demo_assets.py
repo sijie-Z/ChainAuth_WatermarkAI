@@ -151,6 +151,12 @@ def make_asset(photo, meta, admin, index):
     return asset
 
 
+def latest_version(asset):
+    return AssetVersion.query.filter_by(asset_id=asset.id).order_by(
+        AssetVersion.version_no.desc()
+    ).first()
+
+
 def seed_licenses(assets, users):
     admin = users['admin']
     adm1 = users['adm1']
@@ -159,9 +165,12 @@ def seed_licenses(assets, users):
     user2 = users['user2']
     now = datetime.utcnow()
 
+    first_version = latest_version(assets[0])
     active_license = License(
         license_code=f'LIC-{now:%Y%m%d%H%M%S}-DEMO1',
         asset_id=assets[0].id,
+        version_id=first_version.id if first_version else None,
+        version_no=first_version.version_no if first_version else None,
         licensor_id=admin.id,
         licensee_id=user1.id,
         license_type='non_commercial',
@@ -204,9 +213,12 @@ def seed_licenses(assets, users):
     db.session.add(approved)
     db.session.flush()
 
+    second_version = latest_version(assets[1])
     db.session.add(License(
         license_code=f'LIC-{now:%Y%m%d%H%M%S}-DEMO2',
         asset_id=assets[1].id,
+        version_id=second_version.id if second_version else None,
+        version_no=second_version.version_no if second_version else None,
         licensor_id=admin.id,
         licensee_id=user2.id,
         license_type='commercial_publish',

@@ -211,9 +211,11 @@ class NotificationPreference(db.Model):
         db.Integer, db.ForeignKey('users.id'), nullable=False, unique=True, index=True
     )
     email_enabled = db.Column(db.Boolean, default=False, nullable=False)
-    # 可选值：asset/license/task/comment/system
+    # 可选值：asset/license/task/infringement
     email_groups = db.Column(
-        db.JSON, default=lambda: ['asset', 'license', 'task'], nullable=True
+        db.JSON,
+        default=lambda: ['asset', 'license', 'task', 'infringement'],
+        nullable=True
     )
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow

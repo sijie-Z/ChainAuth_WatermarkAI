@@ -250,11 +250,12 @@ const testingEmail = ref(false)
 const availableGroups = ref([
   { key: 'asset', label: '资产审核结果' },
   { key: 'license', label: '授权审批、撤销与续期' },
-  { key: 'task', label: '水印/存证任务结果' }
+  { key: 'task', label: '水印/存证任务结果' },
+  { key: 'infringement', label: '侵权线索与处理结果' }
 ])
 const notificationPrefs = reactive({
   email_enabled: false,
-  email_groups: ['asset', 'license', 'task'],
+  email_groups: ['asset', 'license', 'task', 'infringement'],
   email: '',
   mail_configured: false,
   sse_enabled: true

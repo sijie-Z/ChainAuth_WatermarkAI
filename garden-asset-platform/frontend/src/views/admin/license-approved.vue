@@ -128,6 +128,9 @@
         <el-descriptions-item label="申请方">{{ detailDialog.applicant_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="有效期">{{ detailDialog.start_time ? formatDate(detailDialog.start_time) : '-' }} 至 {{ detailDialog.end_time ? formatDate(detailDialog.end_time) : '长期' }}</el-descriptions-item>
         <el-descriptions-item label="授权地域">{{ detailDialog.territory || '未指定' }}</el-descriptions-item>
+        <el-descriptions-item label="授权版本">
+          {{ detailDialog.version_no ? `v${detailDialog.version_no}` : '历史授权（不限版本）' }}
+        </el-descriptions-item>
         <el-descriptions-item label="独家授权">{{ detailDialog.is_exclusive ? '是' : '否' }}</el-descriptions-item>
         <el-descriptions-item label="执行范围" :span="2">
           {{ detailDialog.scope_summary || '按授权合同约定' }}

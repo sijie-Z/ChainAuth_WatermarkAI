@@ -15,7 +15,7 @@ EXPECTED_TABLES = {
     'license_contracts', 'certificates', 'blockchain_transactions',
     'operation_logs', 'system_configs', 'notification_reads',
     'notification_events', 'notification_preferences', 'notification_deliveries',
-    'async_tasks', 'alembic_version',
+    'async_tasks', 'infringement_reports', 'alembic_version',
 }
 
 
@@ -77,7 +77,7 @@ def test_flask_db_upgrade_creates_full_schema(tmp_path):
         }
         assert {
             'usage_purpose_code', 'allowed_channels', 'allowed_formats',
-            'max_downloads', 'download_count'
+            'max_downloads', 'download_count', 'version_id', 'version_no'
         } <= license_columns
 
         download_columns = {

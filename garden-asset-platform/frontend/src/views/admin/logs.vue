@@ -21,6 +21,7 @@
         <el-option label="水印" value="watermark" />
         <el-option label="存证" value="blockchain" />
         <el-option label="授权" value="license" />
+        <el-option label="侵权线索" value="infringement" />
         <el-option label="认证" value="auth" />
         <el-option label="用户" value="user" />
       </el-select>
@@ -114,6 +115,7 @@ const MODULE_NAMES = {
   watermark: '水印',
   blockchain: '存证',
   license: '授权',
+  infringement: '侵权线索',
   auth: '认证',
   user: '用户'
 }
@@ -132,7 +134,11 @@ const ACTION_NAMES = {
   approve: '审批',
   reject: '驳回',
   license_apply: '提交申请',
-  license_cancel: '撤回申请'
+  license_cancel: '撤回申请',
+  infringement_report: '提交侵权线索',
+  infringement_start: '受理侵权线索',
+  infringement_confirm: '确认侵权',
+  infringement_reject: '驳回线索'
 }
 
 const ROLE_NAMES = {

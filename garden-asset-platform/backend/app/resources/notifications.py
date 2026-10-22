@@ -15,16 +15,16 @@ from flask_restful import Resource
 
 from app.extensions import db
 from app.models import (
-    Asset, AssetComment, License, LicenseApplication, NotificationEvent,
-    NotificationPreference, NotificationRead, User
+    Asset, AssetComment, InfringementReport, License, LicenseApplication,
+    NotificationEvent, NotificationPreference, NotificationRead, User
 )
 from app.services.email_service import mail_configured, send_test_email
 from app.utils.middleware import rate_limit
 from sqlalchemy import or_
 
 ADMIN_ROLES = ('admin', 'asset_admin', 'license_admin', 'adm1', 'adm2')
-EMAIL_GROUPS = ('asset', 'license', 'task')
-DEFAULT_EMAIL_GROUPS = ['asset', 'license', 'task']
+EMAIL_GROUPS = ('asset', 'license', 'task', 'infringement')
+DEFAULT_EMAIL_GROUPS = ['asset', 'license', 'task', 'infringement']
 
 _sse_connections = {}
 _sse_lock = threading.Lock()
@@ -78,6 +78,21 @@ def _build_items(user):
                 'description': '审核通过后资产才会进入公开档案',
                 'link': '/admin/assets?status=pending',
                 'count': pending_assets,
+                'time': None
+            })
+
+        pending_reports = InfringementReport.query.filter(
+            InfringementReport.status.in_(['pending', 'reviewing'])
+        ).count()
+        if pending_reports:
+            items.append({
+                'id': f'pending-infringements-{pending_reports}',
+                'key': f'pending-infringements-{pending_reports}',
+                'type': 'warning',
+                'title': f'{pending_reports} 条侵权线索待处理',
+                'description': '核实疑似盗用并确认或驳回',
+                'link': '/admin/infringements',
+                'count': pending_reports,
                 'time': None
             })
 
@@ -284,6 +299,7 @@ class NotificationPreferenceResource(Resource):
             {'key': 'asset', 'label': '资产审核结果'},
             {'key': 'license', 'label': '授权审批、撤销与续期'},
             {'key': 'task', 'label': '水印/存证任务结果'},
+            {'key': 'infringement', 'label': '侵权线索与处理结果'},
         ]
         return {'code': 200, 'data': data}, 200
 

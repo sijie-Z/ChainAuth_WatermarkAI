@@ -218,7 +218,7 @@ import { useNotificationStream } from '@/hooks'
 import {
   DataLine, Picture, Stamp, Document, Link, User, Setting,
   Menu, HomeFilled, ArrowDown, Expand, SwitchButton,
-  FullScreen, Close, Reading, Bell, Download, Place, Timer
+  FullScreen, Close, Reading, Bell, Download, Place, Timer, Warning
 } from '@element-plus/icons-vue'
 import { notificationApi } from '@/api/modules'
 
@@ -262,6 +262,7 @@ const menuItems = shallowRef([
   { path: '/admin/watermark', label: '水印管理', icon: Stamp, roles: WATERMARK_ROLES },
   { path: '/admin/blockchain', label: '存证管理', icon: Link, roles: WATERMARK_ROLES },
   { path: '/admin/tasks', label: '任务队列', icon: Timer, roles: WATERMARK_ROLES },
+  { path: '/admin/infringements', label: '侵权线索', icon: Warning, roles: ADMIN_ROLES },
   {
     path: 'license',
     label: '授权审批',

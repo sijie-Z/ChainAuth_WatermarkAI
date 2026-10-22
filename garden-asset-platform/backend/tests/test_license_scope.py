@@ -287,6 +287,109 @@ def test_apply_validates_and_persists_scope(client, app, tmp_path, auth_header):
         assert license_row.max_downloads == 5
 
 
+def test_license_binds_version_and_blocks_new_version(
+    client, app, tmp_path, auth_header
+):
+    asset_id = upload_published_asset(client, app, tmp_path, auth_header)
+    applicant_header = register_and_login(client, 'scope_version_user')
+
+    application = client.post('/api/license/apply', json={
+        'asset_id': asset_id,
+        'license_type': 'academic',
+        'purpose': '课程教学',
+        'usage_purpose_code': 'teaching_research',
+        'allowed_formats': ['JPG'],
+        'territory': '中国大陆',
+        'valid_period': '3m',
+        'contact': 'version@test.com',
+    }, headers=applicant_header).get_json()['data']
+    application_id = application['id']
+    assert client.post(
+        f'/api/license/approve/{application_id}',
+        json={'action': 'approve'},
+        headers=_adm1(client, app),
+    ).status_code == 200
+    assert client.post(
+        f'/api/license/approve/{application_id}',
+        json={'action': 'approve'},
+        headers=_adm2(client, app),
+    ).status_code == 200
+
+    with app.app_context():
+        applicant = User.query.filter_by(username='scope_version_user').one()
+        license_row = License.query.filter_by(
+            asset_id=asset_id, licensee_id=applicant.id
+        ).one()
+        assert license_row.version_no == 1
+        assert license_row.version_id is not None
+        license_id = license_row.id
+
+    # 资产更新为 v2 后，旧授权不能继续下载
+    upload = client.post(
+        f'/api/assets/{asset_id}/versions',
+        data={
+            'file': (make_jpeg((120, 20, 20)), 'v2.jpg'),
+            'change_note': '版本授权测试'
+        },
+        headers=auth_header,
+        content_type='multipart/form-data'
+    )
+    assert upload.status_code == 200, upload.get_json()
+
+    # 新版本按要求退回草稿；重新发布后再验证授权版本绑定
+    with app.app_context():
+        asset = db.session.get(Asset, asset_id)
+        asset.status = 'published'
+        db.session.commit()
+
+    denied = client.get(
+        f'/api/assets/{asset_id}/download?purpose=teaching_research&territory=中国大陆',
+        headers=applicant_header
+    )
+    assert denied.status_code == 403
+    assert 'v1' in denied.get_json()['message'] and 'v2' in denied.get_json()['message']
+    with app.app_context():
+        denied_record = DownloadRecord.query.filter_by(
+            status='denied', license_id=license_id
+        ).one()
+        assert 'v1' in denied_record.denial_reason
+
+    # 对 v2 重新申请并审批后可下载
+    new_application = client.post('/api/license/apply', json={
+        'asset_id': asset_id,
+        'license_type': 'academic',
+        'purpose': '课程教学 v2',
+        'usage_purpose_code': 'teaching_research',
+        'allowed_formats': ['JPG'],
+        'territory': '中国大陆',
+        'valid_period': '3m',
+        'contact': 'version@test.com',
+    }, headers=applicant_header)
+    assert new_application.status_code == 200, new_application.get_json()
+    new_id = new_application.get_json()['data']['id']
+    assert client.post(
+        f'/api/license/approve/{new_id}',
+        json={'action': 'approve'},
+        headers=_adm1(client, app),
+    ).status_code == 200
+    assert client.post(
+        f'/api/license/approve/{new_id}',
+        json={'action': 'approve'},
+        headers=_adm2(client, app),
+    ).status_code == 200
+
+    allowed = client.get(
+        f'/api/assets/{asset_id}/download?purpose=teaching_research&territory=中国大陆',
+        headers=applicant_header
+    )
+    assert allowed.status_code == 200
+    with app.app_context():
+        newest = License.query.filter_by(
+            asset_id=asset_id, licensee_id=applicant.id
+        ).order_by(License.id.desc()).first()
+        assert newest.version_no == 2
+
+
 def _adm1(client, app):
     with app.app_context():
         if not User.query.filter_by(username='scope_adm1').first():

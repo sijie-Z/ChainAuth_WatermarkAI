@@ -203,6 +203,9 @@
         <el-descriptions-item label="资产标题" :span="2">{{ detail.asset_title || '-' }}</el-descriptions-item>
         <el-descriptions-item label="资产编码">{{ detail.asset_code || '-' }}</el-descriptions-item>
         <el-descriptions-item label="授权类型">{{ getLicenseType(detail.license_type) }}</el-descriptions-item>
+        <el-descriptions-item v-if="!isApplicationView" label="授权版本">
+          {{ detail.version_no ? `v${detail.version_no}` : '历史授权（不限版本）' }}
+        </el-descriptions-item>
         <el-descriptions-item label="使用期限">
           {{ detail.end_time ? formatDate(detail.end_time) : (detail.duration_months ? `${detail.duration_months} 个月` : '-') }}
         </el-descriptions-item>

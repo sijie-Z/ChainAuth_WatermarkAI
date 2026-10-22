@@ -196,6 +196,12 @@ const routes = [
         meta: { title: '任务队列', roles: ['admin', 'asset_admin'] }
       },
       {
+        path: 'infringements',
+        name: 'AdminInfringements',
+        component: page(() => import('@/views/admin/infringements.vue'), false),
+        meta: { title: '侵权线索', roles: ADMIN_ROLES }
+      },
+      {
         path: 'gardens',
         name: 'AdminGardens',
         component: page(() => import('@/views/admin/gardens.vue'), false),

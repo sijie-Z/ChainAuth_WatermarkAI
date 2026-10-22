@@ -105,10 +105,18 @@ def validate_application_scope(data, asset):
 
 
 def scope_violation(license_row, *, source_format=None, purpose=None,
-                    territory=None):
+                    territory=None, current_version_id=None,
+                    current_version_no=None):
     """检查一次下载是否在授权范围内；返回拒绝原因或 None。"""
     if not license_row:
         return '无有效授权'
+
+    if license_row.version_id and license_row.version_id != current_version_id:
+        licensed = (
+            f'v{license_row.version_no}' if license_row.version_no else '历史版本'
+        )
+        current = f'v{current_version_no}' if current_version_no else '当前版本'
+        return f'该授权对应 {licensed}，资产当前为 {current}，请重新申请授权'
 
     allowed_formats = [str(item).upper() for item in (license_row.allowed_formats or [])]
     if allowed_formats and source_format:
@@ -146,6 +154,8 @@ def scope_violation(license_row, *, source_format=None, purpose=None,
 def scope_summary(license_row):
     """合同/详情中展示的结构化范围摘要"""
     parts = []
+    if license_row.version_no:
+        parts.append(f"授权版本：v{license_row.version_no}")
     if license_row.usage_purpose_code:
         parts.append(
             f"使用目的：{PURPOSE_OPTIONS.get(license_row.usage_purpose_code, license_row.usage_purpose_code)}"

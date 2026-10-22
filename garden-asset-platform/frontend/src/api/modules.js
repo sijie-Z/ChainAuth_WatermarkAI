@@ -186,6 +186,19 @@ export const logApi = {
   getList: (params) => api.get('/logs', { params })
 }
 
+// 疑似侵权线索
+export const infringementApi = {
+  report: (formData) => api.post('/infringements/report', formData, { timeout: 0 }),
+  mine: (params) => api.get('/infringements/mine', { params }),
+  list: (params) => api.get('/infringements', { params }),
+  get: (id) => api.get(`/infringements/${id}`),
+  review: (id, data) => api.post(`/infringements/${id}/review`, data),
+  getFile: (id) => api.get(`/infringements/${id}/file`, {
+    responseType: 'blob',
+    timeout: 0
+  })
+}
+
 // 系统能力状态
 export const systemApi = {
   getStatus: () => api.get('/system/status')

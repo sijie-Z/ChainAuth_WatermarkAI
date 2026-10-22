@@ -19,6 +19,9 @@ class License(db.Model):
 
     # 关联信息
     asset_id = db.Column(db.String(36), db.ForeignKey('assets.id'), nullable=False)
+    # 授权签发时对应的文件版本；为空表示历史授权，不绑定版本
+    version_id = db.Column(db.Integer, nullable=True)
+    version_no = db.Column(db.Integer, nullable=True)
     licensor_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)  # 授权方
     licensee_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)  # 被授权方
 
@@ -78,6 +81,8 @@ class License(db.Model):
             'id': self.id,
             'license_code': self.license_code,
             'asset_id': self.asset_id,
+            'version_id': self.version_id,
+            'version_no': self.version_no,
             'license_type': self.license_type,
             'usage_scope': self.usage_scope,
             'territory': self.territory,

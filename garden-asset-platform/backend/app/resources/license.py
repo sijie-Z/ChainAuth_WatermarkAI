@@ -10,7 +10,7 @@ from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from app.extensions import db
 from app.models.license import License, LicenseApplication, LicenseContract
-from app.models.asset import Asset
+from app.models.asset import Asset, AssetVersion
 from app.models.user import User
 from app.models.log import OperationLog
 from app.services.license_scope import scope_summary, validate_application_scope
@@ -167,6 +167,7 @@ def build_contract_content(license, asset, application=None):
         f"授权方：{license.licensor.username if license.licensor else '平台资产权利人'}\n"
         f"被授权方：{license.licensee.username if license.licensee else '申请人'}\n"
         f"授权资产：{asset.title}（{asset.asset_code}）\n"
+        f"授权版本：v{license.version_no or '未记录'}\n"
         f"授权类型：{type_names.get(license.license_type, license.license_type)}\n"
         f"使用范围：{usage}\n"
         f"执行范围：{scope_summary(license)}\n"
@@ -426,9 +427,15 @@ class LicenseApproveResource(Resource):
         if end_time is None and application.duration_months:
             end_time = datetime.utcnow() + timedelta(days=application.duration_months * 30)
 
+        current_version = AssetVersion.query.filter_by(asset_id=asset.id).order_by(
+            AssetVersion.version_no.desc()
+        ).first()
+
         license = License(
             license_code=f"LIC-{datetime.now().strftime('%Y%m%d%H%M%S%f')}-{uuid.uuid4().hex[:4].upper()}",
             asset_id=asset.id,
+            version_id=current_version.id if current_version else None,
+            version_no=current_version.version_no if current_version else None,
             # 兼容历史数据：旧资产的 uploader_id 可能为空
             licensor_id=asset.owner_id or asset.creator_id or asset.uploader_id,
             licensee_id=application.applicant_id,
