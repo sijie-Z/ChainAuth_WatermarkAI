@@ -36,6 +36,8 @@ CRITICAL_FILES = {
         'app/services/watermark_service.py',
         'app/services/blockchain_service.py',
         'app/services/task_service.py',
+        'app/services/license_scope.py',
+        'app/services/email_service.py',
         'app/services/ai_service.py',
         'algorithm/__init__.py',
         'algorithm/vector/__init__.py',

@@ -248,6 +248,12 @@
             <el-collapse-item title="水印/存证任务一直排队怎么办？" name="12">
               <p>任务执行需要后台 worker。开发环境默认随 API 进程启动；生产环境由 compose 的 worker 服务或 <code>flask tasks run</code> 执行。界面提示 worker 未启用时，先启动 worker，再用 <code>flask tasks list</code> 查看队列；失败任务可重试，超时任务由 <code>flask tasks reconcile</code> 重新排队。</p>
             </el-collapse-item>
+            <el-collapse-item title="授权范围会真的被执行吗？" name="13">
+              <p>会。申请时选择的使用目的、渠道、可下载格式、地域和下载次数会写入授权；授权用户下载时必须申报用途与地域，系统核对格式、地域和剩余次数，超出范围直接拒绝并写入下载台账。使用渠道和自由文本用途主要用于合同与审计，下载环节无法自动判断线下使用；历史授权没有结构化字段时视为不限制。</p>
+            </el-collapse-item>
+            <el-collapse-item title="通知能实时收到吗？" name="14">
+              <p>审核、授权与任务结果会通过 SSE 实时推到顶栏铃铛，无需刷新。邮件通知在“账号设置 → 通知设置”开启，需要管理员先配置 SMTP（MAIL_ENABLED / MAIL_HOST）；未配置时界面会明确提示，不会假装已发送。</p>
+            </el-collapse-item>
             <el-collapse-item title="AI 分析和智能问答为什么提示不可用？" name="5">
               <p>AI 能力需要单独配置模型与 API Key，默认关闭。关闭时接口会明确返回 503，而不是伪造分析结果。配置方式见 README 的 AI 章节。</p>
             </el-collapse-item>

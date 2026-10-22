@@ -7,7 +7,8 @@ from app.models.blockchain import BlockchainTransaction, Certificate
 from app.models.log import OperationLog
 from app.models.extra import (
     Favorite, DownloadRecord, AssetShare, ShareDownload, NotificationRead,
-    NotificationEvent, Collection, CollectionAsset, SystemConfig
+    NotificationEvent, NotificationPreference, NotificationDelivery,
+    Collection, CollectionAsset, SystemConfig
 )
 from app.models.comment import AssetComment
 from app.models.annotation import AssetAnnotation
@@ -22,6 +23,7 @@ __all__ = [
     'OperationLog',
     'Favorite', 'DownloadRecord', 'AssetShare', 'ShareDownload',
     'NotificationRead', 'NotificationEvent',
+    'NotificationPreference', 'NotificationDelivery',
     'Collection', 'CollectionAsset', 'SystemConfig',
     'AssetComment', 'AssetAnnotation', 'AsyncTask'
 ]

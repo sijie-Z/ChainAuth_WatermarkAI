@@ -40,6 +40,13 @@ class DownloadRecord(db.Model):
     license_id = db.Column(db.Integer, db.ForeignKey('licenses.id'), nullable=True)
     ip_address = db.Column(db.String(50), nullable=True)
     user_agent = db.Column(db.String(500), nullable=True)
+
+    # 授权范围执行：成功下载与超范围拒绝都进入台账
+    status = db.Column(db.String(20), default='success')  # success/denied
+    denial_reason = db.Column(db.String(300), nullable=True)
+    usage_purpose = db.Column(db.String(40), nullable=True)
+    territory = db.Column(db.String(100), nullable=True)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     user = db.relationship('User', backref=db.backref('downloads', lazy='dynamic'))
@@ -54,6 +61,10 @@ class DownloadRecord(db.Model):
             'user_id': self.user_id,
             'asset_id': self.asset_id,
             'license_id': self.license_id,
+            'status': self.status or 'success',
+            'denial_reason': self.denial_reason,
+            'usage_purpose': self.usage_purpose,
+            'territory': self.territory,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
@@ -183,6 +194,80 @@ class NotificationEvent(db.Model):
             'title': self.title,
             'description': self.description,
             'link': self.link,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
+class NotificationPreference(db.Model):
+    """用户通知偏好
+
+    站内 SSE 默认开启；邮件为显式开关，按事件分组过滤。
+    邮箱使用用户资料中的 email，不在偏好表重复存储。
+    """
+    __tablename__ = 'notification_preferences'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey('users.id'), nullable=False, unique=True, index=True
+    )
+    email_enabled = db.Column(db.Boolean, default=False, nullable=False)
+    # 可选值：asset/license/task/comment/system
+    email_groups = db.Column(
+        db.JSON, default=lambda: ['asset', 'license', 'task'], nullable=True
+    )
+    updated_at = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    user = db.relationship(
+        'User', backref=db.backref('notification_preference', uselist=False)
+    )
+
+    def to_dict(self):
+        return {
+            'email_enabled': bool(self.email_enabled),
+            'email_groups': self.email_groups or [],
+            'email': self.user.email if self.user else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class NotificationDelivery(db.Model):
+    """通知投递记录（当前支持邮件渠道）
+
+    事件写入时同步创建 pending 投递行（同一事务）；后台 worker 领取后
+    根据用户偏好与 SMTP 配置发送，失败按次数退避重试。
+    """
+    __tablename__ = 'notification_deliveries'
+    __table_args__ = (
+        db.UniqueConstraint('event_id', 'channel', name='uk_notification_delivery'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(
+        db.Integer, db.ForeignKey('notification_events.id'), nullable=False, index=True
+    )
+    channel = db.Column(db.String(20), default='email', nullable=False)
+    status = db.Column(db.String(20), default='pending', nullable=False, index=True)
+    attempts = db.Column(db.Integer, default=0, nullable=False)
+    error_message = db.Column(db.String(500), nullable=True)
+    next_attempt_at = db.Column(db.DateTime, nullable=True)
+    sent_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    event = db.relationship(
+        'NotificationEvent', backref=db.backref('deliveries', lazy='dynamic')
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'event_id': self.event_id,
+            'channel': self.channel,
+            'status': self.status,
+            'attempts': self.attempts,
+            'error_message': self.error_message,
+            'sent_at': self.sent_at.isoformat() if self.sent_at else None,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 

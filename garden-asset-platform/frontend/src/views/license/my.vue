@@ -208,6 +208,12 @@
         </el-descriptions-item>
         <el-descriptions-item label="使用范围">{{ formatScope(detail) }}</el-descriptions-item>
         <el-descriptions-item label="使用目的" :span="2">{{ detail.purpose || detail.usage_purpose || detail.usage_scope || '-' }}</el-descriptions-item>
+        <el-descriptions-item v-if="detail.scope_summary" label="执行范围" :span="2">
+          {{ detail.scope_summary }}
+        </el-descriptions-item>
+        <el-descriptions-item v-if="detail.max_downloads" label="下载用量">
+          {{ detail.download_count || 0 }} / {{ detail.max_downloads }}
+        </el-descriptions-item>
         <el-descriptions-item v-if="isApplicationView" label="一级审批">
           {{ getStatusMeta(detail.adm1_status).label }}
         </el-descriptions-item>
@@ -423,7 +429,12 @@ async function downloadAsset(row) {
   if (downloadingId.value) return
   downloadingId.value = row.id
   try {
-    const response = await assetApi.download(row.asset_id)
+    const params = {}
+    if (row.usage_purpose_code) params.purpose = row.usage_purpose_code
+    if (['中国大陆', '中国港澳台', '全球', '海外'].includes(row.territory)) {
+      params.territory = row.territory
+    }
+    const response = await assetApi.download(row.asset_id, params)
     const url = window.URL.createObjectURL(new Blob([response.data]))
     const link = document.createElement('a')
     link.href = url
@@ -433,8 +444,20 @@ async function downloadAsset(row) {
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
     ElMessage.success('下载开始')
-  } catch {
-    ElMessage.error('下载失败，请确认授权仍然有效')
+  } catch (error) {
+    let message = '下载失败，请确认授权仍然有效'
+    const data = error.response?.data
+    if (data instanceof Blob) {
+      try {
+        const parsed = JSON.parse(await data.text())
+        message = parsed.message || message
+      } catch {
+        // 保留默认提示
+      }
+    } else if (data?.message) {
+      message = data.message
+    }
+    ElMessage.error(message)
   } finally {
     downloadingId.value = null
   }

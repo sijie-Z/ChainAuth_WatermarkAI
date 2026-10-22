@@ -10,7 +10,9 @@ vi.mock('@/api/index', () => ({
 }))
 
 import api from '@/api/index'
-import { assetApi, blockchainApi, licenseApi, taskApi, userApi } from '@/api/modules'
+import {
+  assetApi, blockchainApi, licenseApi, notificationApi, taskApi, userApi
+} from '@/api/modules'
 
 describe('api modules', () => {
   beforeEach(() => {
@@ -70,6 +72,25 @@ describe('api modules', () => {
 
     expect(api.post).toHaveBeenCalledWith('/tasks/task-1/retry')
     expect(api.post).toHaveBeenCalledWith('/tasks/task-1/cancel')
+  })
+
+  it('assetApi.download forwards declared usage scope', () => {
+    assetApi.download('asset-1', { purpose: 'teaching_research', territory: '中国大陆' })
+
+    expect(api.get).toHaveBeenCalledWith('/assets/asset-1/download', {
+      params: { purpose: 'teaching_research', territory: '中国大陆' },
+      responseType: 'blob',
+      timeout: 0
+    })
+  })
+
+  it('notificationApi exposes server preferences and SSE URL', () => {
+    notificationApi.updatePreferences({ email_enabled: true, email_groups: ['license'] })
+    expect(api.put).toHaveBeenCalledWith('/notifications/preferences', {
+      email_enabled: true,
+      email_groups: ['license']
+    })
+    expect(notificationApi.streamUrl(12)).toContain('/notifications/stream?since_id=12')
   })
 
   it('keeps the existing method signatures', () => {

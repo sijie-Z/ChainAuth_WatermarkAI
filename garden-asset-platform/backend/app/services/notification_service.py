@@ -4,7 +4,7 @@
 调用方负责 commit，便于与业务事务保持一致。
 """
 from app.extensions import db
-from app.models import NotificationEvent
+from app.models import NotificationDelivery, NotificationEvent
 
 
 def add_notification_event(user_id, event_type, title, description=None, link=None):
@@ -18,4 +18,11 @@ def add_notification_event(user_id, event_type, title, description=None, link=No
         link=(link or '')[:300] or None
     )
     db.session.add(event)
+    db.session.flush()
+    # 邮件投递与事件同一事务写入，worker 按用户偏好决定发送或跳过
+    db.session.add(NotificationDelivery(
+        event_id=event.id,
+        channel='email',
+        status='pending',
+    ))
     return event

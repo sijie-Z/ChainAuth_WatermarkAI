@@ -212,7 +212,9 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElNotification } from 'element-plus'
 import { useUserStore } from '@/stores/user'
+import { useNotificationStream } from '@/hooks'
 import {
   DataLine, Picture, Stamp, Document, Link, User, Setting,
   Menu, HomeFilled, ArrowDown, Expand, SwitchButton,
@@ -395,6 +397,19 @@ onMounted(() => {
   document.addEventListener('fullscreenchange', handleFullscreenChange)
   document.addEventListener('keydown', handleKeydown)
   loadPendingNotifications()
+})
+
+useNotificationStream((event) => {
+  loadPendingNotifications()
+  ElNotification({
+    title: event.title || '新通知',
+    message: event.description || '你有一条新的站内通知',
+    type: /rejected|revoked|failed/.test(event.event_type || '') ? 'warning' : 'info',
+    duration: 6000,
+    onClick: () => {
+      if (event.link) router.push(event.link)
+    }
+  })
 })
 
 onUnmounted(() => {

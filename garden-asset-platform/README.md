@@ -17,7 +17,8 @@
 | 区块链存证 | 按文件版本签发存证证书，支持历史版本证书追溯；默认本地模拟，可配置接入 FISCO BCOS | FISCO BCOS + Python SDK（可选） |
 | 异步任务 | 水印/存证任务持久化入队，后台 worker 执行，支持进度查询、失败重试与超时对账 | Flask + 数据库队列 + 进程内/独立 worker |
 | AI 辅助（可选） | 以图搜图、侵权辅助检测、智能问答；默认关闭，需安装模型与 API Key | CLIP + Milvus + 智谱 GLM（可选） |
-| 授权分发 | 在线申请→双重审批→合同管理→下载控制 | Flask + JWT |
+| 授权分发 | 在线申请→双重审批→合同管理→下载控制；用途/渠道/格式/地域/下载次数作为可执行范围 | Flask + JWT |
+| 通知渠道 | 站内 SSE 实时推送 + 可选 SMTP 邮件通知，按用户偏好分组发送 | SSE + SMTP |
 | 协作与版本 | 评论/回复、影像区域标注、版本上传/恢复 | Vue3 + Flask |
 
 ### 技术架构
@@ -116,7 +117,7 @@ FLASK_APP=run.py flask db upgrade
 ### 运行测试
 
 ```bash
-# 后端测试（274个用例，覆盖API/模型/安全/迁移/异步任务/版本证书）
+# 后端测试（289个用例，覆盖API/模型/安全/迁移/异步任务/版本证书/通知渠道/授权范围）
 cd backend && python -m pytest tests/ -v
 
 # 前端生产构建
@@ -148,7 +149,7 @@ garden-asset-platform/
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
 │   ├── migrations/                # Alembic 迁移（baseline + versions）
-│   ├── tests/                     # pytest测试（274个用例）
+│   ├── tests/                     # pytest测试（289个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -192,7 +193,7 @@ garden-asset-platform/
 | GET | `/api/assets` | 资产列表（分页、筛选、搜索） |
 | POST | `/api/assets/upload` | 上传资产（含魔数校验） |
 | GET | `/api/assets/:id` | 资产详情 |
-| GET | `/api/assets/:id/download` | 下载资产文件 |
+| GET | `/api/assets/:id/download` | 下载资产（授权用户需传 `purpose`/`territory` 申报范围，超范围返回 403 并记录） |
 | GET | `/api/assets/stats` | 资产统计（含水印趋势） |
 | GET | `/api/assets/my` | 我的资产 |
 | GET | `/api/assets/:id/thumbnail` | 资产缩略图（`?size=card` 返回列表卡片图） |
@@ -268,6 +269,9 @@ garden-asset-platform/
 |------|------|------|
 | GET | `/api/notifications` | 当前用户的待办提醒（审批、申请状态、到期），含未读数与已读状态 |
 | POST | `/api/notifications/read` | 标记单条或全部待办为已读 |
+| GET/PUT | `/api/notifications/preferences` | 邮件通知开关与事件分组偏好 |
+| POST | `/api/notifications/test-email` | 向当前用户邮箱发送测试邮件（需配置 SMTP） |
+| GET | `/api/notifications/stream` | SSE 实时通知流（Authorization 头鉴权，`since_id` 补发） |
 | GET | `/api/logs` | 操作日志（管理员，支持模块/结果/日期/关键词筛选） |
 | GET | `/api/system/status` | 系统能力状态（管理员：AI/链/Redis/调度器真实启用情况） |
 
@@ -275,7 +279,7 @@ garden-asset-platform/
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/license/apply` | 申请使用授权 |
+| POST | `/api/license/apply` | 申请使用授权（支持 `usage_purpose_code`、`allowed_channels`、`allowed_formats`、`max_downloads`、`territory`） |
 | GET | `/api/license/pending` | 待审批列表（审批员） |
 | POST | `/api/license/approve/:id` | 审批（通过/拒绝） |
 | GET | `/api/license/approved` | 已审批列表 |
@@ -318,10 +322,21 @@ Docker 部署见 `garden-asset-platform/.env.example`；本地开发见 `backend
 | `TASK_MAX_ATTEMPTS` | 异步任务最大尝试次数 | `3` |
 | `TASK_STUCK_TIMEOUT_MINUTES` | 多久未完成的 running 任务视为超时并重新排队 | `15` |
 | `TASK_WORKER_POLL_INTERVAL` | worker 空闲轮询间隔（秒） | `1.0` |
+| `SSE_ENABLED` | 是否启用站内 SSE 实时通知 | `true` |
+| `SSE_MAX_SECONDS` | 单个 SSE 连接最长保持秒数 | `300` |
+| `SSE_MAX_CONNECTIONS_PER_USER` | 单用户同时保留的 SSE 连接上限 | `3` |
+| `MAIL_ENABLED` | 是否启用邮件通知 | `false` |
+| `MAIL_HOST` / `MAIL_PORT` | SMTP 主机与端口 | - / `587` |
+| `MAIL_USERNAME` / `MAIL_PASSWORD` | SMTP 登录凭据 | - |
+| `MAIL_FROM` | 发件人地址 | 同 `MAIL_USERNAME` |
+| `MAIL_USE_TLS` / `MAIL_USE_SSL` | SMTP 加密方式 | `true` / `false` |
+| `PUBLIC_BASE_URL` | 邮件中链接使用的前端地址 | `http://localhost:5173` |
 
 > 多 worker 部署（4 个 gunicorn worker）默认关闭任务调度器，避免备份/授权过期任务重复执行。如需启用，设置 `SCHEDULER_ENABLED=true`，并确保只运行一个调度进程（或改用外部 cron）。
 
 > 水印与存证任务默认进入 `async_tasks` 表，由 `docker compose` 中的 `worker` 服务执行；开发环境由 API 进程内 worker 执行。任务领取使用条件更新，多 worker 并发也不会重复处理。
+
+> 站内实时通知使用 SSE，Docker 后端已切换为 `gthread` worker 并放宽超时；每个在线连接占用一个线程。大规模部署建议改用 Redis Pub/Sub + gevent/eventlet，或把 SSE 拆成独立服务。邮件通知默认关闭，配置 `MAIL_ENABLED`/`MAIL_HOST` 后由 worker 每分钟派发。
 
 > 文件默认保存在 `backend/uploads/`（Docker 中为挂载卷）。`docker-compose.yml` 中的 MinIO 服务为可选组件，当前版本尚未接入对象存储后端。
 

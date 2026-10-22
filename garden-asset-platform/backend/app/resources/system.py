@@ -10,6 +10,7 @@ from flask_restful import Resource
 from app.models import User
 from app.services.ai_service import ai_service
 from app.services.blockchain_service import blockchain_service
+from app.services.email_service import delivery_counts, mail_configured
 from app.services.task_service import task_counts
 
 ADMIN_ROLES = ('admin', 'asset_admin', 'license_admin', 'adm1', 'adm2')
@@ -30,6 +31,8 @@ class SystemStatusResource(Resource):
         scheduler_enabled = bool(current_app.config.get('SCHEDULER_ENABLED', False))
         worker_enabled = bool(current_app.config.get('TASK_WORKER_ENABLED', False))
         counts = task_counts()
+        mail_ready = mail_configured()
+        deliveries = delivery_counts()
 
         return {
             'code': 200,
@@ -80,6 +83,21 @@ class SystemStatusResource(Resource):
                         '任务会留在队列，需运行 flask tasks run 或开启 TASK_WORKER_ENABLED'
                     ),
                     'counts': counts
+                },
+                'notifications': {
+                    'sse_enabled': bool(
+                        current_app.config.get('SSE_ENABLED', True)
+                    ),
+                    'mail_configured': mail_ready,
+                    'label': (
+                        '邮件通知已配置' if mail_ready else '邮件通知未配置'
+                    ),
+                    'description': (
+                        '事件通知可通过 SMTP 发送给开启邮件偏好的用户'
+                        if mail_ready else
+                        '站内 SSE 可用；配置 MAIL_ENABLED/MAIL_HOST 后可发送邮件'
+                    ),
+                    'deliveries': deliveries
                 }
             }
         }, 200

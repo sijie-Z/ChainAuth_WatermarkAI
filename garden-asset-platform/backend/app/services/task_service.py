@@ -391,6 +391,12 @@ def _worker_loop(app):
                 if ticks >= reconcile_every:
                     ticks = 0
                     reconcile_stuck()
+                    if not app.config.get('SCHEDULER_ENABLED', False):
+                        try:
+                            from app.services.email_service import dispatch_pending_emails
+                            dispatch_pending_emails()
+                        except Exception:
+                            logger.exception('邮件通知派发失败')
                 db.session.remove()
         except Exception:
             logger.exception('异步任务 worker 轮询异常')

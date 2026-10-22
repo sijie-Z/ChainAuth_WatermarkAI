@@ -1,23 +1,33 @@
-"""站内待办提醒与已读状态
+"""站内待办提醒、通知偏好与实时推送
 
 待办不单独存通知正文：按当前用户角色与业务状态实时汇总。
-已读状态单独记录在 notification_reads，key 同时包含业务状态，
-状态变化后会重新变为未读。
+事件通知写入 notification_events 后，可通过 SSE 实时推送到已登录页面；
+邮件投递由 notification_deliveries + 后台 worker 完成。
 """
+import json
+import threading
+import time
 from datetime import datetime, timedelta
 
-from flask import request
+from flask import current_app, request, Response, stream_with_context
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restful import Resource
 
 from app.extensions import db
 from app.models import (
     Asset, AssetComment, License, LicenseApplication, NotificationEvent,
-    NotificationRead, User
+    NotificationPreference, NotificationRead, User
 )
+from app.services.email_service import mail_configured, send_test_email
+from app.utils.middleware import rate_limit
 from sqlalchemy import or_
 
 ADMIN_ROLES = ('admin', 'asset_admin', 'license_admin', 'adm1', 'adm2')
+EMAIL_GROUPS = ('asset', 'license', 'task')
+DEFAULT_EMAIL_GROUPS = ['asset', 'license', 'task']
+
+_sse_connections = {}
+_sse_lock = threading.Lock()
 
 
 def _build_items(user):
@@ -250,3 +260,172 @@ class NotificationReadResource(Resource):
                 'unread_count': sum(item.get('count', 1) for item in unread_items)
             }
         }, 200
+
+
+class NotificationPreferenceResource(Resource):
+    """当前用户的邮件通知偏好"""
+
+    @jwt_required()
+    def get(self):
+        user = User.query.get(get_jwt_identity())
+        if not user:
+            return {'code': 404, 'message': '用户不存在'}, 404
+        preference = NotificationPreference.query.filter_by(user_id=user.id).first()
+        data = preference.to_dict() if preference else {
+            'email_enabled': False,
+            'email_groups': DEFAULT_EMAIL_GROUPS,
+            'email': user.email,
+            'updated_at': None,
+        }
+        data['email'] = user.email
+        data['mail_configured'] = mail_configured()
+        data['sse_enabled'] = bool(current_app.config.get('SSE_ENABLED', True))
+        data['available_groups'] = [
+            {'key': 'asset', 'label': '资产审核结果'},
+            {'key': 'license', 'label': '授权审批、撤销与续期'},
+            {'key': 'task', 'label': '水印/存证任务结果'},
+        ]
+        return {'code': 200, 'data': data}, 200
+
+    @jwt_required()
+    def put(self):
+        user = User.query.get(get_jwt_identity())
+        if not user:
+            return {'code': 404, 'message': '用户不存在'}, 404
+
+        data = request.get_json(silent=True) or {}
+        email_enabled = bool(data.get('email_enabled'))
+        groups = data.get('email_groups', DEFAULT_EMAIL_GROUPS)
+        if not isinstance(groups, list):
+            return {'code': 400, 'message': 'email_groups 必须是数组'}, 400
+        groups = [str(item) for item in groups if item]
+        invalid = [item for item in groups if item not in EMAIL_GROUPS]
+        if invalid:
+            return {'code': 400, 'message': '存在无效的通知分组'}, 400
+        if email_enabled and not user.email:
+            return {'code': 400, 'message': '请先在个人信息中填写邮箱'}, 400
+
+        preference = NotificationPreference.query.filter_by(user_id=user.id).first()
+        if not preference:
+            preference = NotificationPreference(user_id=user.id)
+            db.session.add(preference)
+        preference.email_enabled = email_enabled
+        preference.email_groups = groups
+        db.session.commit()
+
+        return {
+            'code': 200,
+            'message': '通知偏好已保存',
+            'data': preference.to_dict()
+        }, 200
+
+
+class NotificationTestEmailResource(Resource):
+    """向当前用户邮箱发送测试邮件"""
+
+    @rate_limit(limit=3, window=60)
+    @jwt_required()
+    def post(self):
+        user = User.query.get(get_jwt_identity())
+        if not user:
+            return {'code': 404, 'message': '用户不存在'}, 404
+        if not mail_configured():
+            return {
+                'code': 503,
+                'message': 'SMTP 未配置，请先在服务端设置 MAIL_ENABLED 等环境变量'
+            }, 503
+        try:
+            send_test_email(user)
+        except ValueError as exc:
+            return {'code': 400, 'message': str(exc)}, 400
+        except Exception as exc:
+            current_app.logger.warning('测试邮件发送失败: %s', exc)
+            return {'code': 500, 'message': '测试邮件发送失败，请检查 SMTP 配置'}, 500
+        return {'code': 200, 'message': f'测试邮件已发送至 {user.email}'}, 200
+
+
+class NotificationStreamResource(Resource):
+    """SSE 实时通知流
+
+    使用 Authorization 头鉴权，前端通过 fetch + ReadableStream 消费。
+    每 5 秒检查一次数据库中的新事件，心跳保活，连接最长保持配置的秒数。
+    """
+
+    @jwt_required()
+    def get(self):
+        if not current_app.config.get('SSE_ENABLED', True):
+            return {'code': 503, 'message': '实时通知未启用'}, 503
+
+        user_id = get_jwt_identity()
+        app = current_app._get_current_object()
+        max_seconds = int(app.config.get('SSE_MAX_SECONDS', 300))
+        interval = max(0.2, float(app.config.get('SSE_POLL_INTERVAL', 5)))
+        max_connections = int(
+            app.config.get('SSE_MAX_CONNECTIONS_PER_USER', 3)
+        )
+
+        with _sse_lock:
+            current = _sse_connections.get(user_id, 0)
+            if current >= max_connections:
+                return {
+                    'code': 429,
+                    'message': '实时通知连接数过多，请关闭多余页面后重试'
+                }, 429
+            _sse_connections[user_id] = current + 1
+
+        since_arg = request.args.get('since_id', type=int)
+        if since_arg is None:
+            latest = NotificationEvent.query.filter_by(user_id=user_id).order_by(
+                NotificationEvent.id.desc()
+            ).first()
+            since_id = latest.id if latest else 0
+        else:
+            since_id = max(0, since_arg)
+
+        def generate():
+            last_id = since_id
+            started = time.time()
+            try:
+                yield 'retry: 5000\n\n'
+                while time.time() - started < max_seconds:
+                    payloads = []
+                    try:
+                        events = NotificationEvent.query.filter(
+                            NotificationEvent.user_id == user_id,
+                            NotificationEvent.id > last_id,
+                        ).order_by(NotificationEvent.id.asc()).limit(50).all()
+                        payloads = [event.to_dict() for event in events]
+                        db.session.remove()
+                    except Exception:
+                        db.session.rollback()
+                        db.session.remove()
+                        app.logger.exception('SSE 读取通知事件失败')
+
+                    for payload in payloads:
+                        last_id = max(last_id, payload['id'])
+                        yield (
+                            f"id: {payload['id']}\n"
+                            'event: notification\n'
+                            f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                        )
+                    yield ': heartbeat\n\n'
+                    time.sleep(interval)
+
+                yield 'event: close\ndata: {}\n\n'
+            finally:
+                with _sse_lock:
+                    remaining = _sse_connections.get(user_id, 1) - 1
+                    if remaining > 0:
+                        _sse_connections[user_id] = remaining
+                    else:
+                        _sse_connections.pop(user_id, None)
+
+        return Response(
+            stream_with_context(generate()),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'X-Accel-Buffering': 'no',
+                'Connection': 'keep-alive',
+            },
+        )

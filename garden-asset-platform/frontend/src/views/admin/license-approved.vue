@@ -129,6 +129,12 @@
         <el-descriptions-item label="有效期">{{ detailDialog.start_time ? formatDate(detailDialog.start_time) : '-' }} 至 {{ detailDialog.end_time ? formatDate(detailDialog.end_time) : '长期' }}</el-descriptions-item>
         <el-descriptions-item label="授权地域">{{ detailDialog.territory || '未指定' }}</el-descriptions-item>
         <el-descriptions-item label="独家授权">{{ detailDialog.is_exclusive ? '是' : '否' }}</el-descriptions-item>
+        <el-descriptions-item label="执行范围" :span="2">
+          {{ detailDialog.scope_summary || '按授权合同约定' }}
+        </el-descriptions-item>
+        <el-descriptions-item v-if="detailDialog.max_downloads" label="下载用量" :span="2">
+          {{ detailDialog.download_count || 0 }} / {{ detailDialog.max_downloads }} 次
+        </el-descriptions-item>
         <el-descriptions-item label="审批人">{{ detailDialog.approver_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="申请用途" :span="2">{{ detailDialog.purpose || detailDialog.usage_scope || '-' }}</el-descriptions-item>
         <el-descriptions-item label="审批意见" :span="2">{{ detailDialog.approve_comment || '-' }}</el-descriptions-item>

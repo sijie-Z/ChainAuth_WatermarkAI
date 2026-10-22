@@ -84,12 +84,15 @@ def tasks_group():
 @click.option('--once', is_flag=True, help='处理完当前到期任务后退出')
 @click.option('--interval', default=2.0, type=float, help='无任务时的轮询间隔（秒）')
 @click.option('--limit', default=50, type=int, help='单轮最多处理任务数')
+@click.option('--no-email', is_flag=True, help='不派发邮件通知')
 @with_appcontext
-def tasks_run(once, interval, limit):
+def tasks_run(once, interval, limit, no_email):
     """启动队列 worker（生产环境用它替代进程内线程）"""
     from app.services import task_service
+    from app.services.email_service import dispatch_pending_emails
 
     click.echo('任务 worker 已启动，按 Ctrl+C 停止')
+    last_email_dispatch = 0.0
     while True:
         processed = 0
         while processed < max(1, limit):
@@ -104,6 +107,17 @@ def tasks_run(once, interval, limit):
             )
             if task.error_message:
                 click.echo(f'  错误: {task.error_message}')
+
+        now = time.time()
+        if not no_email and now - last_email_dispatch >= 60:
+            result = dispatch_pending_emails()
+            last_email_dispatch = now
+            if result.get('sent') or result.get('failed'):
+                click.echo(
+                    f"邮件通知: 发送 {result.get('sent', 0)}, "
+                    f"失败 {result.get('failed', 0)}"
+                )
+
         if once:
             click.echo(f'本次处理 {processed} 个任务')
             break
@@ -147,9 +161,74 @@ def tasks_list(status, limit):
             click.echo(f'  {task.error_message}')
 
 
+@click.group('notifications')
+def notifications_group():
+    """通知渠道运维（邮件派发与测试）"""
+
+
+@notifications_group.command('dispatch')
+@click.option('--limit', default=20, type=int)
+@with_appcontext
+def notifications_dispatch(limit):
+    """派发到期的邮件通知"""
+    from app.services.email_service import dispatch_pending_emails
+
+    result = dispatch_pending_emails(limit=limit)
+    if not result.get('mail_configured'):
+        click.echo('SMTP 未配置（MAIL_ENABLED/MAIL_HOST），未发送邮件')
+        return
+    click.echo(
+        f"发送 {result['sent']}，跳过 {result['skipped']}，"
+        f"失败 {result['failed']}，待重试 {result['retried']}"
+    )
+
+
+@notifications_group.command('test')
+@click.argument('username')
+@with_appcontext
+def notifications_test(username):
+    """给指定用户发送测试邮件"""
+    from app.models import User
+    from app.services.email_service import send_test_email
+
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        click.echo(f'用户 {username} 不存在')
+        return
+    try:
+        send_test_email(user)
+    except Exception as exc:
+        click.echo(f'发送失败: {exc}')
+        return
+    click.echo(f'测试邮件已发送至 {user.email}')
+
+
+@notifications_group.command('deliveries')
+@click.option('--status', default=None, help='pending/sent/skipped/failed')
+@click.option('--limit', default=20, type=int)
+@with_appcontext
+def notifications_deliveries(status, limit):
+    """查看邮件投递记录"""
+    from app.models import NotificationDelivery
+
+    query = NotificationDelivery.query
+    if status:
+        query = query.filter_by(status=status)
+    rows = query.order_by(NotificationDelivery.id.desc()).limit(max(1, limit)).all()
+    if not rows:
+        click.echo('暂无投递记录')
+        return
+    for row in rows:
+        click.echo(
+            f'{row.id} event={row.event_id} {row.status:<8} '
+            f'attempts={row.attempts} {row.error_message or ""}'
+        )
+
+
 def register_commands(app):
     """注册命令"""
     app.cli.add_command(create_admin)
     app.cli.add_command(init_gardens)
     app.cli.add_command(reset_password)
     app.cli.add_command(tasks_group)
+    app.cli.add_command(notifications_group)

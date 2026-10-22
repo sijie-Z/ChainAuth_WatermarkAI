@@ -462,6 +462,56 @@
           </template>
         </el-dialog>
 
+        <!-- 下载范围声明 -->
+        <el-dialog
+          v-model="downloadDialogVisible"
+          title="确认使用范围"
+          width="min(480px, 92vw)"
+        >
+          <el-alert
+            type="info"
+            :closable="false"
+            show-icon
+            class="download-scope-alert"
+            title="本次下载会记录申报用途与地域"
+            description="申报范围必须与授权范围一致，超出范围会被拒绝并写入台账。"
+          />
+          <el-form label-width="90px" class="download-scope-form">
+            <el-form-item label="使用目的">
+              <el-select v-model="downloadForm.purpose" style="width: 100%">
+                <el-option
+                  v-for="item in downloadPurposeOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="使用地域">
+              <el-select v-model="downloadForm.territory" style="width: 100%">
+                <el-option
+                  v-for="item in downloadTerritoryOptions"
+                  :key="item"
+                  :label="item"
+                  :value="item"
+                />
+              </el-select>
+            </el-form-item>
+          </el-form>
+          <div v-if="activeLicense" class="download-scope-summary">
+            <p>{{ activeLicense.scope_summary || '按授权合同约定' }}</p>
+            <p v-if="activeLicense.max_downloads">
+              剩余下载次数：{{ activeLicense.download_remaining }} / {{ activeLicense.max_downloads }}
+            </p>
+          </div>
+          <template #footer>
+            <el-button @click="downloadDialogVisible = false">取消</el-button>
+            <el-button type="primary" :loading="downloading" @click="confirmDownload">
+              确认下载
+            </el-button>
+          </template>
+        </el-dialog>
+
         <!-- 上传新版本 -->
         <el-dialog
           v-model="versionDialogVisible"
@@ -771,6 +821,21 @@ const versionProgress = ref(0)
 const versionDownloadingId = ref(null)
 const versionRestoringId = ref(null)
 const activeTask = ref(null)
+const downloadDialogVisible = ref(false)
+const downloadForm = reactive({
+  purpose: 'personal_learning',
+  territory: '中国大陆'
+})
+const downloadPurposeOptions = [
+  { value: 'personal_learning', label: '个人学习' },
+  { value: 'teaching_research', label: '教学科研' },
+  { value: 'commercial_marketing', label: '商业宣传' },
+  { value: 'publication', label: '出版发行' },
+  { value: 'exhibition', label: '公开展览' },
+  { value: 'derivative', label: '衍生创作' },
+  { value: 'other', label: '其他' }
+]
+const downloadTerritoryOptions = ['中国大陆', '中国港澳台', '全球', '海外']
 let taskPollTimer = null
 
 const VERSION_ACCEPT = {
@@ -1239,11 +1304,37 @@ async function shareAsset() {
   }
 }
 
-async function downloadAsset() {
+function downloadAsset() {
+  if (downloading.value) return
+  // 所有者与管理员下载自己管理的资产，不受授权范围限制
+  if (canManage.value) {
+    performDownload({})
+    return
+  }
+  if (!activeLicense.value) {
+    ElMessage.warning('无有效授权，请先申请授权')
+    return
+  }
+  downloadForm.purpose = activeLicense.value.usage_purpose_code || 'personal_learning'
+  downloadForm.territory = downloadTerritoryOptions.includes(activeLicense.value.territory)
+    ? activeLicense.value.territory
+    : '中国大陆'
+  downloadDialogVisible.value = true
+}
+
+async function confirmDownload() {
+  downloadDialogVisible.value = false
+  await performDownload({
+    purpose: downloadForm.purpose,
+    territory: downloadForm.territory
+  })
+}
+
+async function performDownload(params) {
   if (downloading.value) return
   downloading.value = true
   try {
-    const response = await assetApi.download(asset.value.id)
+    const response = await assetApi.download(asset.value.id, params)
     const url = URL.createObjectURL(response.data)
     const link = document.createElement('a')
     link.href = url
@@ -1253,6 +1344,7 @@ async function downloadAsset() {
     link.remove()
     URL.revokeObjectURL(url)
     ElMessage.success('下载已开始')
+    loadExtras()
   } catch (error) {
     let message = '下载失败'
     const data = error.response?.data
@@ -1907,6 +1999,27 @@ watch(() => route.query.tab, tab => {
 }
 
 // ========== 分享弹窗 ==========
+.download-scope-alert {
+  margin-bottom: 16px;
+}
+
+.download-scope-form {
+  margin-top: 4px;
+}
+
+.download-scope-summary {
+  padding: 12px 14px;
+  border-radius: $radius-sm;
+  background: $bg-secondary;
+  font-size: 12px;
+  line-height: 1.7;
+  color: $text-secondary;
+
+  p {
+    margin: 0;
+  }
+}
+
 .share-dialog-note {
   margin: 0 0 16px;
   font-size: 13px;

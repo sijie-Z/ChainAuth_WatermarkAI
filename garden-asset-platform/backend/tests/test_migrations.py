@@ -14,7 +14,8 @@ EXPECTED_TABLES = {
     'favorites', 'download_records', 'licenses', 'license_applications',
     'license_contracts', 'certificates', 'blockchain_transactions',
     'operation_logs', 'system_configs', 'notification_reads',
-    'notification_events', 'async_tasks', 'alembic_version',
+    'notification_events', 'notification_preferences', 'notification_deliveries',
+    'async_tasks', 'alembic_version',
 }
 
 
@@ -70,5 +71,18 @@ def test_flask_db_upgrade_creates_full_schema(tmp_path):
             assert columns != ['asset_id'], (
                 'certificates.asset_id 仍带唯一约束，无法按版本签发多份证书'
             )
+
+        license_columns = {
+            row[1] for row in connection.execute('PRAGMA table_info(licenses)')
+        }
+        assert {
+            'usage_purpose_code', 'allowed_channels', 'allowed_formats',
+            'max_downloads', 'download_count'
+        } <= license_columns
+
+        download_columns = {
+            row[1] for row in connection.execute('PRAGMA table_info(download_records)')
+        }
+        assert {'status', 'denial_reason', 'usage_purpose', 'territory'} <= download_columns
     finally:
         connection.close()

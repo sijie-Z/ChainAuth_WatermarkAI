@@ -13,6 +13,7 @@ from app.models.license import License, LicenseApplication, LicenseContract
 from app.models.asset import Asset
 from app.models.user import User
 from app.models.log import OperationLog
+from app.services.license_scope import scope_summary, validate_application_scope
 from app.services.notification_service import add_notification_event
 
 
@@ -44,6 +45,10 @@ class LicenseApplyResource(Resource):
         if existing:
             return {'code': 400, 'message': '该资产已有待审批的申请'}, 400
 
+        scope_fields, scope_error = validate_application_scope(data, asset)
+        if scope_error:
+            return {'code': 400, 'message': scope_error}, 400
+
         application = LicenseApplication(
             application_code=f"APP-{datetime.now().strftime('%Y%m%d%H%M%S%f')}-{uuid.uuid4().hex[:4].upper()}",
             asset_id=asset_id,
@@ -51,7 +56,11 @@ class LicenseApplyResource(Resource):
             license_type=data.get('license_type', 'personal'),
             usage_scope=data.get('purpose', ''),
             usage_purpose=data.get('purpose', ''),
-            territory=data.get('territory', '中国大陆'),
+            usage_purpose_code=scope_fields['usage_purpose_code'],
+            allowed_channels=scope_fields['allowed_channels'],
+            allowed_formats=scope_fields['allowed_formats'],
+            max_downloads=scope_fields['max_downloads'],
+            territory=scope_fields['territory'],
             duration_months=self._parse_duration(data.get('valid_period')),
             is_exclusive=data.get('is_exclusive', False),
             contact_person=data.get('contact', '')
@@ -160,6 +169,7 @@ def build_contract_content(license, asset, application=None):
         f"授权资产：{asset.title}（{asset.asset_code}）\n"
         f"授权类型：{type_names.get(license.license_type, license.license_type)}\n"
         f"使用范围：{usage}\n"
+        f"执行范围：{scope_summary(license)}\n"
         f"授权地域：{license.territory or '中国大陆'}\n"
         f"授权期限：{fmt(license.start_time)} 至 {fmt(license.end_time)}\n"
         f"是否独家：{'是' if license.is_exclusive else '否'}\n\n"
@@ -425,6 +435,10 @@ class LicenseApproveResource(Resource):
             license_type=application.license_type,
             usage_scope=application.usage_scope,
             territory=application.territory,
+            usage_purpose_code=application.usage_purpose_code,
+            allowed_channels=application.allowed_channels,
+            allowed_formats=application.allowed_formats,
+            max_downloads=application.max_downloads,
             start_time=datetime.utcnow(),
             end_time=end_time,
             is_exclusive=application.is_exclusive,
@@ -478,6 +492,7 @@ class LicenseApprovedResource(Resource):
             lic_dict['asset_title'] = lic.asset.title if lic.asset else ''
             lic_dict['licensee_name'] = lic.licensee.username if lic.licensee else ''
             lic_dict['licensor_name'] = lic.licensor.username if lic.licensor else ''
+            lic_dict['scope_summary'] = scope_summary(lic)
 
             application = LicenseApplication.query.filter_by(
                 asset_id=lic.asset_id,
@@ -551,6 +566,7 @@ class MyLicenseResource(Resource):
         for lic in pagination.items:
             lic_dict = lic.to_dict()
             lic_dict['asset_title'] = lic.asset.title if lic.asset else ''
+            lic_dict['scope_summary'] = scope_summary(lic)
             result.append(lic_dict)
 
         return {

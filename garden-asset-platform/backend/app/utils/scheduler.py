@@ -99,6 +99,21 @@ def init_scheduler(app):
             except Exception as exc:
                 app.logger.error(f'异步任务对账失败: {exc}')
 
+    @scheduler.scheduled_job('interval', minutes=1)
+    def dispatch_email_notifications():
+        """每分钟派发到期的邮件通知"""
+        with app.app_context():
+            try:
+                from app.services.email_service import dispatch_pending_emails
+                result = dispatch_pending_emails()
+                if result.get('sent') or result.get('failed'):
+                    app.logger.info(
+                        f"邮件通知: 发送 {result.get('sent', 0)}, "
+                        f"失败 {result.get('failed', 0)}"
+                    )
+            except Exception as exc:
+                app.logger.error(f'邮件通知派发失败: {exc}')
+
     scheduler.start()
     app.logger.info('任务调度器已启动')
 

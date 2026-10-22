@@ -155,8 +155,10 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElNotification } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import { notificationApi, userApi } from '@/api/modules'
+import { useNotificationStream } from '@/hooks'
 import {
   ArrowDown, Bell, Collection, DataLine, Download, Menu, Picture, Reading, Search, Setting, Star, SwitchButton, User
 } from '@element-plus/icons-vue'
@@ -243,6 +245,19 @@ async function refreshCurrentUser() {
 onMounted(() => {
   refreshCurrentUser()
   loadNotifications()
+})
+
+useNotificationStream((event) => {
+  loadNotifications()
+  ElNotification({
+    title: event.title || '新通知',
+    message: event.description || '你有一条新的站内通知',
+    type: /rejected|revoked|failed/.test(event.event_type || '') ? 'warning' : 'info',
+    duration: 6000,
+    onClick: () => {
+      if (event.link) router.push(event.link)
+    }
+  })
 })
 
 function openCommandPalette() {

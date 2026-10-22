@@ -21,20 +21,24 @@
 
     <section v-if="showSummary" class="summary-grid">
       <div class="summary-card">
-        <span class="summary-label">累计下载</span>
+        <span class="summary-label">台账记录</span>
         <strong class="summary-value">{{ summary.total ?? '—' }}</strong>
       </div>
       <div class="summary-card">
-        <span class="summary-label">今日下载</span>
+        <span class="summary-label">今日记录</span>
         <strong class="summary-value">{{ summary.today ?? '—' }}</strong>
       </div>
       <div class="summary-card">
-        <span class="summary-label">授权下载</span>
+        <span class="summary-label">授权渠道记录</span>
         <strong class="summary-value">{{ summary.license_total ?? '—' }}</strong>
       </div>
       <div class="summary-card">
         <span class="summary-label">分享下载</span>
         <strong class="summary-value">{{ summary.share_total ?? '—' }}</strong>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">超范围拒绝</span>
+        <strong class="summary-value denied">{{ summary.denied_total ?? '—' }}</strong>
       </div>
       <div class="summary-card">
         <span class="summary-label">涉及用户</span>
@@ -67,6 +71,15 @@
         value-format="YYYY-MM-DD"
         class="filter-date"
       />
+      <el-select
+        v-model="filters.status"
+        class="filter-channel"
+        @change="applyFilters"
+      >
+        <el-option label="全部结果" value="all" />
+        <el-option label="下载成功" value="success" />
+        <el-option label="超范围拒绝" value="denied" />
+      </el-select>
       <el-select
         v-if="scope === 'all'"
         v-model="filters.channel"
@@ -120,6 +133,18 @@
               </span>
             </router-link>
             <span v-else class="muted">资产已删除</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="结果" width="110">
+          <template #default="{ row }">
+            <el-tooltip
+              v-if="row.status === 'denied'"
+              :content="row.denial_reason || '超出授权范围'"
+              placement="top"
+            >
+              <el-tag size="small" type="danger" effect="plain">超范围拒绝</el-tag>
+            </el-tooltip>
+            <el-tag v-else size="small" type="success" effect="plain">成功</el-tag>
           </template>
         </el-table-column>
         <el-table-column v-if="scope === 'all'" label="渠道" width="100">
@@ -183,6 +208,14 @@
               row.license.license_code
             }}</span>
             <span v-else-if="row.channel === 'share'" class="mobile-license mono">分享下载</span>
+            <el-tag
+              v-if="row.status === 'denied'"
+              size="small"
+              type="danger"
+              effect="plain"
+            >
+              超范围拒绝
+            </el-tag>
           </header>
           <router-link v-if="row.asset" :to="`/assets/${row.asset.id}`" class="mobile-asset">
             {{ row.asset.title }}
@@ -229,14 +262,15 @@ const summary = reactive({
   users: null,
   assets: null,
   license_total: null,
-  share_total: null
+  share_total: null,
+  denied_total: null
 })
 const loading = ref(false)
 const loadError = ref(false)
 const page = ref(1)
 const perPage = ref(20)
 const total = ref(0)
-const filters = reactive({ keyword: '', dateRange: [], channel: 'all' })
+const filters = reactive({ keyword: '', dateRange: [], channel: 'all', status: 'all' })
 const failedThumbs = reactive({})
 
 function markThumbFailed(id) {
@@ -247,7 +281,8 @@ const appliedFilters = reactive({
   keyword: '',
   start_date: '',
   end_date: '',
-  channel: 'all'
+  channel: 'all',
+  status: 'all'
 })
 
 function buildParams() {
@@ -257,7 +292,8 @@ function buildParams() {
     keyword: appliedFilters.keyword || undefined,
     start_date: appliedFilters.start_date || undefined,
     end_date: appliedFilters.end_date || undefined,
-    channel: scope.value === 'all' ? appliedFilters.channel : undefined
+    channel: scope.value === 'all' ? appliedFilters.channel : undefined,
+    status: appliedFilters.status === 'all' ? undefined : appliedFilters.status
   }
 }
 
@@ -292,6 +328,7 @@ function applyFilters() {
   appliedFilters.start_date = filters.dateRange?.[0] || ''
   appliedFilters.end_date = filters.dateRange?.[1] || ''
   appliedFilters.channel = filters.channel || 'all'
+  appliedFilters.status = filters.status || 'all'
   page.value = 1
   loadRecords()
 }
@@ -300,6 +337,7 @@ function resetFilters() {
   filters.keyword = ''
   filters.dateRange = []
   filters.channel = 'all'
+  filters.status = 'all'
   applyFilters()
 }
 
@@ -358,9 +396,13 @@ onMounted(loadRecords)
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
   margin-bottom: 16px;
+}
+
+.summary-value.denied {
+  color: $error-color;
 }
 
 .summary-card {

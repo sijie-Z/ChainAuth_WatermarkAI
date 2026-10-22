@@ -84,7 +84,11 @@ def create_app(config_name='default'):
             'blockchain': 'enabled' if app.config.get('BLOCKCHAIN_ENABLED') else 'simulated',
             'ai': 'enabled' if app.config.get('AI_ENABLED') else 'disabled',
             'scheduler': 'enabled' if app.config.get('SCHEDULER_ENABLED') else 'disabled',
-            'task_worker': 'enabled' if app.config.get('TASK_WORKER_ENABLED') else 'disabled'
+            'task_worker': 'enabled' if app.config.get('TASK_WORKER_ENABLED') else 'disabled',
+            'mail': 'enabled' if (
+                app.config.get('MAIL_ENABLED') and app.config.get('MAIL_HOST')
+            ) else 'disabled',
+            'sse': 'enabled' if app.config.get('SSE_ENABLED') else 'disabled'
         }
         return jsonify(status), 200 if status['status'] == 'healthy' else 503
 
@@ -297,10 +301,17 @@ def register_api_resources(app):
     api.add_resource(MyLicenseResource, '/license/my')
     api.add_resource(MyApplicationsResource, '/license/my-applications')
 
-    # 站内待办提醒
-    from app.resources.notifications import NotificationsResource, NotificationReadResource
+    # 站内待办提醒与通知渠道
+    from app.resources.notifications import (
+        NotificationsResource, NotificationReadResource,
+        NotificationPreferenceResource, NotificationTestEmailResource,
+        NotificationStreamResource
+    )
     api.add_resource(NotificationsResource, '/notifications')
     api.add_resource(NotificationReadResource, '/notifications/read')
+    api.add_resource(NotificationPreferenceResource, '/notifications/preferences')
+    api.add_resource(NotificationTestEmailResource, '/notifications/test-email')
+    api.add_resource(NotificationStreamResource, '/notifications/stream')
 
     # 操作日志
     from app.resources.logs import LogListResource

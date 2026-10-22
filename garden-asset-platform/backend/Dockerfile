@@ -33,4 +33,5 @@ ENV PYTHONUNBUFFERED=1
 EXPOSE 5000
 
 # 启动命令
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "app:create_app('production')"]
+# gthread：SSE 长连接会占用线程，不能使用默认同步 worker 的 4 连接上限
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--worker-class", "gthread", "--threads", "8", "--timeout", "360", "app:create_app('production')"]

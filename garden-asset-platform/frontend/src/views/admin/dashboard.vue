@@ -378,6 +378,19 @@ const systemItems = computed(() => {
       type: (data.tasks?.counts?.failed || 0) > 0
         ? 'danger'
         : (data.tasks?.enabled ? 'success' : 'warning')
+    },
+    {
+      key: 'notifications',
+      name: '通知渠道',
+      label: data.notifications?.mail_configured
+        ? '邮件 + 站内实时'
+        : (data.notifications?.sse_enabled ? '仅站内实时' : '通知未启用'),
+      description: data.notifications
+        ? `邮件待发 ${data.notifications.deliveries?.pending || 0} · 已发 ${data.notifications.deliveries?.sent || 0} · 失败 ${data.notifications.deliveries?.failed || 0}`
+        : '',
+      type: (data.notifications?.deliveries?.failed || 0) > 0
+        ? 'danger'
+        : (data.notifications?.mail_configured ? 'success' : 'info')
     }
   ]
 })

@@ -28,7 +28,11 @@ export const assetApi = {
     : api.post('/assets/upload', formData),
   update: (id, data) => api.put(`/assets/${id}`, data),
   delete: (id) => api.delete(`/assets/${id}`),
-  download: (id) => api.get(`/assets/${id}/download`, { responseType: 'blob', timeout: 0 }),
+  download: (id, params) => api.get(`/assets/${id}/download`, {
+    params,
+    responseType: 'blob',
+    timeout: 0
+  }),
   my: (params) => api.get('/assets/my', { params }),
   publish: (id) => api.post(`/assets/${id}/publish`),
   approve: (id, data) => api.post(`/assets/${id}/approve`, data),
@@ -166,7 +170,15 @@ export const licenseApi = {
 // 站内待办提醒
 export const notificationApi = {
   get: () => api.get('/notifications', { silent: true }),
-  markRead: (payload) => api.post('/notifications/read', payload, { silent: true })
+  markRead: (payload) => api.post('/notifications/read', payload, { silent: true }),
+  getPreferences: () => api.get('/notifications/preferences'),
+  updatePreferences: (data) => api.put('/notifications/preferences', data),
+  testEmail: () => api.post('/notifications/test-email'),
+  streamUrl: (sinceId) => {
+    const base = import.meta.env.VITE_API_BASE_URL || '/api'
+    const query = sinceId ? `?since_id=${encodeURIComponent(sinceId)}` : ''
+    return `${base}/notifications/stream${query}`
+  }
 }
 
 // 操作日志

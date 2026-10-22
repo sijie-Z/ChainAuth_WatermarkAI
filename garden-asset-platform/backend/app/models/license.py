@@ -34,6 +34,13 @@ class License(db.Model):
     usage_scope = db.Column(db.Text, nullable=True)  # 使用范围描述
     territory = db.Column(db.String(100), default='中国大陆')  # 授权地域
 
+    # 可执行的授权范围（为空表示不限制，兼容历史授权）
+    usage_purpose_code = db.Column(db.String(40), nullable=True)
+    allowed_channels = db.Column(db.JSON, nullable=True)  # online/print/exhibition/broadcast
+    allowed_formats = db.Column(db.JSON, nullable=True)   # JPG/PNG/PDF/ZIP...
+    max_downloads = db.Column(db.Integer, nullable=True)
+    download_count = db.Column(db.Integer, default=0, nullable=False)
+
     # 有效期
     start_time = db.Column(db.DateTime, nullable=False)
     end_time = db.Column(db.DateTime, nullable=True)
@@ -74,6 +81,15 @@ class License(db.Model):
             'license_type': self.license_type,
             'usage_scope': self.usage_scope,
             'territory': self.territory,
+            'usage_purpose_code': self.usage_purpose_code,
+            'allowed_channels': self.allowed_channels or [],
+            'allowed_formats': self.allowed_formats or [],
+            'max_downloads': self.max_downloads,
+            'download_count': self.download_count or 0,
+            'download_remaining': (
+                None if self.max_downloads is None
+                else max(self.max_downloads - (self.download_count or 0), 0)
+            ),
             'start_time': self.start_time.isoformat() if self.start_time else None,
             'end_time': self.end_time.isoformat() if self.end_time else None,
             'is_exclusive': self.is_exclusive,
@@ -101,6 +117,10 @@ class LicenseApplication(db.Model):
     license_type = db.Column(db.String(50), nullable=False)
     usage_scope = db.Column(db.Text, nullable=False)
     usage_purpose = db.Column(db.Text, nullable=True)
+    usage_purpose_code = db.Column(db.String(40), nullable=True)
+    allowed_channels = db.Column(db.JSON, nullable=True)
+    allowed_formats = db.Column(db.JSON, nullable=True)
+    max_downloads = db.Column(db.Integer, nullable=True)
     territory = db.Column(db.String(100), default='中国大陆')
     duration_months = db.Column(db.Integer, nullable=True)
     is_exclusive = db.Column(db.Boolean, default=False)
@@ -148,6 +168,11 @@ class LicenseApplication(db.Model):
             'usage_scope': self.usage_scope,
             'usage_purpose': self.usage_purpose,
             'purpose': self.usage_purpose or self.usage_scope,
+            'usage_purpose_code': self.usage_purpose_code,
+            'allowed_channels': self.allowed_channels or [],
+            'allowed_formats': self.allowed_formats or [],
+            'max_downloads': self.max_downloads,
+            'territory': self.territory,
             'duration_months': self.duration_months,
             'status': self.status,
             'adm1_status': self.adm1_status,

@@ -640,19 +640,77 @@ class AssetDownloadResource(Resource):
         if asset.status != 'published' and not (is_owner or user.role in ADMIN_ROLES):
             return {'code': 403, 'message': '资产未发布'}, 403
 
-        # 检查下载权限：有效授权未过期，或本人/管理员
+        # 检查下载权限：有效授权未过期且在授权范围内，或本人/管理员
         from app.models.license import License
+        from app.models.extra import DownloadRecord
+        from app.services.license_scope import (
+            PURPOSE_OPTIONS, TERRITORY_OPTIONS, scope_violation
+        )
         now = datetime.utcnow()
-        has_license = License.query.filter(
+
+        purpose = (request.args.get('purpose') or '').strip() or None
+        territory = (request.args.get('territory') or '').strip() or None
+        if purpose and purpose not in PURPOSE_OPTIONS:
+            return {'code': 400, 'message': '使用目的选项无效'}, 400
+        if territory and territory not in TERRITORY_OPTIONS:
+            return {'code': 400, 'message': '使用地域选项无效'}, 400
+
+        licenses = License.query.filter(
             License.asset_id == asset_id,
             License.licensee_id == user_id,
             License.status == 'active',
             License.start_time <= now,
             or_(License.end_time.is_(None), License.end_time > now),
-        ).first()
+        ).order_by(License.id.asc()).all()
 
-        if not has_license and not is_owner and user.role not in ADMIN_ROLES:
-            return {'code': 403, 'message': '无下载权限，请先申请授权'}, 403
+        bypass_scope = is_owner or user.role in ADMIN_ROLES
+        selected_license = None
+        denial_reason = None
+        if not bypass_scope:
+            if not licenses:
+                denial_reason = '无下载权限，请先申请授权'
+            else:
+                reasons = []
+                for license_row in licenses:
+                    reason = scope_violation(
+                        license_row,
+                        source_format=asset.file_format,
+                        purpose=purpose,
+                        territory=territory,
+                    )
+                    if not reason:
+                        selected_license = license_row
+                        break
+                    reasons.append(reason)
+                if not selected_license:
+                    denial_reason = reasons[0] if reasons else '无下载权限'
+
+        if denial_reason:
+            record = DownloadRecord(
+                asset_id=asset_id,
+                user_id=user_id,
+                license_id=licenses[0].id if licenses else None,
+                status='denied',
+                denial_reason=denial_reason[:300],
+                usage_purpose=purpose,
+                territory=territory,
+                ip_address=request.remote_addr,
+                user_agent=request.headers.get('User-Agent', '')[:500]
+            )
+            db.session.add(record)
+            db.session.commit()
+            OperationLog.log(
+                user=user,
+                action='download_denied',
+                module='license',
+                description=f'下载被拒: {asset.asset_code} · {denial_reason}',
+                target_type='asset',
+                target_id=asset_id,
+                request=request,
+                status='failed',
+                error_message=denial_reason
+            )
+            return {'code': 403, 'message': denial_reason}, 403
 
         # 先确认文件存在，避免“下载失败但下载量已经增加”
         file_path = os.path.abspath(asset.watermarked_path or asset.storage_path or '')
@@ -660,15 +718,21 @@ class AssetDownloadResource(Resource):
             return {'code': 404, 'message': '文件不存在'}, 404
 
         # 记录下载（关联本次使用的授权，便于后续审计）
-        from app.models.extra import DownloadRecord
         record = DownloadRecord(
             asset_id=asset_id,
             user_id=user_id,
-            license_id=has_license.id if has_license else None,
+            license_id=selected_license.id if selected_license else None,
+            status='success',
+            usage_purpose=purpose,
+            territory=territory,
             ip_address=request.remote_addr,
             user_agent=request.headers.get('User-Agent', '')[:500]
         )
         db.session.add(record)
+        if selected_license:
+            selected_license.download_count = (
+                selected_license.download_count or 0
+            ) + 1
         asset.download_count += 1
         db.session.commit()
 

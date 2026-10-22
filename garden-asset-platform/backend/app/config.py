@@ -139,6 +139,26 @@ class Config:
         os.environ.get('TASK_STUCK_TIMEOUT_MINUTES', '15')
     )
 
+    # 站内实时通知（SSE）
+    SSE_ENABLED = os.environ.get('SSE_ENABLED', 'true').lower() == 'true'
+    SSE_MAX_SECONDS = int(os.environ.get('SSE_MAX_SECONDS', '300'))
+    SSE_POLL_INTERVAL = float(os.environ.get('SSE_POLL_INTERVAL', '5'))
+    SSE_MAX_CONNECTIONS_PER_USER = int(
+        os.environ.get('SSE_MAX_CONNECTIONS_PER_USER', '3')
+    )
+
+    # 邮件通知（默认关闭；配置 SMTP 后可在账号设置中开启）
+    MAIL_ENABLED = os.environ.get('MAIL_ENABLED', 'false').lower() == 'true'
+    MAIL_HOST = os.environ.get('MAIL_HOST', '')
+    MAIL_PORT = int(os.environ.get('MAIL_PORT', '587'))
+    MAIL_USERNAME = os.environ.get('MAIL_USERNAME', '')
+    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD', '')
+    MAIL_FROM = os.environ.get('MAIL_FROM', '')
+    MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS', 'true').lower() == 'true'
+    MAIL_USE_SSL = os.environ.get('MAIL_USE_SSL', 'false').lower() == 'true'
+    MAIL_TIMEOUT = int(os.environ.get('MAIL_TIMEOUT', '10'))
+    PUBLIC_BASE_URL = os.environ.get('PUBLIC_BASE_URL', 'http://localhost:5173')
+
 
 class DevelopmentConfig(Config):
     """开发环境配置"""
@@ -170,6 +190,9 @@ class TestingConfig(Config):
     BLOCKCHAIN_ENABLED = False
     SCHEDULER_ENABLED = False
     TASK_WORKER_ENABLED = False
+    SSE_MAX_SECONDS = 1
+    SSE_POLL_INTERVAL = 0.2
+    MAIL_ENABLED = False
 
 
 config = {

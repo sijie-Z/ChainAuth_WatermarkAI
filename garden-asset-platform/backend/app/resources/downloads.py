@@ -56,6 +56,10 @@ def _apply_filters(query, args):
         )
         query = query.filter(DownloadRecord.asset_id.in_(matching_assets))
 
+    status = (args.get('status') or '').strip()
+    if status in ('success', 'denied'):
+        query = query.filter(DownloadRecord.status == status)
+
     return query, None
 
 
@@ -78,7 +82,11 @@ def _serialize(record, include_user=False):
                 'license_code': record.license.license_code,
                 'license_type': record.license.license_type
             } if record.license else None
-        )
+        ),
+        'status': record.status or 'success',
+        'denial_reason': record.denial_reason,
+        'usage_purpose': record.usage_purpose,
+        'territory': record.territory
     }
     if include_user:
         item['user'] = {
@@ -139,6 +147,10 @@ class DownloadLedgerResource(Resource):
         if channel not in ('all', 'license', 'share'):
             return {'code': 400, 'message': '无效的下载渠道'}, 400
 
+        status_filter = (request.args.get('status') or 'all').strip()
+        if status_filter not in ('all', 'success', 'denied'):
+            return {'code': 400, 'message': '无效的下载状态'}, 400
+
         start, error = _parse_date(request.args.get('start_date'), '开始日期')
         if error:
             return error, 400
@@ -177,11 +189,19 @@ class DownloadLedgerResource(Resource):
             DownloadRecord.asset_id.label('asset_id'),
             DownloadRecord.user_id.label('user_id'),
             DownloadRecord.license_id.label('license_id'),
-            literal(None).cast(Integer).label('share_id')
+            literal(None).cast(Integer).label('share_id'),
+            DownloadRecord.status.label('status'),
+            DownloadRecord.denial_reason.label('denial_reason'),
+            DownloadRecord.usage_purpose.label('usage_purpose'),
+            DownloadRecord.territory.label('territory')
         )
         license_query = apply_common(license_query, DownloadRecord)
         if user_id_filter:
             license_query = license_query.filter(DownloadRecord.user_id == user_id_filter)
+        if status_filter != 'all':
+            license_query = license_query.filter(
+                DownloadRecord.status == status_filter
+            )
 
         share_query = db.session.query(
             literal('share').label('channel'),
@@ -190,14 +210,23 @@ class DownloadLedgerResource(Resource):
             ShareDownload.asset_id.label('asset_id'),
             literal(None).cast(Integer).label('user_id'),
             literal(None).cast(Integer).label('license_id'),
-            ShareDownload.share_id.label('share_id')
+            ShareDownload.share_id.label('share_id'),
+            literal('success').label('status'),
+            literal(None).cast(db.String(300)).label('denial_reason'),
+            literal(None).cast(db.String(40)).label('usage_purpose'),
+            literal(None).cast(db.String(100)).label('territory')
         )
         share_query = apply_common(share_query, ShareDownload)
 
         include_license = channel in ('all', 'license') and not (
             channel == 'share'
         )
-        include_share = channel in ('all', 'share') and not user_id_filter
+        # 分享下载没有“拒绝”状态，被拒筛选时不应包含分享记录
+        include_share = (
+            channel in ('all', 'share')
+            and not user_id_filter
+            and status_filter != 'denied'
+        )
 
         queries = []
         if include_license:
@@ -212,7 +241,8 @@ class DownloadLedgerResource(Resource):
                     'per_page': per_page, 'pages': 0,
                     'summary': {
                         'total': 0, 'today': 0, 'users': 0, 'assets': 0,
-                        'license_total': 0, 'share_total': 0
+                        'license_total': 0, 'share_total': 0,
+                        'denied_total': 0, 'denied_today': 0
                     }
                 }
             }, 200
@@ -298,7 +328,11 @@ class DownloadLedgerResource(Resource):
                 'share': {
                     'id': share.id,
                     'has_access_code': bool(share.access_code_hash)
-                } if share else None
+                } if share else None,
+                'status': row.status or 'success',
+                'denial_reason': row.denial_reason,
+                'usage_purpose': row.usage_purpose,
+                'territory': row.territory
             })
 
         license_total = license_query.count() if include_license else 0
@@ -311,6 +345,13 @@ class DownloadLedgerResource(Resource):
             share_query.filter(ShareDownload.created_at >= today).count()
             if include_share else 0
         )
+        denied_total = DownloadRecord.query.filter(
+            DownloadRecord.status == 'denied'
+        ).count() if include_license else 0
+        denied_today = DownloadRecord.query.filter(
+            DownloadRecord.status == 'denied',
+            DownloadRecord.created_at >= today
+        ).count() if include_license else 0
 
         return {
             'code': 200,
@@ -328,7 +369,9 @@ class DownloadLedgerResource(Resource):
                     'license_total': license_total,
                     'license_today': license_today,
                     'share_total': share_total,
-                    'share_today': share_today
+                    'share_today': share_today,
+                    'denied_total': denied_total,
+                    'denied_today': denied_today
                 }
             }
         }, 200
@@ -357,6 +400,9 @@ class AssetDownloadSummaryResource(Resource):
             'code': 200,
             'data': {
                 'total': DownloadRecord.query.filter_by(asset_id=asset_id).count(),
+                'denied': DownloadRecord.query.filter_by(
+                    asset_id=asset_id, status='denied'
+                ).count(),
                 'recent': [_serialize(record, include_user=True) for record in records]
             }
         }, 200
