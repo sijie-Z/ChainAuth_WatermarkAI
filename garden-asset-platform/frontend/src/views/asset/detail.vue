@@ -443,6 +443,62 @@
           </template>
         </el-dialog>
 
+        <!-- 上传新版本 -->
+        <el-dialog
+          v-model="versionDialogVisible"
+          title="上传新版本"
+          width="min(560px, 94vw)"
+          :close-on-click-modal="false"
+        >
+          <el-alert type="warning" :closable="false" show-icon class="version-warning">
+            新版本会替换当前文件并重置水印状态；历史存证仍对应旧版本，需要重新核验或存证。
+          </el-alert>
+          <el-upload
+            drag
+            :auto-upload="false"
+            :limit="1"
+            :on-change="handleVersionFile"
+            :on-exceed="handleVersionExceed"
+            :show-file-list="false"
+            :accept="versionAccept"
+          >
+            <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+            <div class="el-upload__text">
+              将新版本文件拖到此处，或 <em>点击选择</em>
+            </div>
+          </el-upload>
+          <div v-if="versionFile" class="version-file">
+            <el-icon><Document /></el-icon>
+            <span>{{ versionFile.name }} · {{ formatSize(versionFile.size) }}</span>
+          </div>
+          <el-input
+            v-model="versionNote"
+            type="textarea"
+            :rows="3"
+            maxlength="500"
+            show-word-limit
+            class="version-note-input"
+            placeholder="变更说明（可选），例如：修正斗拱标注、替换为高清扫描件"
+          />
+          <el-progress
+            v-if="versionUploading"
+            :percentage="versionProgress"
+            :stroke-width="4"
+            class="version-progress"
+          />
+          <template #footer>
+            <el-button :disabled="versionUploading" @click="versionDialogVisible = false">取消</el-button>
+            <el-button
+              type="primary"
+              :loading="versionUploading"
+              :disabled="!versionFile"
+              @click="submitVersion"
+            >
+              上传并保存
+            </el-button>
+          </template>
+        </el-dialog>
+
         <!-- 溯源证据链 -->
         <section class="evidence-section">
           <header class="related-head">
@@ -470,6 +526,82 @@
             :items="evidence.items"
             :summary="evidence.summary"
           />
+        </section>
+
+        <!-- 版本历史 -->
+        <section class="version-section">
+          <header class="related-head">
+            <div>
+              <h2 class="related-title">版本历史</h2>
+              <p class="related-subtitle">
+                {{ versions.length ? `共 ${versions.length} 个版本 · 当前 v${currentVersionNo}` : '文件修订与替换记录' }}
+              </p>
+            </div>
+            <el-button
+              v-if="canManage && asset.status !== 'deleted'"
+              type="primary"
+              plain
+              size="small"
+              @click="openVersionDialog"
+            >
+              上传新版本
+            </el-button>
+          </header>
+          <el-skeleton v-if="versionsLoading" animated :rows="3" />
+          <div v-else-if="versionsError" class="evidence-error">
+            <span>版本历史加载失败。</span>
+            <el-button type="primary" link @click="loadVersions">重新加载</el-button>
+          </div>
+          <div v-else-if="versions.length === 0" class="version-empty">
+            暂无版本记录。旧资产会在执行初始化脚本后补齐 v1。
+          </div>
+          <div v-else class="version-list">
+            <article
+              v-for="version in versions"
+              :key="version.id"
+              class="version-item"
+              :class="{ current: version.is_current }"
+            >
+              <div class="version-main">
+                <div class="version-head">
+                  <strong class="version-no">v{{ version.version_no }}</strong>
+                  <el-tag v-if="version.is_current" size="small" type="success" effect="plain">当前版本</el-tag>
+                  <span class="version-meta">
+                    {{ (version.file_format || '文件').toUpperCase() }}
+                    · {{ formatSize(version.file_size) }}
+                    · {{ version.creator_name || '—' }}
+                    · {{ formatDate(version.created_at) }}
+                  </span>
+                </div>
+                <p class="version-note">{{ version.change_note || '无变更说明' }}</p>
+                <p v-if="version.file_hash" class="version-hash" :title="version.file_hash">
+                  SHA-256 {{ version.file_hash.slice(0, 16) }}…{{ version.file_hash.slice(-8) }}
+                </p>
+              </div>
+              <div class="version-actions">
+                <el-button
+                  v-if="canManage"
+                  size="small"
+                  link
+                  type="primary"
+                  :loading="versionDownloadingId === version.id"
+                  @click="downloadVersion(version)"
+                >
+                  下载
+                </el-button>
+                <el-button
+                  v-if="canManage && !version.is_current"
+                  size="small"
+                  link
+                  type="warning"
+                  :loading="versionRestoringId === version.id"
+                  @click="restoreVersion(version)"
+                >
+                  恢复为此版本
+                </el-button>
+              </div>
+            </article>
+          </div>
         </section>
 
         <!-- 同园林相关资产 -->
@@ -508,7 +640,8 @@ import { ref, computed, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  ArrowLeft, Collection, CopyDocument, Document, Link, Picture, Star, StarFilled, Share, Download
+  ArrowLeft, Collection, CopyDocument, Document, Link, Picture, Star, StarFilled, Share,
+  Download, UploadFilled
 } from '@element-plus/icons-vue'
 import { assetApi, collectionApi, licenseApi, watermarkApi, blockchainApi } from '@/api/modules'
 import { useUserStore } from '@/stores/user'
@@ -556,6 +689,29 @@ const collectionOptions = ref([])
 const collectionChecked = ref([])
 const collectionLoading = ref(false)
 const collectionSaving = ref(false)
+const versions = ref([])
+const versionsLoading = ref(false)
+const versionsError = ref(false)
+const versionDialogVisible = ref(false)
+const versionFile = ref(null)
+const versionNote = ref('')
+const versionUploading = ref(false)
+const versionProgress = ref(0)
+const versionDownloadingId = ref(null)
+const versionRestoringId = ref(null)
+
+const VERSION_ACCEPT = {
+  image: 'image/*',
+  vector: '.shp,.geojson,.kml,.kmz,.zip',
+  document: '.pdf,.doc,.docx,.dwg,.dxf',
+  video: '.mp4,.mov,.avi,.mkv',
+  model: '.obj,.fbx,.gltf,.glb,.stl'
+}
+const versionAccept = computed(() => VERSION_ACCEPT[asset.value.asset_type] || '')
+const currentVersionNo = computed(() => {
+  const current = versions.value.find(item => item.is_current)
+  return current?.version_no || versions.value[0]?.version_no || 1
+})
 const watermarkReady = computed(() =>
   ['embedded', 'verified'].includes(asset.value.watermark_status)
 )
@@ -633,6 +789,7 @@ async function loadAsset() {
       asset.value = response.data.data
       loadExtras()
       loadEvidence()
+      loadVersions()
     } else {
       loadError.value = true
     }
@@ -836,6 +993,143 @@ async function saveCollections() {
   }
 }
 
+async function loadVersions() {
+  if (!asset.value.id) return
+  versionsLoading.value = true
+  versionsError.value = false
+  try {
+    const response = await assetApi.getVersions(asset.value.id)
+    if (response.data?.code === 200) {
+      versions.value = response.data.data?.items || []
+    } else {
+      versionsError.value = true
+    }
+  } catch {
+    versionsError.value = true
+  } finally {
+    versionsLoading.value = false
+  }
+}
+
+function openVersionDialog() {
+  versionFile.value = null
+  versionNote.value = ''
+  versionProgress.value = 0
+  versionDialogVisible.value = true
+}
+
+function handleVersionFile(uploadFile) {
+  const raw = uploadFile.raw
+  if (!raw) return
+  if (raw.size > 500 * 1024 * 1024) {
+    ElMessage.error('文件超过 500MB 限制')
+    versionFile.value = null
+    return
+  }
+  versionFile.value = raw
+}
+
+function handleVersionExceed(files) {
+  const raw = files?.[0]
+  if (!raw) return
+  if (raw.size > 500 * 1024 * 1024) {
+    ElMessage.error('文件超过 500MB 限制')
+    return
+  }
+  versionFile.value = raw
+}
+
+async function submitVersion() {
+  if (!versionFile.value || versionUploading.value) return
+  versionUploading.value = true
+  versionProgress.value = 0
+  try {
+    const formData = new FormData()
+    formData.append('file', versionFile.value)
+    formData.append('change_note', versionNote.value.trim())
+    const response = await assetApi.uploadVersion(asset.value.id, formData, {
+      onUploadProgress: (event) => {
+        if (!event.total) return
+        versionProgress.value = Math.min(95, Math.round((event.loaded / event.total) * 95))
+      }
+    })
+    if (response.data?.code === 200) {
+      versionProgress.value = 100
+      asset.value = response.data.data.asset || asset.value
+      ElMessage.success('新版本已保存，水印状态已重置')
+      versionDialogVisible.value = false
+      await Promise.all([loadVersions(), loadEvidence()])
+    } else {
+      ElMessage.error(response.data?.message || '版本上传失败')
+    }
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '版本上传失败')
+  } finally {
+    versionUploading.value = false
+  }
+}
+
+async function downloadVersion(version) {
+  if (versionDownloadingId.value) return
+  versionDownloadingId.value = version.id
+  try {
+    const response = await assetApi.downloadVersion(asset.value.id, version.id)
+    const url = URL.createObjectURL(response.data)
+    const link = document.createElement('a')
+    const ext = version.file_format ? `.${version.file_format.toLowerCase()}` : ''
+    link.href = url
+    link.download = `${asset.value.asset_code}-v${version.version_no}${ext}`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    let message = '版本下载失败'
+    const data = error.response?.data
+    if (data instanceof Blob) {
+      try {
+        const parsed = JSON.parse(await data.text())
+        message = parsed.message || message
+      } catch {
+        // 保留默认提示
+      }
+    } else if (data?.message) {
+      message = data.message
+    }
+    ElMessage.error(message)
+  } finally {
+    versionDownloadingId.value = null
+  }
+}
+
+async function restoreVersion(version) {
+  if (versionRestoringId.value) return
+  try {
+    await ElMessageBox.confirm(
+      `恢复 v${version.version_no} 会把该版本复制为新的当前版本，并重置水印；历史版本不会删除。`,
+      '恢复历史版本',
+      { type: 'warning', confirmButtonText: '恢复', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  versionRestoringId.value = version.id
+  try {
+    const response = await assetApi.restoreVersion(asset.value.id, version.id)
+    if (response.data?.code === 200) {
+      asset.value = response.data.data.asset || asset.value
+      ElMessage.success(`已恢复 v${version.version_no} 并生成新版本`)
+      await Promise.all([loadVersions(), loadEvidence()])
+    } else {
+      ElMessage.error(response.data?.message || '恢复失败')
+    }
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '恢复失败')
+  } finally {
+    versionRestoringId.value = null
+  }
+}
+
 async function toggleFavorite() {
   if (favoriteLoading.value) return
   favoriteLoading.value = true
@@ -1027,7 +1321,12 @@ function typeLabel(type) {
 }
 
 function getAssetUrl(asset) {
-  if (asset.id) return `/api/assets/${asset.id}/thumbnail`
+  if (asset.id) {
+    const current = versions.value.find(item => item.is_current)
+    const token = current?.file_hash || asset.watermark_id || ''
+    const suffix = token ? `?v=${String(token).slice(0, 10)}` : ''
+    return `/api/assets/${asset.id}/thumbnail${suffix}`
+  }
   return placeholderImage(asset.asset_type)
 }
 
@@ -1587,6 +1886,131 @@ onMounted(() => {
   .evidence-section {
     padding: 16px;
   }
+
+  .version-section {
+    padding: 16px;
+  }
+
+  .version-item {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .version-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+// ========== 版本历史 ==========
+.version-section {
+  margin-top: $spacing-3xl;
+  padding: $spacing-xl;
+  border: 1px solid $border-light;
+  border-radius: $radius-lg;
+  background: $bg-card;
+  box-shadow: $shadow-card;
+}
+
+.version-empty {
+  padding: 18px;
+  border: 1px dashed $border-color;
+  border-radius: $radius-md;
+  background: $bg-secondary;
+  font-size: 13px;
+  color: $text-secondary;
+}
+
+.version-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.version-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid $border-light;
+
+  &:last-child { border-bottom: none; padding-bottom: 0; }
+
+  &.current {
+    background: rgba(47, 107, 90, 0.03);
+    margin: 0 -12px;
+    padding-left: 12px;
+    padding-right: 12px;
+    border-radius: $radius-sm;
+  }
+}
+
+.version-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.version-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.version-no {
+  font-family: $font-mono;
+  font-size: 14px;
+  color: $text-primary;
+}
+
+.version-meta {
+  font-size: 11px;
+  color: $text-placeholder;
+}
+
+.version-note {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: $text-secondary;
+}
+
+.version-hash {
+  margin: 3px 0 0;
+  font-family: $font-mono;
+  font-size: 10px;
+  color: $text-placeholder;
+}
+
+.version-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.version-warning {
+  margin-bottom: 14px;
+}
+
+.version-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: $radius-sm;
+  background: $bg-secondary;
+  font-size: 12px;
+  color: $text-secondary;
+}
+
+.version-note-input {
+  margin-top: 12px;
+}
+
+.version-progress {
+  margin-top: 10px;
 }
 
 // ========== 相关资产 ==========

@@ -11,7 +11,7 @@ from flask_restful import Resource
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.extensions import db
 from app.models.user import User
-from app.models.asset import Asset, AssetTag, AssetFeature
+from app.models.asset import Asset, AssetTag, AssetFeature, AssetVersion
 from app.models.garden import Garden
 from app.models.license import LicenseApplication, License
 from app.models.log import OperationLog
@@ -469,6 +469,20 @@ class AssetUploadResource(Resource):
                 asset.thumbnail_path = detail_path
             except Exception as e:
                 current_app.logger.warning(f'缩略图生成失败: {e}', exc_info=True)
+
+        # 初始版本与资产在同一事务内入库，保证资产一定有 v1
+        db.session.add(AssetVersion(
+            asset_id=asset.id,
+            version_no=1,
+            file_path=os.path.abspath(file_path),
+            file_name=original_name[:255],
+            file_format=ext.upper(),
+            file_size=file_size,
+            file_hash=file_hash,
+            thumbnail_path=asset.thumbnail_path,
+            change_note='初始版本',
+            created_by=user_id
+        ))
 
         db.session.commit()
 

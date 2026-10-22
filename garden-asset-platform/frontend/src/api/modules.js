@@ -36,6 +36,17 @@ export const assetApi = {
   removeFavorite: (id) => api.delete(`/assets/${id}/favorite`),
   getFavorites: (params) => api.get('/favorites', { params }),
   getEvidence: (id) => api.get(`/assets/${id}/evidence`),
+  getVersions: (id) => api.get(`/assets/${id}/versions`),
+  uploadVersion: (id, formData, config) => api.post(
+    `/assets/${id}/versions`,
+    formData,
+    { timeout: 0, ...config }
+  ),
+  downloadVersion: (id, versionId) => api.get(
+    `/assets/${id}/versions/${versionId}/download`,
+    { responseType: 'blob', timeout: 0 }
+  ),
+  restoreVersion: (id, versionId) => api.post(`/assets/${id}/versions/${versionId}/restore`),
   getShares: (id) => api.get(`/assets/${id}/shares`),
   createShare: (id, data) => api.post(`/assets/${id}/shares`, data),
   revokeShare: (shareId) => api.delete(`/shares/${shareId}`)

@@ -160,6 +160,21 @@ def register_api_resources(app):
     api.add_resource(AssetPublishResource, '/assets/<string:asset_id>/publish')
     api.add_resource(AssetApproveResource, '/assets/<string:asset_id>/approve')
 
+    # 资产版本历史
+    from app.resources.versions import (
+        AssetVersionListResource, AssetVersionDownloadResource,
+        AssetVersionRestoreResource
+    )
+    api.add_resource(AssetVersionListResource, '/assets/<string:asset_id>/versions')
+    api.add_resource(
+        AssetVersionDownloadResource,
+        '/assets/<string:asset_id>/versions/<int:version_id>/download'
+    )
+    api.add_resource(
+        AssetVersionRestoreResource,
+        '/assets/<string:asset_id>/versions/<int:version_id>/restore'
+    )
+
     # 证据链与公开分享
     from app.resources.evidence import AssetEvidenceResource
     from app.resources.share import (

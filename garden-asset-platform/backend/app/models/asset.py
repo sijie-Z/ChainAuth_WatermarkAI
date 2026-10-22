@@ -80,6 +80,12 @@ class Asset(db.Model):
     tags = db.relationship('AssetTag', backref='asset', lazy='dynamic', cascade='all, delete-orphan')
     features = db.relationship('AssetFeature', backref='asset', lazy='dynamic', cascade='all, delete-orphan')
     licenses = db.relationship('License', backref='asset', lazy='dynamic')
+    versions = db.relationship(
+        'AssetVersion',
+        backref='asset',
+        lazy='dynamic',
+        cascade='all, delete-orphan'
+    )
 
     def to_dict(self):
         vr_value = None
@@ -166,3 +172,55 @@ class AssetFeature(db.Model):
             'feature_value': self.feature_value,
             'confidence': float(self.confidence) if self.confidence else None
         }
+
+
+class AssetVersion(db.Model):
+    """资产版本历史表
+
+    每次上传新文件或恢复旧版本都会新增一条记录，历史文件保持原位不删除。
+    资产主表始终指向当前版本；链上存证等历史信息保留在资产上，由证据链标记
+    “当前文件已变更”。
+    """
+    __tablename__ = 'asset_versions'
+    __table_args__ = (
+        db.UniqueConstraint('asset_id', 'version_no', name='uk_asset_version'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    asset_id = db.Column(
+        db.String(36), db.ForeignKey('assets.id'), nullable=False, index=True
+    )
+    version_no = db.Column(db.Integer, nullable=False)
+
+    # 文件信息（file_path 为服务器上的绝对路径）
+    file_path = db.Column(db.String(500), nullable=False)
+    file_name = db.Column(db.String(255), nullable=True)
+    file_format = db.Column(db.String(20), nullable=True)
+    file_size = db.Column(db.BigInteger, nullable=True)
+    file_hash = db.Column(db.String(64), nullable=True)
+    thumbnail_path = db.Column(db.String(500), nullable=True)
+
+    change_note = db.Column(db.String(500), nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    creator = db.relationship('User', foreign_keys=[created_by], backref='asset_versions')
+
+    def to_dict(self, is_current=False):
+        return {
+            'id': self.id,
+            'asset_id': self.asset_id,
+            'version_no': self.version_no,
+            'file_name': self.file_name,
+            'file_format': self.file_format,
+            'file_size': self.file_size,
+            'file_hash': self.file_hash,
+            'change_note': self.change_note,
+            'created_by': self.created_by,
+            'creator_name': (self.creator.nickname or self.creator.username) if self.creator else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'is_current': bool(is_current)
+        }
+
+    def __repr__(self):
+        return f'<AssetVersion {self.asset_id} v{self.version_no}>'

@@ -91,15 +91,30 @@ def _watermark_item(asset):
     )
 
 
+def _certificate_outdated(asset, certificate):
+    """资产已有版本记录，且证书指纹与当前文件不一致时，视为证书对应历史版本"""
+    if not certificate or not certificate.file_hash:
+        return False
+    if certificate.file_hash == asset.file_hash:
+        return False
+    return asset.versions.count() > 0
+
+
 def _chain_item(asset):
     tx = BlockchainTransaction.query.filter_by(
         asset_id=asset.id, tx_type='asset_register'
     ).order_by(BlockchainTransaction.id.desc()).first()
+    certificate = Certificate.query.filter_by(asset_id=asset.id).first()
+    file_changed = _certificate_outdated(asset, certificate)
 
     status = asset.chain_status or 'none'
     if status == 'confirmed':
-        state = STATE_DONE
-        description = '文件指纹与水印编号已写入链上存证记录'
+        if file_changed:
+            state = STATE_WARNING
+            description = '当前文件已更新，链上存证对应历史版本'
+        else:
+            state = STATE_DONE
+            description = '文件指纹与水印编号已写入链上存证记录'
     elif status == 'pending':
         state = STATE_PENDING
         description = '存证交易等待确认'
@@ -117,6 +132,8 @@ def _chain_item(asset):
         fields['区块高度'] = str(tx.block_number)
     if asset.chain_timestamp:
         fields['确认时间'] = asset.chain_timestamp.strftime('%Y-%m-%d %H:%M:%S')
+    if file_changed and certificate and certificate.file_hash:
+        fields['存证文件指纹'] = certificate.file_hash
     if not current_app.config.get('BLOCKCHAIN_ENABLED', False):
         fields['存证环境'] = '本地模拟链（未连接 FISCO BCOS 节点）'
 
@@ -145,6 +162,11 @@ def _certificate_item(asset):
     else:
         state = STATE_WARNING
         description = '证书当前不可用'
+
+    # 当前文件已被新版本替换时，证书仍指向历史版本，明确提示但不隐藏旧证据
+    if _certificate_outdated(asset, certificate):
+        state = STATE_WARNING
+        description = '当前文件已更新，证书对应历史版本'
 
     fields = {
         '证书编号': certificate.certificate_id,

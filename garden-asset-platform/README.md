@@ -95,7 +95,7 @@ npm run dev                  # 启动Vite开发服务器 :5173
 ### 运行测试
 
 ```bash
-# 后端测试（228个用例，覆盖API/模型/安全）
+# 后端测试（235个用例，覆盖API/模型/安全）
 cd backend && python -m pytest tests/ -v
 
 # 前端生产构建
@@ -126,7 +126,7 @@ garden-asset-platform/
 │   ├── algorithm/                 # 水印算法库（DCT+QIM/矢量）
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
-│   ├── tests/                     # pytest测试（228个用例）
+│   ├── tests/                     # pytest测试（235个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -176,6 +176,9 @@ garden-asset-platform/
 | GET | `/api/assets/:id/thumbnail` | 资产缩略图（`?size=card` 返回列表卡片图） |
 | GET | `/api/assets/:id/related` | 同园林相关资产 |
 | GET | `/api/assets/:id/evidence` | 资产证据链（上传/水印/存证/证书/发布/授权/下载） |
+| GET/POST | `/api/assets/:id/versions` | 版本历史 / 上传新版本（文件替换并重置水印） |
+| GET | `/api/assets/:id/versions/:version_id/download` | 下载指定历史版本 |
+| POST | `/api/assets/:id/versions/:version_id/restore` | 恢复历史版本（生成新版本，不删除历史） |
 | GET/POST | `/api/assets/:id/shares` | 查询/创建公开分享链接（有效期、访问码、下载权限） |
 | GET | `/api/shares/:token` | 公开分享页数据（免登录，返回资产与证据链） |
 | GET | `/api/shares/:token/download` | 通过分享链接下载（受分享设置限制） |

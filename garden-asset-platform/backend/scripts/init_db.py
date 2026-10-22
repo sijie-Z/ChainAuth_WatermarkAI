@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app import create_app
 from app.extensions import db
 from app.models import (
-    User, Garden, Asset, AssetTag,
+    User, Garden, Asset, AssetTag, AssetVersion,
     License, LicenseApplication,
     Certificate, OperationLog
 )
@@ -136,6 +136,34 @@ def ensure_indexes():
         print(f"Index check skipped: {exc}")
 
 
+def ensure_asset_versions():
+    """为已有资产补建 v1 版本记录（已有版本不删除、不覆盖）"""
+    print("Ensuring asset versions...")
+
+    assets = Asset.query.filter(Asset.file_hash.isnot(None)).all()
+    created = 0
+    for asset in assets:
+        if AssetVersion.query.filter_by(asset_id=asset.id).first():
+            continue
+        storage_path = asset.storage_path or ''
+        db.session.add(AssetVersion(
+            asset_id=asset.id,
+            version_no=1,
+            file_path=storage_path,
+            file_name=os.path.basename(storage_path) if storage_path else None,
+            file_format=asset.file_format,
+            file_size=asset.file_size,
+            file_hash=asset.file_hash,
+            thumbnail_path=asset.thumbnail_path,
+            change_note='初始版本',
+            created_by=asset.uploader_id or asset.creator_id
+        ))
+        created += 1
+
+    db.session.commit()
+    print(f"Asset versions ready: {created} created")
+
+
 def init_database():
     """初始化数据库"""
     app = create_app('development')
@@ -152,6 +180,7 @@ def init_database():
         create_admin_user()
         create_gardens()
         create_test_users()
+        ensure_asset_versions()
 
         print("\n" + "="*50)
         print("Database initialization completed!")

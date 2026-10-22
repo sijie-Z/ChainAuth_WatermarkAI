@@ -24,7 +24,7 @@ os.chdir(BACKEND_DIR)
 from app import create_app  # noqa: E402
 from app.extensions import db  # noqa: E402
 from app.models import (  # noqa: E402
-    Asset, AssetFeature, AssetTag, BlockchainTransaction, Certificate,
+    Asset, AssetFeature, AssetTag, AssetVersion, BlockchainTransaction, Certificate,
     Garden, License, LicenseApplication, LicenseContract, OperationLog, User
 )
 from app.models.extra import DownloadRecord, Favorite  # noqa: E402
@@ -68,8 +68,29 @@ def reset_demo_data():
     AssetFeature.query.delete()
     AssetTag.query.delete()
     OperationLog.query.delete()
+    AssetVersion.query.delete()
     Asset.query.delete()
     db.session.commit()
+
+
+def ensure_initial_version(asset):
+    """为演示资产补建 v1，已有版本时不动"""
+    if AssetVersion.query.filter_by(asset_id=asset.id).first():
+        return False
+    storage_path = asset.storage_path or ''
+    db.session.add(AssetVersion(
+        asset_id=asset.id,
+        version_no=1,
+        file_path=os.path.abspath(storage_path) if storage_path else '',
+        file_name=os.path.basename(storage_path) if storage_path else None,
+        file_format=asset.file_format,
+        file_size=asset.file_size,
+        file_hash=asset.file_hash,
+        thumbnail_path=asset.thumbnail_path,
+        change_note='初始版本',
+        created_by=asset.uploader_id or asset.creator_id
+    ))
+    return True
 
 
 def refresh_gardens():
@@ -114,6 +135,7 @@ def make_asset(photo, meta, admin, index):
 
     asset.thumbnail_path, _ = generate_thumbnail_set(photo_path, asset.id)
     db.session.add(asset)
+    ensure_initial_version(asset)
     return asset
 
 
@@ -298,6 +320,8 @@ def seed_user_assets(source_assets, user):
             continue
         source = item['source']
         path = source.storage_path
+        with open(path, 'rb') as handle:
+            actual_hash = hashlib.sha256(handle.read()).hexdigest()
         asset = Asset(
             asset_code=item['code'],
             title=item['title'],
@@ -305,7 +329,7 @@ def seed_user_assets(source_assets, user):
             asset_type='image',
             file_format='jpg',
             file_size=os.path.getsize(path),
-            file_hash=hashlib.sha256((path + item['code']).encode()).hexdigest(),
+            file_hash=actual_hash,
             storage_path=path,
             garden_id=source.garden_id,
             creator_id=user.id,
@@ -317,6 +341,7 @@ def seed_user_assets(source_assets, user):
         db.session.add(asset)
         db.session.flush()
         asset.thumbnail_path, _ = generate_thumbnail_set(path, asset.id)
+        ensure_initial_version(asset)
         created += 1
 
     db.session.commit()
