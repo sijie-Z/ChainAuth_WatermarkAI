@@ -6,7 +6,7 @@ import pytest
 from app.extensions import db
 from app.models import (
     Asset, AssetShare, Certificate, DownloadRecord, Garden,
-    LicenseApplication, NotificationRead, User,
+    LicenseApplication, NotificationRead, ShareDownload, User,
 )
 
 
@@ -271,3 +271,38 @@ def test_expired_share_is_gone(client, auth_header, asset_fixture):
         db.session.commit()
 
     assert client.get(f"/api/shares/{share['token']}").status_code == 410
+
+
+def test_share_download_writes_ledger(client, app, auth_header, admin_header,
+                                     asset_fixture, tmp_path):
+    file_path = tmp_path / 'share-download.jpg'
+    file_path.write_bytes(b'share-download-content')
+    with app.app_context():
+        asset = db.session.get(Asset, asset_fixture['asset_id'])
+        asset.storage_path = str(file_path)
+        db.session.commit()
+
+    created = client.post(
+        f"/api/assets/{asset_fixture['asset_id']}/shares",
+        headers=auth_header,
+        json={'expires_in_days': 1, 'allow_download': True, 'max_downloads': 3}
+    )
+    assert created.status_code == 200
+    token = created.get_json()['data']['token']
+
+    downloaded = client.get(f'/api/shares/{token}/download')
+    assert downloaded.status_code == 200
+    assert downloaded.data == b'share-download-content'
+
+    with app.app_context():
+        assert ShareDownload.query.filter_by(
+            asset_id=asset_fixture['asset_id']
+        ).count() == 1
+
+    ledger = client.get('/api/downloads', headers=admin_header)
+    assert ledger.status_code == 200
+    data = ledger.get_json()['data']
+    share_items = [item for item in data['items'] if item['channel'] == 'share']
+    assert share_items
+    assert share_items[0]['user'] is None
+    assert data['summary']['share_total'] >= 1

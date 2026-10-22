@@ -13,7 +13,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from werkzeug.security import generate_password_hash
 
 from app.extensions import db
-from app.models import Asset, AssetShare, User
+from app.models import Asset, AssetShare, ShareDownload, User
 from app.models.log import OperationLog
 from app.services.evidence_service import build_evidence
 from app.utils.middleware import rate_limit
@@ -302,6 +302,12 @@ class PublicShareDownloadResource(Resource):
 
         share.download_count = (share.download_count or 0) + 1
         asset.download_count = (asset.download_count or 0) + 1
+        db.session.add(ShareDownload(
+            share_id=share.id,
+            asset_id=asset.id,
+            ip_address=request.remote_addr,
+            user_agent=request.headers.get('User-Agent', '')[:500]
+        ))
         db.session.commit()
 
         OperationLog.log(

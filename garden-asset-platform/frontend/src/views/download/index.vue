@@ -29,6 +29,14 @@
         <strong class="summary-value">{{ summary.today ?? '—' }}</strong>
       </div>
       <div class="summary-card">
+        <span class="summary-label">授权下载</span>
+        <strong class="summary-value">{{ summary.license_total ?? '—' }}</strong>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">分享下载</span>
+        <strong class="summary-value">{{ summary.share_total ?? '—' }}</strong>
+      </div>
+      <div class="summary-card">
         <span class="summary-label">涉及用户</span>
         <strong class="summary-value">{{ summary.users ?? '—' }}</strong>
       </div>
@@ -59,6 +67,16 @@
         value-format="YYYY-MM-DD"
         class="filter-date"
       />
+      <el-select
+        v-if="scope === 'all'"
+        v-model="filters.channel"
+        class="filter-channel"
+        @change="applyFilters"
+      >
+        <el-option label="全部渠道" value="all" />
+        <el-option label="授权下载" value="license" />
+        <el-option label="分享下载" value="share" />
+      </el-select>
       <el-button type="primary" @click="applyFilters">查询</el-button>
       <el-button @click="resetFilters">重置</el-button>
     </section>
@@ -104,14 +122,24 @@
             <span v-else class="muted">资产已删除</span>
           </template>
         </el-table-column>
+        <el-table-column v-if="scope === 'all'" label="渠道" width="100">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.channel === 'share' ? 'warning' : 'success'" effect="plain">
+              {{ row.channel_label || '授权下载' }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column v-if="scope === 'all'" label="下载用户" width="140">
           <template #default="{ row }">
-            {{ row.user?.nickname || row.user?.username || '—' }}
+            {{ row.user?.nickname || row.user?.username || (row.channel === 'share' ? '匿名分享' : '—') }}
           </template>
         </el-table-column>
         <el-table-column label="授权编号" min-width="190">
           <template #default="{ row }">
             <span v-if="row.license" class="mono">{{ row.license.license_code }}</span>
+            <span v-else-if="row.channel === 'share'" class="muted">
+              分享链接{{ row.share ? ` #${row.share.id}` : '' }}
+            </span>
             <span v-else class="muted">{{ row.asset ? '所有者/管理员下载' : '—' }}</span>
           </template>
         </el-table-column>
@@ -154,6 +182,7 @@
             <span v-if="row.license" class="mobile-license mono">{{
               row.license.license_code
             }}</span>
+            <span v-else-if="row.channel === 'share'" class="mobile-license mono">分享下载</span>
           </header>
           <router-link v-if="row.asset" :to="`/assets/${row.asset.id}`" class="mobile-asset">
             {{ row.asset.title }}
@@ -162,7 +191,10 @@
           <span v-else class="muted">资产已删除</span>
           <footer class="mobile-foot">
             <span v-if="scope === 'all'"
-              >下载人：{{ row.user?.nickname || row.user?.username || '—' }}</span
+              >下载人：{{
+                row.user?.nickname || row.user?.username
+                  || (row.channel === 'share' ? '匿名分享' : '—')
+              }}</span
             >
             <span v-else>{{ row.license ? '授权下载' : '所有者/管理员下载' }}</span>
           </footer>
@@ -191,20 +223,32 @@ const scope = computed(() => (embedded.value ? 'all' : activeScope.value))
 const showSummary = computed(() => scope.value === 'all')
 
 const records = ref([])
-const summary = reactive({ total: null, today: null, users: null, assets: null })
+const summary = reactive({
+  total: null,
+  today: null,
+  users: null,
+  assets: null,
+  license_total: null,
+  share_total: null
+})
 const loading = ref(false)
 const loadError = ref(false)
 const page = ref(1)
 const perPage = ref(20)
 const total = ref(0)
-const filters = reactive({ keyword: '', dateRange: [] })
+const filters = reactive({ keyword: '', dateRange: [], channel: 'all' })
 const failedThumbs = reactive({})
 
 function markThumbFailed(id) {
   failedThumbs[id] = true
 }
 
-const appliedFilters = reactive({ keyword: '', start_date: '', end_date: '' })
+const appliedFilters = reactive({
+  keyword: '',
+  start_date: '',
+  end_date: '',
+  channel: 'all'
+})
 
 function buildParams() {
   return {
@@ -212,7 +256,8 @@ function buildParams() {
     per_page: perPage.value,
     keyword: appliedFilters.keyword || undefined,
     start_date: appliedFilters.start_date || undefined,
-    end_date: appliedFilters.end_date || undefined
+    end_date: appliedFilters.end_date || undefined,
+    channel: scope.value === 'all' ? appliedFilters.channel : undefined
   }
 }
 
@@ -246,6 +291,7 @@ function applyFilters() {
   appliedFilters.keyword = filters.keyword.trim()
   appliedFilters.start_date = filters.dateRange?.[0] || ''
   appliedFilters.end_date = filters.dateRange?.[1] || ''
+  appliedFilters.channel = filters.channel || 'all'
   page.value = 1
   loadRecords()
 }
@@ -253,6 +299,7 @@ function applyFilters() {
 function resetFilters() {
   filters.keyword = ''
   filters.dateRange = []
+  filters.channel = 'all'
   applyFilters()
 }
 
@@ -311,7 +358,7 @@ onMounted(loadRecords)
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -354,6 +401,10 @@ onMounted(loadRecords)
 
 .filter-date {
   width: 260px;
+}
+
+.filter-channel {
+  width: 130px;
 }
 
 .load-error {

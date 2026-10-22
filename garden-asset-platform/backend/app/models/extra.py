@@ -129,6 +129,32 @@ class AssetShare(db.Model):
         return data
 
 
+class ShareDownload(db.Model):
+    """匿名分享下载记录
+
+    公开分享下载没有登录用户，单独建表记录，便于与授权下载台账合并审计。
+    """
+    __tablename__ = 'share_downloads'
+
+    id = db.Column(db.Integer, primary_key=True)
+    share_id = db.Column(
+        db.Integer, db.ForeignKey('asset_shares.id'), nullable=False, index=True
+    )
+    asset_id = db.Column(
+        db.String(36), db.ForeignKey('assets.id'), nullable=False, index=True
+    )
+    ip_address = db.Column(db.String(50), nullable=True)
+    user_agent = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    share = db.relationship(
+        'AssetShare', backref=db.backref('downloads', lazy='dynamic')
+    )
+    asset = db.relationship(
+        'Asset', backref=db.backref('share_downloads', lazy='dynamic')
+    )
+
+
 class NotificationRead(db.Model):
     """通知已读状态
 

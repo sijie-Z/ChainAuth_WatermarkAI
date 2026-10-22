@@ -16,12 +16,26 @@ from app.models import (
     Certificate, OperationLog
 )
 
+# 迁移基线：旧库没有 alembic_version 时先 stamp 到此版本，再执行后续迁移
+BASELINE_REVISION = 'be3bcbd6313e'
+
 
 def create_tables():
-    """创建所有数据表"""
-    print("Creating database tables...")
-    db.create_all()
-    print("Tables created successfully!")
+    """通过 Alembic 创建/升级数据表
+
+    - 空库：执行 baseline 及后续迁移；
+    - 已有表但没有 alembic_version 的旧库：先 stamp 基线，再应用后续迁移。
+    """
+    from flask_migrate import stamp, upgrade
+    from sqlalchemy import inspect
+
+    print("Applying database migrations...")
+    existing = set(inspect(db.engine).get_table_names())
+    if existing and 'users' in existing and 'alembic_version' not in existing:
+        stamp(revision=BASELINE_REVISION)
+        print(f"Existing database stamped at baseline {BASELINE_REVISION}")
+    upgrade()
+    print("Database migrations applied.")
 
 
 def create_admin_user():

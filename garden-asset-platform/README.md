@@ -94,10 +94,26 @@ npm install
 npm run dev                  # 启动Vite开发服务器 :5173
 ```
 
+### 数据库迁移
+
+项目使用 Flask-Migrate / Alembic 管理表结构。新库直接执行：
+
+```bash
+cd backend
+FLASK_APP=run.py flask db upgrade
+```
+
+`scripts/init_db.py` 已改为通过迁移建表；如果接入已有旧库（有表但没有 `alembic_version`），脚本会先 stamp 基线再执行后续迁移。手动处理旧库时：
+
+```bash
+FLASK_APP=run.py flask db stamp be3bcbd6313e
+FLASK_APP=run.py flask db upgrade
+```
+
 ### 运行测试
 
 ```bash
-# 后端测试（249个用例，覆盖API/模型/安全）
+# 后端测试（251个用例，覆盖API/模型/安全/迁移）
 cd backend && python -m pytest tests/ -v
 
 # 前端生产构建
@@ -128,7 +144,8 @@ garden-asset-platform/
 │   ├── algorithm/                 # 水印算法库（DCT+QIM/矢量）
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
-│   ├── tests/                     # pytest测试（249个用例）
+│   ├── migrations/                # Alembic 迁移（baseline + versions）
+│   ├── tests/                     # pytest测试（251个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
