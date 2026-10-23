@@ -15,6 +15,7 @@
           <router-link to="/home" class="nav-link">首页</router-link>
           <router-link to="/assets" class="nav-link">资产档案</router-link>
           <router-link to="/trace" class="nav-link">溯源查询</router-link>
+          <router-link to="/watermark-lab" class="nav-link">水印实验室</router-link>
           <router-link to="/guide" class="nav-link">使用指南</router-link>
           <template v-if="isLoggedIn">
             <router-link to="/license/my" class="nav-link">我的授权</router-link>
@@ -77,6 +78,7 @@
       <router-link to="/home" @click="mobileNavOpen = false">首页</router-link>
       <router-link to="/assets" @click="mobileNavOpen = false">资产档案</router-link>
       <router-link to="/trace" @click="mobileNavOpen = false">溯源查询</router-link>
+      <router-link to="/watermark-lab" @click="mobileNavOpen = false">水印实验室</router-link>
       <router-link to="/guide" @click="mobileNavOpen = false">使用指南</router-link>
       <router-link v-if="isLoggedIn" to="/license/my" @click="mobileNavOpen = false">我的授权</router-link>
       <router-link v-if="isAdmin" to="/admin" @click="mobileNavOpen = false">管理后台</router-link>
@@ -327,6 +329,7 @@
           <router-link to="/home">首页</router-link>
           <router-link to="/assets">资产档案</router-link>
           <router-link to="/trace">溯源查询</router-link>
+          <router-link to="/watermark-lab">水印实验室</router-link>
           <router-link to="/guide">使用指南</router-link>
           <router-link to="/login">登录</router-link>
         </nav>
@@ -1412,6 +1415,13 @@ onUnmounted(() => {
       .garden-visual { min-height: 260px; }
     }
   }
+}
+
+@media (max-width: 1180px) {
+  .navbar { padding: 0 24px; }
+  .navbar-menu { display: none; }
+  .mobile-nav-toggle { display: inline-flex; }
+  .navbar-actions { gap: 10px; }
 }
 
 @media (max-width: 768px) {

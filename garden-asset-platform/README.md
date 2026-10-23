@@ -13,12 +13,13 @@
 | 模块 | 功能 | 技术实现 |
 |------|------|----------|
 | 资产管理 | 数字资产上传、浏览、分类、检索、下载 | Vue3 + Flask + MinIO |
-| 数字水印 | DCT + QIM 盲水印嵌入与提取，抗 JPEG 压缩、噪声与 50%–150% 缩放 | Python OpenCV + NumPy |
+| 数字水印 | DCT + QIM 盲水印嵌入与提取，对 JPEG、噪声与 50%–150% 缩放具备恢复能力，具体以水印实验室实测为准 | Python OpenCV + NumPy |
+| 水印实验室 | 上传图片后真实执行嵌入与 8 项攻击，返回 PSNR、NC、水印 ID 恢复情况与每项耗时，可下载 Markdown 报告 | DCT/QIM + Flask + Vue3 |
 | 区块链存证 | 按文件版本签发存证证书，支持历史版本证书追溯；默认本地模拟，可配置接入 FISCO BCOS | FISCO BCOS + Python SDK（可选） |
 | 异步任务 | 水印/存证任务持久化入队，后台 worker 执行，支持进度查询、失败重试与超时对账；worker 心跳与队列健康度可观测 | Flask + 数据库队列 + 进程内/独立 worker |
 | AI 辅助（可选） | 以图搜图、侵权辅助检测、智能问答；默认关闭，需安装模型与 API Key | CLIP + Milvus + 智谱 GLM（可选） |
-| 授权分发 | 在线申请→双重审批→合同管理→下载控制；用途/渠道/格式/地域/下载次数作为可执行范围，授权绑定签发时的文件版本 |
-| 下载指纹 | 授权用户下载影像时生成带资产编码、授权编号、账号与唯一指纹码的可见副本，原盲水印保留；台账可回溯 |
+| 授权分发 | 在线申请→双重审批→合同管理→下载控制；用途/渠道/格式/地域/下载次数作为可执行范围，授权绑定签发时的文件版本 | Vue3 + Flask |
+| 下载指纹 | 授权用户下载影像时生成带资产编码、授权编号、账号与唯一指纹码的可见副本，原盲水印保留；台账可回溯 | Pillow + Flask |
 | 多格式预览 | 图片/矢量缩略图、视频在线播放、PDF 内嵌预览、三维模型（GLB/GLTF/STL/OBJ）旋转缩放；预览按授权控制且不计下载量 | Vue3 + Flask + three.js |
 | 侵权线索 | 公开提交疑似盗用文件/链接，水印匹配资产后进入后台研判，确认或驳回时通知举报人与权利人 | Vue3 + Flask |
 | 通知渠道 | 站内 SSE 实时推送 + 可选 SMTP 邮件 + 系统 Webhook（兼容企业微信群机器人，支持签名与重试） | SSE + SMTP + Webhook |
@@ -122,7 +123,7 @@ FLASK_APP=run.py flask db upgrade
 ### 运行测试
 
 ```bash
-# 后端测试（332个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/侵权线索/批量巡检/备份恢复/存储巡检）
+# 后端测试（340个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/侵权线索/批量巡检/备份恢复/存储巡检/水印鲁棒性实验）
 cd backend && python -m pytest tests/ -v
 
 # Windows 内存受限时：逐文件隔离子进程运行（推荐）
@@ -163,7 +164,7 @@ garden-asset-platform/
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
 │   ├── migrations/                # Alembic 迁移（baseline + versions）
-│   ├── tests/                     # pytest测试（332个用例）
+│   ├── tests/                     # pytest测试（340个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -246,6 +247,7 @@ garden-asset-platform/
 | POST | `/api/watermark/extract` | 提取水印 |
 | POST | `/api/watermark/verify` | 验证水印ID |
 | POST | `/api/watermark/trace` | 图片溯源查询 |
+| POST | `/api/watermark/benchmark` | 水印鲁棒性实验（需登录：真实嵌入 + JPEG/噪声/缩放攻击，返回 PSNR/NC/ID 恢复） |
 | GET | `/api/watermark/logs` | 水印操作日志 |
 
 ### 区块链存证
@@ -326,6 +328,7 @@ garden-asset-platform/
 
 - 生产配置强制校验 `SECRET_KEY`/`JWT_SECRET_KEY`：示例占位文本或不足 32 位时拒绝启动
 - JWT双Token认证（Access 24h + Refresh 30d）；登出同时撤销 refresh token，改密/重置密码后旧 token 立即失效
+- 非 debug 模式下缺失/过期/撤销的 Token 统一返回 401，不会因 Flask-RESTful 异常接管变成 500
 - 请求频率限制（Redis计数器，可配置阈值；Redis异常不影响业务执行）
 - 文件上传魔数字节校验（17种文件类型）
 - 文件大小限制（继承Flask MAX_CONTENT_LENGTH）

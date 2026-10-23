@@ -121,6 +121,10 @@ export const watermarkApi = {
   trace: (formData) => api.post('/watermark/trace', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
+  benchmark: (formData) => api.post('/watermark/benchmark', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000
+  }),
   getLogs: () => api.get('/watermark/logs')
 }
 

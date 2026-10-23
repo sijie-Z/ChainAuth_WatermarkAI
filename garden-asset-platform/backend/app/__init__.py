@@ -133,7 +133,55 @@ def register_commands(app):
 def register_api_resources(app):
     """注册API资源"""
     from flask_restful import Api
-    api = Api(app, prefix='/api')
+    from flask_jwt_extended.exceptions import (
+        CSRFError,
+        FreshTokenRequired,
+        InvalidHeaderError,
+        InvalidQueryParamError,
+        JWTDecodeError,
+        NoAuthorizationError,
+        RevokedTokenError,
+        UserClaimsVerificationError,
+        UserLookupError,
+        WrongTokenError,
+    )
+    from jwt.exceptions import (
+        DecodeError,
+        ExpiredSignatureError,
+        InvalidAudienceError,
+        InvalidIssuerError,
+        InvalidTokenError,
+        MissingRequiredClaimError,
+    )
+
+    # debug/testing 关闭时 Flask-RESTful 会自行接管非 HTTP 异常，绕过
+    # JWTManager 注册的 401 处理器，导致缺少/过期 Token 变成 500。
+    # 显式登记 JWT 异常，保证生产模式下前端仍能收到 401 并刷新或跳登录。
+    jwt_error_messages = {
+        'NoAuthorizationError': '缺少认证Token',
+        'ExpiredSignatureError': 'Token已过期，请重新登录',
+        'InvalidTokenError': '无效的Token',
+        'RevokedTokenError': 'Token已被撤销',
+        'UserLookupError': '账号不存在或已被禁用',
+    }
+    jwt_error_classes = (
+        CSRFError, FreshTokenRequired, InvalidHeaderError,
+        InvalidQueryParamError, JWTDecodeError, NoAuthorizationError,
+        RevokedTokenError, UserClaimsVerificationError, UserLookupError,
+        WrongTokenError, DecodeError, ExpiredSignatureError,
+        InvalidAudienceError, InvalidIssuerError, InvalidTokenError,
+        MissingRequiredClaimError,
+    )
+    rest_errors = {
+        cls.__name__: {
+            'status': 401,
+            'code': 401,
+            'message': jwt_error_messages.get(cls.__name__, '认证失败，请重新登录'),
+        }
+        for cls in jwt_error_classes
+    }
+
+    api = Api(app, prefix='/api', errors=rest_errors)
 
     # 认证相关
     from app.resources.auth import (
@@ -257,12 +305,13 @@ def register_api_resources(app):
     from app.resources.watermark import (
         WatermarkEmbedResource, WatermarkExtractResource,
         WatermarkVerifyResource, WatermarkTraceResource,
-        WatermarkLogsResource
+        WatermarkBenchmarkResource, WatermarkLogsResource
     )
     api.add_resource(WatermarkEmbedResource, '/watermark/embed')
     api.add_resource(WatermarkExtractResource, '/watermark/extract')
     api.add_resource(WatermarkVerifyResource, '/watermark/verify')
     api.add_resource(WatermarkTraceResource, '/watermark/trace')
+    api.add_resource(WatermarkBenchmarkResource, '/watermark/benchmark')
     api.add_resource(WatermarkLogsResource, '/watermark/logs')
 
     # 区块链相关

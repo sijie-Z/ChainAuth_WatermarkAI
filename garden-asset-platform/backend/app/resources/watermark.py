@@ -259,6 +259,76 @@ class WatermarkTraceResource(Resource):
                 os.remove(temp_path)
 
 
+class WatermarkBenchmarkResource(Resource):
+    """水印鲁棒性实验
+
+    上传一张图片，真实执行嵌入与多种攻击，返回 PSNR/NC/ID 恢复情况。
+    需要登录：算法计算成本较高，避免匿名请求打满 CPU。
+    """
+
+    @rate_limit(limit=4, window=60)
+    @jwt_required()
+    def post(self):
+        if 'file' not in request.files:
+            return {'code': 400, 'message': '未上传图片'}, 400
+
+        file = request.files['file']
+        if not file.filename:
+            return {'code': 400, 'message': '未选择图片'}, 400
+
+        import os
+        import uuid
+
+        from app.services.watermark_benchmark import ALLOWED_IMAGE_EXTS
+
+        ext = os.path.splitext(file.filename)[1].lower()
+        if ext not in ALLOWED_IMAGE_EXTS:
+            return {'code': 400, 'message': '仅支持 PNG/JPG/BMP/TIFF/WebP 图片'}, 400
+
+        max_bytes = current_app.config.get(
+            'WATERMARK_BENCHMARK_MAX_BYTES', 10 * 1024 * 1024
+        )
+        file.seek(0, os.SEEK_END)
+        file_size = file.tell()
+        file.seek(0)
+        if file_size > max_bytes:
+            return {
+                'code': 400,
+                'message': f'图片大小超过限制 ({max_bytes // 1024 // 1024}MB)'
+            }, 400
+
+        upload_root = os.path.join(
+            current_app.config.get('UPLOAD_FOLDER', './uploads'), 'benchmark_tmp'
+        )
+        os.makedirs(upload_root, exist_ok=True)
+        temp_path = os.path.join(upload_root, f'upload_{uuid.uuid4().hex}{ext}')
+        file.save(temp_path)
+
+        try:
+            from app.services.watermark_benchmark import run_benchmark
+
+            result = run_benchmark(
+                temp_path,
+                max_side=current_app.config.get('WATERMARK_BENCHMARK_MAX_SIDE', 640),
+            )
+            return {
+                'code': 200,
+                'message': '鲁棒性实验完成',
+                'data': result,
+            }, 200
+        except ValueError as exc:
+            return {'code': 400, 'message': str(exc)}, 400
+        except Exception:
+            current_app.logger.exception('水印鲁棒性实验失败')
+            return {
+                'code': 500,
+                'message': '实验执行失败，请更换图片后重试'
+            }, 500
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+
 class WatermarkLogsResource(Resource):
     """水印操作记录"""
 

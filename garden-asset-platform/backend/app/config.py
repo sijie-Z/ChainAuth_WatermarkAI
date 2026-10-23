@@ -102,6 +102,14 @@ class Config:
     EXTRACTED_FOLDER = os.environ.get('EXTRACTED_FOLDER', './extracted')
     BACKUP_DIR = os.environ.get('BACKUP_DIR', './backups')
 
+    # 水印鲁棒性实验室：限制工作尺寸与上传大小，控制单次实验的 CPU 占用
+    WATERMARK_BENCHMARK_MAX_SIDE = int(
+        os.environ.get('WATERMARK_BENCHMARK_MAX_SIDE', '640')
+    )
+    WATERMARK_BENCHMARK_MAX_BYTES = int(
+        os.environ.get('WATERMARK_BENCHMARK_MAX_BYTES', str(10 * 1024 * 1024))
+    )
+
     # 文件上传大小限制 (500MB)
     MAX_CONTENT_LENGTH = int(os.environ.get('MAX_CONTENT_LENGTH', str(500 * 1024 * 1024)))
 

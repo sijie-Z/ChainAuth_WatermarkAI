@@ -93,6 +93,12 @@ const routes = [
     meta: { title: '溯源查询', siteHeader: true }
   },
   {
+    path: '/watermark-lab',
+    name: 'WatermarkLab',
+    component: page(() => import('@/views/watermark/lab.vue')),
+    meta: { title: '水印实验室', requiresAuth: true, siteHeader: true }
+  },
+  {
     path: '/guide',
     name: 'Guide',
     component: page(() => import('@/views/guide/index.vue')),

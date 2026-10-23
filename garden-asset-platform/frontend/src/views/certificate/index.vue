@@ -177,8 +177,14 @@
 
         <!-- 平台签章 -->
         <div class="cert-signature">
-          <span class="signature-org">苏州园林数字资产平台</span>
-          <span class="cert-seal" aria-hidden="true">园</span>
+          <figure v-if="qrDataUrl" class="cert-qr">
+            <img :src="qrDataUrl" alt="证书核验二维码" />
+            <figcaption>扫码核验证书</figcaption>
+          </figure>
+          <div class="signature-right">
+            <span class="signature-org">苏州园林数字资产平台</span>
+            <span class="cert-seal" aria-hidden="true">园</span>
+          </div>
         </div>
 
         <!-- 页脚 -->
@@ -203,6 +209,7 @@ import { parseBackendDate } from '@/utils'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Printer, Share, Link, CircleCheck, CircleClose } from '@element-plus/icons-vue'
+import QRCode from 'qrcode'
 import { blockchainApi } from '@/api/modules'
 
 const route = useRoute()
@@ -212,6 +219,7 @@ const loading = ref(true)
 const loadError = ref(false)
 const certificate = ref({})
 const certBody = ref(null)
+const qrDataUrl = ref('')
 
 async function loadCertificate() {
   loading.value = true
@@ -238,14 +246,34 @@ async function loadCertificate() {
         certificateCount: payload.certificate_count || 1,
         versionFileName: payload.version?.file_name || ''
       }
+      await buildQrCode()
     } else {
       certificate.value = {}
+      qrDataUrl.value = ''
     }
   } catch {
     loadError.value = true
     certificate.value = {}
+    qrDataUrl.value = ''
   } finally {
     loading.value = false
+  }
+}
+
+async function buildQrCode() {
+  if (!certificate.value.certificate_id) {
+    qrDataUrl.value = ''
+    return
+  }
+  try {
+    qrDataUrl.value = await QRCode.toDataURL(window.location.href, {
+      margin: 1,
+      width: 220,
+      errorCorrectionLevel: 'M',
+      color: { dark: '#2f6b5a', light: '#ffffff' }
+    })
+  } catch {
+    qrDataUrl.value = ''
   }
 }
 
@@ -515,11 +543,38 @@ onMounted(() => {
 // 朱砂印章
 .cert-signature {
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
+  align-items: flex-end;
+  justify-content: space-between;
   gap: 16px;
   margin-bottom: 20px;
   padding-top: 4px;
+}
+
+.cert-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+
+  img {
+    width: 88px;
+    height: 88px;
+    padding: 4px;
+    background: #fff;
+    border: 1px solid $border-color;
+  }
+
+  figcaption {
+    font-size: 10px;
+    color: $text-placeholder;
+  }
+}
+
+.signature-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .signature-org {
@@ -608,7 +663,12 @@ onMounted(() => {
   }
 
   .cert-signature {
+    align-items: flex-start;
     justify-content: flex-start;
+  }
+
+  .signature-right {
+    margin-left: auto;
   }
 }
 </style>

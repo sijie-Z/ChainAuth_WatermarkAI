@@ -73,6 +73,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Collection,
+  Cpu,
   DataLine,
   Document,
   Download,
@@ -132,6 +133,16 @@ const pageActions = computed(() => {
       icon: Search,
       tone: 'secondary',
       keywords: 'trace 溯源 核验'
+    },
+    {
+      id: 'page-watermark-lab',
+      title: '水印实验室',
+      subtitle: '真实执行压缩、噪声与缩放攻击',
+      path: '/watermark-lab',
+      icon: Cpu,
+      tone: 'accent',
+      auth: true,
+      keywords: 'watermark lab 水印 鲁棒性 实验 PSNR NC'
     },
     {
       id: 'page-guide',

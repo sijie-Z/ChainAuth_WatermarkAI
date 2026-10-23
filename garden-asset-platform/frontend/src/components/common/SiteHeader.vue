@@ -13,6 +13,7 @@
         <router-link to="/home" class="site-nav-link" :class="{ active: route.path === '/home' }">首页</router-link>
         <router-link to="/assets" class="site-nav-link" :class="{ active: route.path.startsWith('/assets') }">资产档案</router-link>
         <router-link to="/trace" class="site-nav-link" :class="{ active: route.path === '/trace' }">溯源查询</router-link>
+        <router-link to="/watermark-lab" class="site-nav-link" :class="{ active: route.path === '/watermark-lab' }">水印实验室</router-link>
         <router-link v-if="isLoggedIn" to="/license/my" class="site-nav-link" :class="{ active: route.path === '/license/my' }">我的授权</router-link>
         <router-link to="/guide" class="site-nav-link" :class="{ active: route.path === '/guide' }">使用指南</router-link>
       </nav>
@@ -140,6 +141,7 @@
       <router-link to="/home" @click="mobileOpen = false">首页</router-link>
       <router-link to="/assets" @click="mobileOpen = false">资产档案</router-link>
       <router-link to="/trace" @click="mobileOpen = false">溯源查询</router-link>
+      <router-link to="/watermark-lab" @click="mobileOpen = false">水印实验室</router-link>
       <router-link to="/guide" @click="mobileOpen = false">使用指南</router-link>
       <router-link v-if="isLoggedIn" to="/license/my" @click="mobileOpen = false">我的授权</router-link>
       <router-link v-if="isLoggedIn" to="/my-assets" @click="mobileOpen = false">我的资产</router-link>
@@ -644,10 +646,10 @@ function handleCommand(command) {
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1180px) {
   .site-header-inner {
-    padding: 0 16px;
-    gap: 12px;
+    padding: 0 24px;
+    gap: 16px;
   }
 
   .site-nav,
@@ -661,6 +663,13 @@ function handleCommand(command) {
 
   .site-mobile-nav {
     display: block;
+  }
+}
+
+@media (max-width: 900px) {
+  .site-header-inner {
+    padding: 0 16px;
+    gap: 12px;
   }
 
   .site-username {
@@ -681,7 +690,63 @@ function handleCommand(command) {
 }
 
 @media (max-width: 480px) {
-  .site-brand-text small {
+  .site-header-inner {
+    gap: 8px;
+    padding: 0 12px;
+  }
+
+  .site-brand {
+    gap: 8px;
+    min-width: 0;
+    flex-shrink: 1;
+
+    .site-mark {
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
+      font-size: 16px;
+    }
+
+    .site-brand-text {
+      min-width: 0;
+    }
+
+    .site-brand-text strong {
+      overflow: hidden;
+      font-size: 13px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .site-brand-text small {
+      display: none;
+    }
+  }
+
+  .site-actions {
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .site-search-btn,
+  .site-icon-btn,
+  .site-menu-toggle {
+    width: 32px;
+    height: 32px;
+  }
+
+  .site-user {
+    gap: 4px;
+    padding: 2px 4px 2px 2px;
+  }
+
+  .site-avatar {
+    width: 26px;
+    height: 26px;
+    font-size: 12px;
+  }
+
+  .site-arrow {
     display: none;
   }
 

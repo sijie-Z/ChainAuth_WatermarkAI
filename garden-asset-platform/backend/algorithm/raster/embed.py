@@ -59,8 +59,11 @@ def bits_to_id(bits, repeat=None):
             byte = (byte << 1) | int(bit)
         payload.append(byte)
 
+    # 水印 ID 以 NUL 补齐到固定长度；攻击后填充区可能被噪声改写，
+    # 只取第一个 NUL 之前的内容，避免尾部噪声把合法 ID 判为无效。
+    raw = bytes(payload).split(b'\x00', 1)[0]
     try:
-        return payload.rstrip(b'\x00').decode('utf-8')
+        return raw.decode('utf-8')
     except UnicodeDecodeError:
         return None
 

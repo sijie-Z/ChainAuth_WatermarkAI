@@ -82,17 +82,23 @@ def _decode_valid_id(image_array, alpha=DEFAULT_ALPHA):
 
 
 def _resolve_scaled_image(image, alpha=DEFAULT_ALPHA):
-    """ID 解码失败时，尝试常见缩放比例，返回能解出有效 ID 的图像与 ID"""
+    """ID 解码失败时，尝试常见缩放比例，返回能解出有效 ID 的图像与 ID。
+
+    2.0 倍还额外尝试最近邻插值：图片被精确缩小一半时（缩略图常见），
+    最近邻放大能完整还原原像素块，QIM 系数不会被插值平滑破坏。
+    """
     base_width, base_height = image.size
     use_color = image.mode in ('RGB', 'RGBA', 'P', 'CMYK', 'LA')
     for factor in SCALE_CANDIDATES:
         size = (max(8, int(base_width * factor)), max(8, int(base_height * factor)))
-        candidate = image.resize(size, Image.LANCZOS)
-        candidate_array = np.array(candidate.convert('RGB' if use_color else 'L'))
-        watermark_id = _decode_valid_id(candidate_array, alpha)
-        if watermark_id:
-            logger.info(f'检测到缩放攻击，按 {factor:.2f} 倍恢复后解码成功')
-            return candidate, watermark_id
+        resample_options = (Image.LANCZOS, Image.NEAREST) if factor == 2.0 else (Image.LANCZOS,)
+        for resample in resample_options:
+            candidate = image.resize(size, resample)
+            candidate_array = np.array(candidate.convert('RGB' if use_color else 'L'))
+            watermark_id = _decode_valid_id(candidate_array, alpha)
+            if watermark_id:
+                logger.info(f'检测到缩放攻击，按 {factor:.2f} 倍恢复后解码成功')
+                return candidate, watermark_id
     return None, None
 
 
