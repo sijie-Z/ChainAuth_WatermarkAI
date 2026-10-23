@@ -79,3 +79,20 @@ def test_init_db_selects_production_config(monkeypatch):
     monkeypatch.setenv('FLASK_ENV', 'development')
     assert module._is_production() is False
     assert module._app_config_name() == 'development'
+
+
+def test_create_admin_generates_random_password_when_not_debug(app, runner):
+    from app.models import User
+
+    result = runner.invoke(args=['create-admin', '--username', 'opsadmin'])
+    assert result.exit_code == 0, result.output
+    assert '随机初始密码' in result.output
+
+    password = result.output.split('随机初始密码: ', 1)[1].split('（', 1)[0].strip()
+    assert len(password) >= 20
+
+    with app.app_context():
+        admin = User.query.filter_by(username='opsadmin').first()
+        assert admin is not None
+        assert admin.check_password(password)
+

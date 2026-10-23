@@ -111,4 +111,4 @@ python -m flask backup list
 - [x] 侵权线索、批量巡检、通知渠道、Webhook
 - [x] 视频/PDF/三维模型在线预览
 - [x] 备份恢复、存储巡检、生产密钥与初始化安全
-- [x] 后端 331 个用例、前端 49 个 Vitest、18 个 Playwright 点击流（数量以实际运行结果为准）
+- [x] 后端 332 个用例、前端 49 个 Vitest、18 个 Playwright 点击流（数量以实际运行结果为准）

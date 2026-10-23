@@ -57,7 +57,7 @@
 
 ### Security
 - 生产环境启动校验 `SECRET_KEY`/`JWT_SECRET_KEY`：拒绝 `change-me` 等示例占位文本与不足 32 位的密钥，附 `scripts/generate_secrets.py` 生成随机值
-- 生产初始化改用 production 配置：不再创建 `123456` 演示账号（`SEED_DEMO_USERS=true` 可显式开启），未设置 `ADMIN_INITIAL_PASSWORD` 时生成一次性随机管理员密码并打印
+- 生产初始化改用 production 配置：不再创建 `123456` 演示账号（`SEED_DEMO_USERS=true` 可显式开启），未设置 `ADMIN_INITIAL_PASSWORD` 时生成一次性随机管理员密码并打印；`flask create-admin` 在非调试环境未给密码时同样随机生成
 - `AI_ENABLED` 默认改为 `false`，与 README 和能力状态一致，避免未配置模型时拖慢启动
 
 ### Fixed
@@ -87,7 +87,7 @@
 - 同周期还包括：路由白屏/卡顿与 Google Fonts 外链、列表骨架塌陷、详情页布局溢出、后台切换重建、水印 `verified` 误判、证书页硬编码、登录回跳与 400ms 定时器等问题
 
 ### Tests
-- 后端 331 个用例：使用 `backend/scripts/run_tests.py` 逐文件隔离完整跑通（331 passed，单文件峰值 257MB）；新增存储巡检、生产密钥、合同正文、worker 心跳/队列健康度、备份恢复回环、侵权线索、批量巡检、授权版本绑定、使用报表、Webhook、下载指纹与预览权限用例
+- 后端 332 个用例：使用 `backend/scripts/run_tests.py` 逐文件隔离完整跑通（332 passed，单文件峰值 339MB）；新增存储巡检、生产密钥、合同正文、worker 心跳/队列健康度、备份恢复回环、侵权线索、批量巡检、授权版本绑定、使用报表、Webhook、下载指纹与预览权限用例
 - 前端 49 个 Vitest（`--maxWorkers=1` 降低内存占用）；Playwright 18 个点击流（新增任务队列 worker 心跳、三维模型预览、命令面板、下载记录、公开分享核验、合集、批量上传、版本恢复、评论/标注与授权续期/撤销入口）
 
 ## [1.7.0] - 2026-10-21

@@ -1,9 +1,11 @@
 """
 命令行工具
 """
+import secrets
 import time
 
 import click
+from flask import current_app
 from flask.cli import with_appcontext
 from app.extensions import db
 from app.models import User, Garden
@@ -11,7 +13,10 @@ from app.models import User, Garden
 
 @click.command('create-admin')
 @click.option('--username', default='admin', help='管理员用户名')
-@click.option('--password', default='admin123', help='管理员密码')
+@click.option(
+    '--password', default=None,
+    help='管理员密码；缺省时开发环境用 admin123，生产环境随机生成'
+)
 @click.option('--email', default='admin@szgarden.cn', help='管理员邮箱')
 @with_appcontext
 def create_admin(username, password, email):
@@ -19,6 +24,14 @@ def create_admin(username, password, email):
     if User.query.filter_by(username=username).first():
         click.echo(f'用户 {username} 已存在')
         return
+
+    generated = False
+    if not password:
+        if current_app.debug:
+            password = 'admin123'
+        else:
+            password = secrets.token_urlsafe(16)
+            generated = True
 
     admin = User(
         username=username,
@@ -32,6 +45,8 @@ def create_admin(username, password, email):
     db.session.commit()
 
     click.echo(f'管理员创建成功: {username}')
+    if generated:
+        click.echo(f'随机初始密码: {password}（请保存并在首次登录后修改）')
 
 
 @click.command('init-gardens')
