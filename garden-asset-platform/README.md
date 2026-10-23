@@ -15,11 +15,11 @@
 | 资产管理 | 数字资产上传、浏览、分类、检索、下载 | Vue3 + Flask + MinIO |
 | 数字水印 | DCT + QIM 盲水印嵌入与提取，抗 JPEG 压缩、噪声与 50%–150% 缩放 | Python OpenCV + NumPy |
 | 区块链存证 | 按文件版本签发存证证书，支持历史版本证书追溯；默认本地模拟，可配置接入 FISCO BCOS | FISCO BCOS + Python SDK（可选） |
-| 异步任务 | 水印/存证任务持久化入队，后台 worker 执行，支持进度查询、失败重试与超时对账 | Flask + 数据库队列 + 进程内/独立 worker |
+| 异步任务 | 水印/存证任务持久化入队，后台 worker 执行，支持进度查询、失败重试与超时对账；worker 心跳与队列健康度可观测 | Flask + 数据库队列 + 进程内/独立 worker |
 | AI 辅助（可选） | 以图搜图、侵权辅助检测、智能问答；默认关闭，需安装模型与 API Key | CLIP + Milvus + 智谱 GLM（可选） |
 | 授权分发 | 在线申请→双重审批→合同管理→下载控制；用途/渠道/格式/地域/下载次数作为可执行范围，授权绑定签发时的文件版本 |
 | 下载指纹 | 授权用户下载影像时生成带资产编码、授权编号、账号与唯一指纹码的可见副本，原盲水印保留；台账可回溯 |
-| 多格式预览 | 图片/矢量缩略图、视频在线播放、PDF 内嵌预览；预览按授权控制且不计下载量 | Vue3 + Flask |
+| 多格式预览 | 图片/矢量缩略图、视频在线播放、PDF 内嵌预览、三维模型（GLB/GLTF/STL/OBJ）旋转缩放；预览按授权控制且不计下载量 | Vue3 + Flask + three.js |
 | 侵权线索 | 公开提交疑似盗用文件/链接，水印匹配资产后进入后台研判，确认或驳回时通知举报人与权利人 | Vue3 + Flask |
 | 通知渠道 | 站内 SSE 实时推送 + 可选 SMTP 邮件 + 系统 Webhook（兼容企业微信群机器人，支持签名与重试） | SSE + SMTP + Webhook |
 | 协作与版本 | 评论/回复、影像区域标注、版本上传/恢复 | Vue3 + Flask |
@@ -43,7 +43,7 @@
 
 | 层级 | 技术 |
 |------|------|
-| 前端 | Vue 3.4, Vite 5, Pinia, Element Plus, ECharts |
+| 前端 | Vue 3.4, Vite 5, Pinia, Element Plus, ECharts, three.js |
 | 后端 | Flask 3.0, Flask-RESTful, SQLAlchemy, Flask-JWT-Extended |
 | 存储 | PostgreSQL, Redis, Milvus；MinIO 为可选服务（当前默认本地磁盘） |
 | 区块链 | FISCO BCOS 3.x（可选，默认本地模拟存证） |
@@ -120,7 +120,7 @@ FLASK_APP=run.py flask db upgrade
 ### 运行测试
 
 ```bash
-# 后端测试（313个用例，覆盖API/模型/安全/迁移/异步任务/版本证书/通知渠道/授权范围/侵权线索/批量巡检）
+# 后端测试（321个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/侵权线索/批量巡检/备份恢复）
 cd backend && python -m pytest tests/ -v
 
 # Windows 内存受限时：逐文件隔离子进程运行（推荐）
@@ -161,7 +161,7 @@ garden-asset-platform/
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
 │   ├── migrations/                # Alembic 迁移（baseline + versions）
-│   ├── tests/                     # pytest测试（313个用例）
+│   ├── tests/                     # pytest测试（321个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -209,7 +209,7 @@ garden-asset-platform/
 | GET | `/api/assets/stats` | 资产统计（含水印趋势） |
 | GET | `/api/assets/my` | 我的资产 |
 | GET | `/api/assets/:id/thumbnail` | 资产缩略图（`?size=card` 返回列表卡片图） |
-| GET | `/api/assets/:id/preview` | 在线预览（已发布资产需有效授权；不计下载量） |
+| GET | `/api/assets/:id/preview` | 在线预览（视频/PDF/GLB/GLTF/STL/OBJ；已发布资产需有效授权；不计下载量） |
 | GET | `/api/assets/:id/related` | 同园林相关资产 |
 | GET | `/api/assets/:id/evidence` | 资产证据链（上传/水印/存证/证书/发布/授权/下载） |
 | GET/POST | `/api/assets/:id/versions` | 版本历史（含各版本证书）/ 上传新版本（文件替换并重置水印与当前存证） |
@@ -261,6 +261,7 @@ garden-asset-platform/
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/tasks` | 任务列表（`asset_id`/`status` 筛选；非管理员仅看自己的任务） |
+| GET | `/api/tasks/health` | 队列健康度与 worker 心跳（管理员：在线 worker、积压、超时处理与告警） |
 | GET | `/api/tasks/:id` | 任务详情与进度 |
 | POST | `/api/tasks/:id/retry` | 重试失败/已取消任务 |
 | POST | `/api/tasks/:id/cancel` | 取消排队中的任务 |
@@ -349,6 +350,8 @@ Docker 部署见 `garden-asset-platform/.env.example`；本地开发见 `backend
 | `TASK_WORKER_ENABLED` | 是否在 API 进程内启动异步任务 worker（开发默认开，生产建议关） | `false` |
 | `TASK_MAX_ATTEMPTS` | 异步任务最大尝试次数 | `3` |
 | `TASK_STUCK_TIMEOUT_MINUTES` | 多久未完成的 running 任务视为超时并重新排队 | `15` |
+| `TASK_WORKER_STALE_SECONDS` | worker 心跳超过该秒数未刷新视为离线 | `90` |
+| `TASK_BACKLOG_THRESHOLD` | 排队任务达到该数量时健康度降为 warning | `50` |
 | `TASK_WORKER_POLL_INTERVAL` | worker 空闲轮询间隔（秒） | `1.0` |
 | `SSE_ENABLED` | 是否启用站内 SSE 实时通知 | `true` |
 | `SSE_MAX_SECONDS` | 单个 SSE 连接最长保持秒数 | `300` |
@@ -364,7 +367,7 @@ Docker 部署见 `garden-asset-platform/.env.example`；本地开发见 `backend
 
 > 多 worker 部署（4 个 gunicorn worker）默认关闭任务调度器，避免备份/授权过期任务重复执行。如需启用，设置 `SCHEDULER_ENABLED=true`，并确保只运行一个调度进程（或改用外部 cron）。
 
-> 水印与存证任务默认进入 `async_tasks` 表，由 `docker compose` 中的 `worker` 服务执行；开发环境由 API 进程内 worker 执行。任务领取使用条件更新，多 worker 并发也不会重复处理。
+> 水印与存证任务默认进入 `async_tasks` 表，由 `docker compose` 中的 `worker` 服务执行；开发环境由 API 进程内 worker 执行。任务领取使用条件更新，多 worker 并发也不会重复处理。worker 每次轮询写入 `worker_heartbeats`，后台“任务队列”页展示在线 worker、积压与超时告警；也可运行 `flask tasks status`（`--check` 在无在线 worker 或健康度异常时返回非零，compose worker 已用作健康检查）。
 
 > 备份目录默认 `backend/backups`（Docker 挂载为 `/app/backups`）。使用 `flask backup create`、`flask backup list`、`flask backup restore <文件名>`；SQLite 恢复前会自动保留 `pre_restore_*.db` 回滚副本。生产环境仍建议定期把备份复制到独立存储并做恢复演练。
 

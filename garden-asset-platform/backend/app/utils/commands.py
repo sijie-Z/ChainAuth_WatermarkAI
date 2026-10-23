@@ -93,14 +93,17 @@ def tasks_run(once, interval, limit, no_email):
     from app.services.webhook_service import dispatch_pending_webhooks
 
     click.echo('任务 worker 已启动，按 Ctrl+C 停止')
+    worker_id = task_service.cli_worker_identity()
+    processed_total = 0
     last_email_dispatch = 0.0
     while True:
         processed = 0
         while processed < max(1, limit):
-            task = task_service.process_next(worker_id='cli')
+            task = task_service.process_next(worker_id=worker_id)
             if not task:
                 break
             processed += 1
+            processed_total += 1
             click.echo(
                 f'[{task.status}] {task.task_type} {task.id} '
                 f'资产={task.asset_id or "-"} '
@@ -108,6 +111,9 @@ def tasks_run(once, interval, limit, no_email):
             )
             if task.error_message:
                 click.echo(f'  错误: {task.error_message}')
+        task_service.record_heartbeat(
+            worker_id, kind='cli', processed=processed_total
+        )
 
         now = time.time()
         if not no_email and now - last_email_dispatch >= 60:
@@ -166,6 +172,40 @@ def tasks_list(status, limit):
         )
         if task.error_message:
             click.echo(f'  {task.error_message}')
+
+
+@tasks_group.command('status')
+@click.option('--check', is_flag=True, help='无在线 worker 或健康度异常时以非零状态退出')
+@with_appcontext
+def tasks_status(check):
+    """查看队列健康度与 worker 心跳"""
+    from app.services import task_service
+
+    health = task_service.queue_health()
+    counts = health['counts']
+    click.echo(
+        f"队列：排队 {counts['queued']}，处理中 {counts['running']}，"
+        f"失败 {counts['failed']}，已完成 {counts['succeeded']}"
+    )
+    click.echo(
+        f"健康度：{health['status']}；在线 worker {health['online_workers']}；"
+        f"最老排队任务 {health['oldest_queued_seconds']} 秒"
+    )
+    for warning in health['warnings']:
+        click.echo(f'  警告: {warning}')
+    if not health['workers']:
+        click.echo('暂无 worker 心跳（未启动 worker，或心跳尚未写入）')
+    for worker in health['workers']:
+        state = '在线' if worker['online'] else '离线'
+        click.echo(
+            f"  [{state}] {worker['worker_id']} "
+            f"{worker['kind_label']} 已处理 {worker['processed']} 个，"
+            f"{worker['last_seen_seconds']} 秒前心跳"
+        )
+    if check and (
+        health['status'] == 'critical' or health['online_workers'] == 0
+    ):
+        raise click.exceptions.Exit(1)
 
 
 @click.group('notifications')

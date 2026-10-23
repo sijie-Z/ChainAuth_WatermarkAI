@@ -63,6 +63,7 @@ declare module 'vue' {
     ErrorBoundary: typeof import('./components/common/ErrorBoundary.vue')['default']
     EvidenceChain: typeof import('./components/common/EvidenceChain.vue')['default']
     LoadingWrapper: typeof import('./components/common/LoadingWrapper.vue')['default']
+    ModelViewer: typeof import('./components/ModelViewer.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     SiteHeader: typeof import('./components/common/SiteHeader.vue')['default']

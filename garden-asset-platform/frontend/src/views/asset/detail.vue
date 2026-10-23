@@ -113,6 +113,13 @@
                 :src="previewUrl"
                 title="文档预览"
               ></iframe>
+              <ModelViewer
+                v-else-if="isModelAsset && previewUrl"
+                :src="previewUrl"
+                :format="modelFormat"
+                class="asset-model"
+                @error="previewError = true"
+              />
               <el-image
                 v-else-if="asset.asset_type === 'image' || asset.asset_type === 'vector'"
                 class="asset-photo"
@@ -787,6 +794,7 @@ import { copyToClipboard, parseBackendDate } from '@/utils'
 import EvidenceChain from '@/components/common/EvidenceChain.vue'
 import AnnotationBoard from '@/components/asset/AnnotationBoard.vue'
 import CommentSection from '@/components/asset/CommentSection.vue'
+import ModelViewer from '@/components/ModelViewer.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -910,8 +918,13 @@ const isPdfAsset = computed(() =>
   asset.value.asset_type === 'document'
   && ['pdf'].includes((asset.value.file_format || '').toLowerCase())
 )
+const modelFormat = computed(() => (asset.value.file_format || '').toLowerCase())
+const isModelAsset = computed(() =>
+  asset.value.asset_type === 'model'
+  && ['glb', 'gltf', 'stl', 'obj'].includes(modelFormat.value)
+)
 const previewSupported = computed(() =>
-  asset.value.asset_type === 'video' || isPdfAsset.value
+  asset.value.asset_type === 'video' || isPdfAsset.value || isModelAsset.value
 )
 const previewPlaceholderText = computed(() => {
   if (previewSupported.value) {
@@ -920,7 +933,7 @@ const previewPlaceholderText = computed(() => {
     return '预览加载中…'
   }
   if (asset.value.asset_type === 'model') {
-    return '三维模型暂不支持在线预览，可下载后查看'
+    return '该模型格式暂不支持在线预览，可下载后查看'
   }
   if (asset.value.asset_type === 'document') {
     return '该文档格式暂不支持在线预览，可下载后查看'
@@ -1823,6 +1836,14 @@ watch(() => route.query.tab, tab => {
 
 .asset-pdf {
   background: $bg-secondary;
+}
+
+.asset-model {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border: 1px solid $border-light;
+  border-radius: $radius-md;
 }
 
 .preview-placeholder {

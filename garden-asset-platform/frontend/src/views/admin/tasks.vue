@@ -21,6 +21,52 @@
       description="任务会留在队列中。请启动 docker compose 的 worker 服务，或运行 flask tasks run。"
     />
 
+    <el-alert
+      v-if="health && health.warnings?.length"
+      :type="health.status === 'critical' ? 'error' : 'warning'"
+      :closable="false"
+      show-icon
+      class="worker-alert"
+      :title="health.status === 'critical' ? '队列健康度：异常' : '队列健康度：需要关注'"
+    >
+      <ul class="health-warnings">
+        <li v-for="warning in health.warnings" :key="warning">{{ warning }}</li>
+      </ul>
+    </el-alert>
+
+    <section class="health-strip">
+      <div class="health-item">
+        <span class="health-label">在线 worker</span>
+        <strong class="health-value" :class="{ danger: health && !health.online_workers }">
+          {{ health?.online_workers ?? '—' }}
+        </strong>
+      </div>
+      <div class="health-item">
+        <span class="health-label">最老排队任务</span>
+        <strong class="health-value">{{ formatDuration(health?.oldest_queued_seconds) }}</strong>
+      </div>
+      <div class="health-item">
+        <span class="health-label">超时处理中</span>
+        <strong class="health-value" :class="{ danger: health?.stale_running }">
+          {{ health?.stale_running ?? '—' }}
+        </strong>
+      </div>
+      <div class="health-item health-workers">
+        <span class="health-label">worker 心跳</span>
+        <span v-if="!health?.workers?.length" class="muted">暂无心跳</span>
+        <el-tag
+          v-for="worker in (health?.workers || []).slice(0, 3)"
+          :key="worker.worker_id"
+          size="small"
+          :type="worker.online ? 'success' : 'info'"
+          effect="plain"
+          :title="worker.worker_id"
+        >
+          {{ worker.kind_label }} · {{ formatDuration(worker.last_seen_seconds, true) }}前
+        </el-tag>
+      </div>
+    </section>
+
     <section class="summary-grid">
       <div v-for="item in summaryItems" :key="item.key" class="summary-card">
         <span class="summary-label">{{ item.label }}</span>
@@ -143,6 +189,7 @@ const statusFilter = ref('')
 const assetFilter = ref('')
 const autoRefresh = ref(true)
 const counts = ref({})
+const health = ref(null)
 let refreshTimer = null
 
 const summaryItems = computed(() => [
@@ -165,6 +212,16 @@ function statusType(status) {
 function formatTime(value) {
   const date = parseBackendDate(value)
   return date ? date.toLocaleString('zh-CN') : '—'
+}
+
+function formatDuration(seconds) {
+  if (seconds === null || seconds === undefined) return '—'
+  if (seconds < 60) return `${seconds} 秒`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes} 分钟`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} 小时`
+  return `${Math.floor(hours / 24)} 天`
 }
 
 async function loadTasks() {
@@ -199,8 +256,19 @@ async function loadSummary() {
   }
 }
 
+async function loadHealth() {
+  try {
+    const response = await taskApi.health()
+    if (response.data?.code === 200) {
+      health.value = response.data.data || null
+    }
+  } catch {
+    // 健康度读取失败时保留上一次结果，不影响任务列表
+  }
+}
+
 async function loadAll() {
-  await Promise.all([loadTasks(), loadSummary()])
+  await Promise.all([loadTasks(), loadSummary(), loadHealth()])
 }
 
 function resetFilters() {
@@ -311,6 +379,52 @@ onBeforeUnmount(() => {
 
 .worker-alert {
   margin-bottom: $spacing-lg;
+}
+
+.health-warnings {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.health-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 28px;
+  padding: 12px 18px;
+  margin-bottom: $spacing-lg;
+  background: $bg-card;
+  border: 1px solid $border-color;
+  border-radius: $radius-lg;
+}
+
+.health-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.health-label {
+  font-size: 12px;
+  color: $text-secondary;
+}
+
+.health-value {
+  font-family: $font-display;
+  font-size: 17px;
+  font-weight: 600;
+  color: $text-primary;
+
+  &.danger { color: $error-color; }
+}
+
+.health-workers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
 }
 
 .summary-grid {

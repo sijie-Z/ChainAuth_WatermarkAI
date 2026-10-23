@@ -12,7 +12,7 @@ from app.models.extra import (
 )
 from app.models.comment import AssetComment
 from app.models.annotation import AssetAnnotation
-from app.models.task import AsyncTask
+from app.models.task import AsyncTask, WorkerHeartbeat
 from app.models.report import InfringementReport
 from app.models.fingerprint import DownloadFingerprint
 
@@ -27,6 +27,7 @@ __all__ = [
     'NotificationRead', 'NotificationEvent',
     'NotificationPreference', 'NotificationDelivery',
     'Collection', 'CollectionAsset', 'SystemConfig',
-    'AssetComment', 'AssetAnnotation', 'AsyncTask', 'InfringementReport',
+    'AssetComment', 'AssetAnnotation', 'AsyncTask', 'WorkerHeartbeat',
+    'InfringementReport',
     'DownloadFingerprint'
 ]

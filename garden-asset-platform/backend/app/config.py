@@ -139,6 +139,13 @@ class Config:
     TASK_STUCK_TIMEOUT_MINUTES = int(
         os.environ.get('TASK_STUCK_TIMEOUT_MINUTES', '15')
     )
+    # worker 心跳多久未刷新视为离线；排队数达到阈值时健康度降为 warning
+    TASK_WORKER_STALE_SECONDS = int(
+        os.environ.get('TASK_WORKER_STALE_SECONDS', '90')
+    )
+    TASK_BACKLOG_THRESHOLD = int(
+        os.environ.get('TASK_BACKLOG_THRESHOLD', '50')
+    )
 
     # 站内实时通知（SSE）
     SSE_ENABLED = os.environ.get('SSE_ENABLED', 'true').lower() == 'true'

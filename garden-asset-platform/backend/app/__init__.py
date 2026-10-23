@@ -356,9 +356,11 @@ def register_api_resources(app):
 
     # 异步任务（水印/存证）
     from app.resources.tasks import (
-        TaskListResource, TaskResource, TaskRetryResource, TaskCancelResource
+        TaskListResource, TaskResource, TaskRetryResource, TaskCancelResource,
+        TaskHealthResource
     )
     api.add_resource(TaskListResource, '/tasks')
+    api.add_resource(TaskHealthResource, '/tasks/health')
     api.add_resource(TaskResource, '/tasks/<string:task_id>')
     api.add_resource(TaskRetryResource, '/tasks/<string:task_id>/retry')
     api.add_resource(TaskCancelResource, '/tasks/<string:task_id>/cancel')

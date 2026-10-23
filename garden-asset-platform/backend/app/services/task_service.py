@@ -22,7 +22,7 @@ from app.extensions import db
 from app.models.asset import Asset, AssetVersion
 from app.models.blockchain import Certificate
 from app.models.report import InfringementReport
-from app.models.task import AsyncTask
+from app.models.task import AsyncTask, WorkerHeartbeat
 from app.models.user import User
 from app.services.blockchain_service import blockchain_service
 from app.services.notification_service import add_notification_event
@@ -522,15 +522,138 @@ def task_counts():
     }
 
 
+def cli_worker_identity():
+    """独立 `flask tasks run` 进程的稳定标识。"""
+    return f'cli:{socket.gethostname()}:{os.getpid()}'
+
+
+def _heartbeat_stale_seconds():
+    return max(15, int(current_app.config.get('TASK_WORKER_STALE_SECONDS', 90)))
+
+
+def record_heartbeat(worker_id, kind='thread', processed=0):
+    """写入或刷新 worker 心跳；失败不打断任务执行。"""
+    now = datetime.utcnow()
+    try:
+        row = WorkerHeartbeat.query.filter_by(worker_id=worker_id).first()
+        if row is None:
+            row = WorkerHeartbeat(
+                worker_id=worker_id,
+                kind=kind,
+                hostname=socket.gethostname(),
+                pid=os.getpid(),
+                processed=max(0, processed),
+                started_at=now,
+                last_seen_at=now,
+            )
+            db.session.add(row)
+        else:
+            row.kind = kind
+            row.processed = max(0, processed)
+            row.last_seen_at = now
+        db.session.commit()
+        return row
+    except Exception:
+        logger.exception('worker 心跳写入失败')
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return None
+
+
+def worker_status(stale_seconds=None):
+    """返回近期 worker 列表与在线数量。"""
+    if stale_seconds is None:
+        stale_seconds = _heartbeat_stale_seconds()
+    now = datetime.utcnow()
+    rows = WorkerHeartbeat.query.order_by(
+        WorkerHeartbeat.last_seen_at.desc()
+    ).limit(20).all()
+    workers = [row.to_dict(stale_seconds=stale_seconds, now=now) for row in rows]
+    online = [worker for worker in workers if worker['online']]
+    return {
+        'workers': workers,
+        'online_count': len(online),
+        'stale_after_seconds': stale_seconds,
+    }
+
+
+def queue_health():
+    """队列积压、worker 在线情况与异常告警。"""
+    now = datetime.utcnow()
+    counts = task_counts()
+    workers = worker_status()
+    backlog_threshold = max(1, int(current_app.config.get('TASK_BACKLOG_THRESHOLD', 50)))
+    stuck_minutes = max(1, int(current_app.config.get('TASK_STUCK_TIMEOUT_MINUTES', 15)))
+    stale_cutoff = now - timedelta(minutes=stuck_minutes)
+
+    oldest_queued = db.session.query(
+        db.func.min(AsyncTask.created_at)
+    ).filter(AsyncTask.status == 'queued').scalar()
+    oldest_queued_seconds = (
+        max(0, int((now - oldest_queued).total_seconds())) if oldest_queued else 0
+    )
+    stale_running = AsyncTask.query.filter(
+        AsyncTask.status == 'running',
+        AsyncTask.started_at.isnot(None),
+        AsyncTask.started_at < stale_cutoff,
+    ).count()
+
+    warnings = []
+    status = 'ok'
+    if counts['queued'] >= backlog_threshold:
+        warnings.append(
+            f"队列积压 {counts['queued']} 个任务，超过阈值 {backlog_threshold}"
+        )
+        status = 'warning'
+    if counts['queued'] and workers['online_count'] == 0:
+        warnings.append(
+            '队列有任务但没有在线 worker，请启动 worker 服务或运行 flask tasks run'
+        )
+        status = 'warning'
+    if stale_running:
+        warnings.append(
+            f'{stale_running} 个任务处理超时，worker 进程可能已中断'
+        )
+        status = 'critical'
+    if counts['running'] and workers['online_count'] == 0:
+        warnings.append('有任务处于处理中但没有在线 worker，可能在等待超时回收')
+        status = 'critical'
+
+    return {
+        'status': status,
+        'warnings': warnings,
+        'counts': counts,
+        'workers': workers['workers'],
+        'online_workers': workers['online_count'],
+        'oldest_queued_seconds': oldest_queued_seconds,
+        'stale_running': stale_running,
+        'backlog_threshold': backlog_threshold,
+        'stuck_timeout_minutes': stuck_minutes,
+        'stale_after_seconds': workers['stale_after_seconds'],
+        'checked_at': now.isoformat(),
+    }
+
+
 def _worker_loop(app):
     interval = float(app.config.get('TASK_WORKER_POLL_INTERVAL', 1.0))
     reconcile_every = 60
+    heartbeat_every = 10
     ticks = 0
+    processed_total = 0
+    last_heartbeat = 0.0
+    worker_id = _worker_identity()
     while not _worker_stop.is_set():
         try:
             with app.app_context():
-                process_pending(limit=5)
+                processed_total += process_pending(limit=5)
                 ticks += 1
+                if time.monotonic() - last_heartbeat >= heartbeat_every:
+                    record_heartbeat(
+                        worker_id, kind='thread', processed=processed_total
+                    )
+                    last_heartbeat = time.monotonic()
                 if ticks >= reconcile_every:
                     ticks = 0
                     reconcile_stuck()

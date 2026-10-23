@@ -73,6 +73,21 @@ class TaskListResource(Resource):
         }, 200
 
 
+class TaskHealthResource(Resource):
+    """队列健康度、worker 心跳与积压告警（管理员）"""
+
+    @jwt_required()
+    def get(self):
+        user = User.query.get(get_jwt_identity())
+        if not user or user.role not in ADMIN_ROLES:
+            return {'code': 403, 'message': '无权限查看队列健康度'}, 403
+        health = task_service.queue_health()
+        health['worker_enabled'] = bool(
+            current_app.config.get('TASK_WORKER_ENABLED', False)
+        )
+        return {'code': 200, 'data': health}, 200
+
+
 class TaskResource(Resource):
     """任务详情"""
 

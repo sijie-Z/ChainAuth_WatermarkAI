@@ -29,6 +29,48 @@ def generate_task_id():
     return str(uuid.uuid4())
 
 
+class WorkerHeartbeat(db.Model):
+    """worker 心跳
+
+    队列有任务却无人处理，是异步架构最常见也最隐蔽的故障。
+    每个进程内线程 / `flask tasks run` 进程定期写入心跳，后台据此
+    区分“worker 在线但空闲”和“没有 worker 在消费队列”。
+    """
+
+    __tablename__ = 'worker_heartbeats'
+
+    id = db.Column(db.Integer, primary_key=True)
+    worker_id = db.Column(db.String(120), nullable=False, unique=True)
+    kind = db.Column(db.String(20), nullable=False, default='thread')
+    hostname = db.Column(db.String(120), nullable=True)
+    pid = db.Column(db.Integer, nullable=True)
+    processed = db.Column(db.Integer, nullable=False, default=0)
+    started_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_seen_at = db.Column(
+        db.DateTime, default=datetime.utcnow, nullable=False, index=True
+    )
+
+    def to_dict(self, stale_seconds=90, now=None):
+        now = now or datetime.utcnow()
+        last_seen = self.last_seen_at
+        age = int((now - last_seen).total_seconds()) if last_seen else None
+        return {
+            'worker_id': self.worker_id,
+            'kind': self.kind,
+            'kind_label': '进程内线程' if self.kind == 'thread' else '独立进程',
+            'hostname': self.hostname,
+            'pid': self.pid,
+            'processed': self.processed or 0,
+            'online': age is not None and age <= stale_seconds,
+            'last_seen_seconds': age,
+            'last_seen_at': last_seen.isoformat() if last_seen else None,
+            'started_at': self.started_at.isoformat() if self.started_at else None,
+        }
+
+    def __repr__(self):
+        return f'<WorkerHeartbeat {self.worker_id}>'
+
+
 class AsyncTask(db.Model):
     """后台任务队列"""
 

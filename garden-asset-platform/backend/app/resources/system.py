@@ -11,7 +11,7 @@ from app.models import NotificationDelivery, User
 from app.services.ai_service import ai_service
 from app.services.blockchain_service import blockchain_service
 from app.services.email_service import delivery_counts, mail_configured
-from app.services.task_service import task_counts
+from app.services.task_service import queue_health, task_counts
 from app.services.webhook_service import (
     config_for_api as webhook_config_for_api,
     get_webhook_config,
@@ -38,6 +38,7 @@ class SystemStatusResource(Resource):
         scheduler_enabled = bool(current_app.config.get('SCHEDULER_ENABLED', False))
         worker_enabled = bool(current_app.config.get('TASK_WORKER_ENABLED', False))
         counts = task_counts()
+        health = queue_health()
         mail_ready = mail_configured()
         deliveries = delivery_counts()
         webhook_config = webhook_config_for_api()
@@ -85,13 +86,24 @@ class SystemStatusResource(Resource):
                 },
                 'tasks': {
                     'enabled': worker_enabled,
-                    'label': '异步 worker 运行中' if worker_enabled else '异步 worker 未启用',
+                    'online_workers': health['online_workers'],
+                    'healthy': health['status'],
+                    'warnings': health['warnings'],
+                    'oldest_queued_seconds': health['oldest_queued_seconds'],
+                    'stale_running': health['stale_running'],
+                    'label': (
+                        f"异步 worker 在线（{health['online_workers']}）"
+                        if health['online_workers'] else
+                        ('异步 worker 配置已启用但无心跳' if worker_enabled
+                         else '异步 worker 未启用')
+                    ),
                     'description': (
                         '水印与存证任务由后台 worker 领取执行'
-                        if worker_enabled else
+                        if health['online_workers'] else
                         '任务会留在队列，需运行 flask tasks run 或开启 TASK_WORKER_ENABLED'
                     ),
-                    'counts': counts
+                    'counts': counts,
+                    'workers': health['workers']
                 },
                 'notifications': {
                     'sse_enabled': bool(

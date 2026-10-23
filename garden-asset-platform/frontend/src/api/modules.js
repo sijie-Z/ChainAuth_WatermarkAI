@@ -141,6 +141,7 @@ export const blockchainApi = {
 export const taskApi = {
   get: (taskId) => api.get(`/tasks/${taskId}`, { silent: true }),
   list: (params) => api.get('/tasks', { params, silent: true }),
+  health: () => api.get('/tasks/health', { silent: true }),
   retry: (taskId) => api.post(`/tasks/${taskId}/retry`),
   cancel: (taskId) => api.post(`/tasks/${taskId}/cancel`)
 }

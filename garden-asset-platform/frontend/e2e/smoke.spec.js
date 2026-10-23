@@ -54,6 +54,21 @@ test.describe('登录与业务流程', () => {
     await expect(page.getByPlaceholder('搜索标题/编码')).toBeVisible()
   })
 
+  test('后台任务队列显示 worker 心跳与队列健康度', async ({ page }) => {
+    await page.goto('/login')
+    await page.getByPlaceholder('请输入用户名').fill('admin')
+    await page.getByPlaceholder('请输入密码').fill('admin123')
+    await page.locator('.login-btn').click()
+
+    await page.waitForURL('**/admin', { timeout: 15000 })
+    await page.goto('/admin/tasks')
+
+    await expect(page.getByRole('heading', { name: '任务队列' })).toBeVisible()
+    await expect(page.getByText('在线 worker')).toBeVisible()
+    await expect(page.getByText('worker 心跳')).toBeVisible()
+    await expect(page.getByText('队列健康度：异常')).toHaveCount(0)
+  })
+
   test('普通用户登录后可以浏览已发布资产', async ({ page }) => {
     await page.goto('/login')
     await page.getByPlaceholder('请输入用户名').fill('user1')
