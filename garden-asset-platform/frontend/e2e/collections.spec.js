@@ -26,7 +26,9 @@ test.describe('用户合集', () => {
     await expect(page.getByRole('heading', { name: '我的合集' })).toBeVisible()
     const card = page.locator('.collection-card').filter({ hasText: collection.name })
     await expect(card).toBeVisible()
-    await card.click()
+    // 点击标题，避免落在卡片右侧的操作按钮上
+    await card.locator('.collection-name').click()
+    await expect(page).toHaveURL(new RegExp(`/collections/${collection.id}$`))
 
     await expect(page.locator('.collection-title')).toHaveText(collection.name)
     await expect(page.getByText('合集里还没有资产')).toBeVisible()

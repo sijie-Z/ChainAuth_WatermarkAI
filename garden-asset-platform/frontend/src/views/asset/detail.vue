@@ -607,15 +607,26 @@
                       <h2 class="related-title">溯源证据链</h2>
                       <p class="related-subtitle">上传登记、水印、链上存证与业务台账按时间排列</p>
                     </div>
-                    <el-button
-                      v-if="canManage && asset.status === 'published'"
-                      type="primary"
-                      plain
-                      size="small"
-                      @click="openShareDialog"
-                    >
-                      分享核验
-                    </el-button>
+                    <div class="evidence-actions">
+                      <el-button
+                        v-if="canManage && asset.status !== 'deleted'"
+                        plain
+                        size="small"
+                        :loading="evidenceExporting"
+                        @click="exportEvidencePackage"
+                      >
+                        导出证据包
+                      </el-button>
+                      <el-button
+                        v-if="canManage && asset.status === 'published'"
+                        type="primary"
+                        plain
+                        size="small"
+                        @click="openShareDialog"
+                      >
+                        分享核验
+                      </el-button>
+                    </div>
                   </header>
                   <el-skeleton v-if="evidenceLoading" animated :rows="4" />
                   <div v-else-if="evidenceError" class="evidence-error">
@@ -821,6 +832,7 @@ const activeDetailTab = ref('evidence')
 const evidence = ref({ items: [], summary: null })
 const evidenceLoading = ref(false)
 const evidenceError = ref(false)
+const evidenceExporting = ref(false)
 const licenseStatusError = ref(false)
 const shareVisible = ref(false)
 const shareCreating = ref(false)
@@ -1048,6 +1060,55 @@ async function loadEvidence() {
     evidenceError.value = true
   } finally {
     evidenceLoading.value = false
+  }
+}
+
+async function exportEvidencePackage() {
+  if (!asset.value.id || evidenceExporting.value) return
+
+  try {
+    await ElMessageBox.confirm(
+      '将打包当前版本原文件与水印副本（超过服务端大小限制时只含清单与证书）、证据链、各版本证书与 SHA-256 校验清单。历史版本只保留记录，不包含文件。',
+      '导出证据包',
+      { type: 'info', confirmButtonText: '生成并下载', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+
+  evidenceExporting.value = true
+  try {
+    const response = await assetApi.exportEvidencePackage(asset.value.id)
+    const omitted = response.headers?.['x-evidence-package-omitted'] === '1'
+    const url = URL.createObjectURL(response.data)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${asset.value.asset_code}-evidence.zip`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    ElMessage.success(
+      omitted
+        ? '证据包已生成：文件超出大小限制，仅包含清单、证书与证据链'
+        : '证据包已生成并开始下载'
+    )
+  } catch (error) {
+    let message = '证据包导出失败'
+    const data = error.response?.data
+    if (data instanceof Blob) {
+      try {
+        const parsed = JSON.parse(await data.text())
+        message = parsed.message || message
+      } catch {
+        // 保留默认提示
+      }
+    } else if (data?.message) {
+      message = data.message
+    }
+    ElMessage.error(message)
+  } finally {
+    evidenceExporting.value = false
   }
 }
 
@@ -2337,6 +2398,15 @@ watch(() => route.query.tab, tab => {
     padding: 16px;
   }
 
+  .related-head {
+    flex-wrap: wrap;
+  }
+
+  .evidence-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
   .version-section {
     padding: 16px;
   }
@@ -2527,6 +2597,13 @@ watch(() => route.query.tab, tab => {
     font-size: 13px;
     color: $primary-color;
   }
+}
+
+.evidence-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .related-grid {

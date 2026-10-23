@@ -110,6 +110,11 @@ class Config:
         os.environ.get('WATERMARK_BENCHMARK_MAX_BYTES', str(10 * 1024 * 1024))
     )
 
+    # 证据包默认最多打包 200MB 二进制文件；超出时只导出清单与证书
+    EVIDENCE_PACKAGE_MAX_BYTES = int(
+        os.environ.get('EVIDENCE_PACKAGE_MAX_BYTES', str(200 * 1024 * 1024))
+    )
+
     # 文件上传大小限制 (500MB)
     MAX_CONTENT_LENGTH = int(os.environ.get('MAX_CONTENT_LENGTH', str(500 * 1024 * 1024)))
 

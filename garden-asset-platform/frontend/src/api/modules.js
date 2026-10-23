@@ -45,6 +45,10 @@ export const assetApi = {
   removeFavorite: (id) => api.delete(`/assets/${id}/favorite`),
   getFavorites: (params) => api.get('/favorites', { params }),
   getEvidence: (id) => api.get(`/assets/${id}/evidence`),
+  exportEvidencePackage: (id, params) => api.get(
+    `/assets/${id}/evidence-package`,
+    { params, responseType: 'blob', timeout: 120000 }
+  ),
   getComments: (id, params) => api.get(`/assets/${id}/comments`, { params }),
   createComment: (id, data) => api.post(`/assets/${id}/comments`, data),
   updateComment: (id, commentId, data) => api.put(`/assets/${id}/comments/${commentId}`, data),

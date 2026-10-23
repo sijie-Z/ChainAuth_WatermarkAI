@@ -263,12 +263,18 @@ def register_api_resources(app):
     )
 
     # 证据链与公开分享
-    from app.resources.evidence import AssetEvidenceResource
+    from app.resources.evidence import (
+        AssetEvidenceResource, AssetEvidencePackageResource
+    )
     from app.resources.share import (
         AssetShareListResource, ShareResource,
         PublicShareResource, PublicShareDownloadResource
     )
     api.add_resource(AssetEvidenceResource, '/assets/<string:asset_id>/evidence')
+    api.add_resource(
+        AssetEvidencePackageResource,
+        '/assets/<string:asset_id>/evidence-package'
+    )
     api.add_resource(AssetShareListResource, '/assets/<string:asset_id>/shares')
     api.add_resource(PublicShareResource, '/shares/<string:token>')
     api.add_resource(PublicShareDownloadResource, '/shares/<string:token>/download')
