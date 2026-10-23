@@ -104,6 +104,57 @@
           </el-skeleton>
           <div v-else class="chart-container" ref="watermarkChartRef"></div>
         </div>
+
+        <!-- 最近上传资产 -->
+        <div class="table-card">
+          <div class="card-header">
+            <h3 class="card-title">最近上传资产</h3>
+            <el-button type="primary" link @click="$router.push('/admin/assets')">查看全部 →</el-button>
+          </div>
+          <el-skeleton v-if="loading" animated :rows="4" style="padding: 16px" />
+          <el-table v-else :data="recentAssets" style="width: 100%" class="modern-table">
+            <el-table-column label="资产信息" min-width="220">
+              <template #default="{ row }">
+                <div class="asset-info">
+                  <div class="asset-thumb">
+                    <img :src="getThumbnail(row)" alt="" loading="lazy" @error="onThumbnailError($event, row)" />
+                  </div>
+                  <div class="asset-meta">
+                    <div class="asset-code">{{ row.asset_code }}</div>
+                    <div class="asset-title">{{ row.title }}</div>
+                  </div>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="type" label="类型" width="76">
+              <template #default="{ row }">
+                <el-tag :type="getTypeTag(row.type)" size="small" effect="light">
+                  {{ getTypeName(row.type) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="保护状态" width="132">
+              <template #default="{ row }">
+                <div class="protection-cell">
+                  <span class="protection-item" :title="`水印：${getWatermarkStatus(row.watermark_status)}`">
+                    <span class="status-dot" :class="row.watermark_status"></span>水印
+                  </span>
+                  <span class="protection-item" :title="`存证：${getChainStatus(row.chain_status)}`">
+                    <span class="status-dot" :class="row.chain_status"></span>存证
+                  </span>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="上传时间" width="112">
+              <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="72">
+              <template #default="{ row }">
+                <el-button type="primary" link size="small" @click="viewAsset(row)">查看</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
       </div>
 
       <!-- 右侧：列表 -->
@@ -191,61 +242,6 @@
             </div>
           </div>
         </div>
-      </div>
-    </div>
-
-    <!-- 底部表格 -->
-    <div class="bottom-section">
-      <div class="table-card">
-        <div class="card-header">
-          <h3 class="card-title">最近上传资产</h3>
-          <el-button type="primary" link @click="$router.push('/admin/assets')">查看全部 →</el-button>
-        </div>
-        <el-skeleton v-if="loading" animated :rows="4" style="padding: 16px" />
-        <el-table v-else :data="recentAssets" style="width: 100%" class="modern-table">
-          <el-table-column label="资产信息" min-width="280">
-            <template #default="{ row }">
-              <div class="asset-info">
-                <div class="asset-thumb">
-                  <img :src="getThumbnail(row)" alt="" loading="lazy" @error="onThumbnailError($event, row)" />
-                </div>
-                <div class="asset-meta">
-                  <div class="asset-code">{{ row.asset_code }}</div>
-                  <div class="asset-title">{{ row.title }}</div>
-                </div>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column prop="type" label="类型" width="100">
-            <template #default="{ row }">
-              <el-tag :type="getTypeTag(row.type)" size="small" effect="light">
-                {{ getTypeName(row.type) }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="水印状态" width="120">
-            <template #default="{ row }">
-              <div class="status-cell">
-                <span class="status-dot" :class="row.watermark_status"></span>
-                <span>{{ getWatermarkStatus(row.watermark_status) }}</span>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column label="存证状态" width="120">
-            <template #default="{ row }">
-              <div class="status-cell">
-                <span class="status-dot" :class="row.chain_status"></span>
-                <span>{{ getChainStatus(row.chain_status) }}</span>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column prop="created_at" label="上传时间" width="160" />
-          <el-table-column label="操作" width="100">
-            <template #default="{ row }">
-              <el-button type="primary" link size="small" @click="viewAsset(row)">查看</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
       </div>
     </div>
   </div>
@@ -475,12 +471,30 @@ async function loadDashboardData() {
 
     // 最近活动
     if (stats?.recent_activities?.length) {
-      const actionIcons = { upload: Picture, embed: Stamp, extract: Stamp, register: Link, approve: Document, login: User }
-      const actionColors = { upload: '#2f6b5a', embed: '#4c6e8a', extract: '#4c6e8a', register: '#6d5b7a', approve: '#b07a2a', login: '#5b675f' }
+      const actionIcons = {
+        upload: Picture, embed: Stamp, extract: Stamp, register: Link,
+        approve: Document, login: User, share_create: Link,
+        share_revoke: Link, share_download: Download, download: Download,
+        upload_version: Upload, restore_version: Timer,
+        collection_create: Reading, collection_delete: Reading,
+        infringement_report: Warning, infringement_start: Warning,
+        infringement_confirm: Warning
+      }
+      const actionColors = {
+        upload: '#2f6b5a', embed: '#4c6e8a', extract: '#4c6e8a',
+        register: '#6d5b7a', approve: '#b07a2a', login: '#5b675f',
+        share_create: '#2f6b5a', share_revoke: '#8a6b3f',
+        share_download: '#4c6e8a', download: '#4c6e8a',
+        upload_version: '#2f6b5a', restore_version: '#8a6b3f',
+        collection_create: '#6d5b7a', collection_delete: '#8a6b3f',
+        infringement_report: '#a6402f', infringement_start: '#b07a2a',
+        infringement_confirm: '#a6402f'
+      }
       const actionNames = {
         upload: '上传资产',
         embed: '嵌入水印',
         watermark_embed: '嵌入水印',
+        watermark_extract: '提取水印',
         extract: '提取水印',
         register: '上链存证',
         approve: '审批授权',
@@ -488,7 +502,18 @@ async function loadDashboardData() {
         license_apply: '提交授权申请',
         update: '更新资产',
         delete: '删除资产',
-        login: '登录'
+        login: '登录',
+        share_create: '创建分享链接',
+        share_revoke: '撤销分享链接',
+        share_download: '分享下载',
+        download: '下载资产',
+        upload_version: '上传新版本',
+        restore_version: '恢复历史版本',
+        collection_create: '新建合集',
+        collection_delete: '删除合集',
+        infringement_report: '提交侵权线索',
+        infringement_start: '受理侵权线索',
+        infringement_confirm: '确认侵权线索'
       }
       recentActivities.value = stats.recent_activities.slice(0, 8).map((a, i) => ({
         id: a.id || i,
@@ -1274,68 +1299,80 @@ onUnmounted(() => {
   }
 }
 
-// 底部表格
-.bottom-section {
-  .table-card {
+// 最近上传表格
+.table-card {
+  overflow: hidden;
+}
+
+.asset-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  .asset-thumb {
+    width: 48px;
+    height: 48px;
+    border-radius: $radius-md;
     overflow: hidden;
+    flex-shrink: 0;
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
   }
 
-  .asset-info {
-    display: flex;
+  .asset-meta {
+    min-width: 0;
+  }
+
+  .asset-code {
+    font-size: 12px;
+    color: $text-secondary;
+    font-family: $font-mono;
+  }
+
+  .asset-title {
+    font-size: 14px;
+    font-weight: $font-weight-medium;
+    color: $text-primary;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+.status-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.protection-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: $text-secondary;
+
+  .protection-item {
+    display: inline-flex;
     align-items: center;
-    gap: 12px;
-
-    .asset-thumb {
-      width: 48px;
-      height: 48px;
-      border-radius: $radius-md;
-      overflow: hidden;
-      flex-shrink: 0;
-
-      img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-      }
-    }
-
-    .asset-meta {
-      min-width: 0;
-    }
-
-    .asset-code {
-      font-size: 12px;
-      color: $text-secondary;
-      font-family: $font-mono;
-    }
-
-    .asset-title {
-      font-size: 14px;
-      font-weight: $font-weight-medium;
-      color: $text-primary;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
+    gap: 4px;
   }
+}
 
-  .status-cell {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 13px;
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
 
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-
-      &.none { background: $text-placeholder; }
-      &.pending { background: $warning-color; }
-      &.embedded, &.confirmed, &.verified { background: $success-color; }
-      &.failed { background: $error-color; }
-    }
-  }
+  &.none { background: $text-placeholder; }
+  &.pending { background: $warning-color; }
+  &.embedded, &.confirmed, &.verified { background: $success-color; }
+  &.failed { background: $error-color; }
 }
 
 // 响应式

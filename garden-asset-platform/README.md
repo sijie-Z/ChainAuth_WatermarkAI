@@ -6,7 +6,7 @@
 
 本系统面向苏州园林数字资产（图片、3D模型、矢量图纸等）的版权保护与安全分发需求，构建了**水印嵌入 → 存证记录 → 可选 AI 辅助 → 溯源追踪**的保护链路。默认使用本地模拟链与关闭 AI；正式接入 FISCO BCOS、模型与 OCR 需按部署文档额外配置。
 
-> 哪些能力已真实可用、哪些仍是演示，以及下一阶段的重构计划，见 [能力完整性审计](docs/COMPLETENESS-AUDIT.md)。
+> 哪些能力已真实可用、哪些仍是演示，以及下一阶段的重构计划，见 [能力完整性审计](docs/COMPLETENESS-AUDIT.md)。现场演示与验收流程见 [演示脚本](docs/DEMO-SCRIPT.md)。
 
 ### 核心功能
 
@@ -43,8 +43,8 @@
 
 | 层级 | 技术 |
 |------|------|
-| 前端 | Vue 3.4, Vite 5, Pinia, Element Plus, ECharts, three.js |
-| 后端 | Flask 3.0, Flask-RESTful, SQLAlchemy, Flask-JWT-Extended |
+| 前端 | Vue 3.5, Vite 8, Pinia, Element Plus, ECharts 6, three.js |
+| 后端 | Flask 3.1, Flask-RESTful, SQLAlchemy 2, Flask-JWT-Extended |
 | 存储 | PostgreSQL, Redis, Milvus；MinIO 为可选服务（当前默认本地磁盘） |
 | 区块链 | FISCO BCOS 3.x（可选，默认本地模拟存证） |
 | AI | CLIP / 智谱 GLM（可选，需自行安装与配置） |
@@ -122,7 +122,7 @@ FLASK_APP=run.py flask db upgrade
 ### 运行测试
 
 ```bash
-# 后端测试（321个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/侵权线索/批量巡检/备份恢复）
+# 后端测试（331个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/侵权线索/批量巡检/备份恢复/存储巡检）
 cd backend && python -m pytest tests/ -v
 
 # Windows 内存受限时：逐文件隔离子进程运行（推荐）
@@ -163,7 +163,7 @@ garden-asset-platform/
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
 │   ├── migrations/                # Alembic 迁移（baseline + versions）
-│   ├── tests/                     # pytest测试（321个用例）
+│   ├── tests/                     # pytest测试（331个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端

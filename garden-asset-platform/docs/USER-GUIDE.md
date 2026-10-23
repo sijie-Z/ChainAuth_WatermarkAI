@@ -184,7 +184,7 @@ python scripts/seed_demo_assets.py --reset
 ## 7. 测试
 
 ```bash
-# 后端 321 个用例
+# 后端 331 个用例
 cd backend && python -m pytest tests/ -q
 
 # Windows 内存不足时：每个测试文件独立进程运行
@@ -210,6 +210,7 @@ cd frontend && npx playwright test
 ## 8. 相关文档
 
 - [README](../README.md)：架构、API 与部署
+- [演示脚本](DEMO-SCRIPT.md)：现场演示顺序、检查项与边界说明
 - [能力完整性审计](COMPLETENESS-AUDIT.md)：真实能力、演示边界与下一阶段计划
 - [DEVELOPMENT](../DEVELOPMENT.md)：模块说明与开发进度
 - [GIT-FLOW](GIT-FLOW.md)：分支与发布流程
