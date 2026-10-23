@@ -503,6 +503,9 @@
             <p v-if="activeLicense.max_downloads">
               剩余下载次数：{{ activeLicense.download_remaining }} / {{ activeLicense.max_downloads }}
             </p>
+            <p class="download-fingerprint-note">
+              本次下载会生成带授权编号与账号的可见指纹副本，原盲水印仍保留。
+            </p>
           </div>
           <template #footer>
             <el-button @click="downloadDialogVisible = false">取消</el-button>
@@ -1343,7 +1346,10 @@ async function performDownload(params) {
     link.click()
     link.remove()
     URL.revokeObjectURL(url)
-    ElMessage.success('下载已开始')
+    const fingerprint = response.headers?.['x-download-fingerprint']
+    ElMessage.success(
+      fingerprint ? `下载已开始，指纹 ${fingerprint}` : '下载已开始'
+    )
     loadExtras()
   } catch (error) {
     let message = '下载失败'
@@ -2017,6 +2023,11 @@ watch(() => route.query.tab, tab => {
 
   p {
     margin: 0;
+  }
+
+  .download-fingerprint-note {
+    margin-top: 6px;
+    color: $primary-dark;
   }
 }
 

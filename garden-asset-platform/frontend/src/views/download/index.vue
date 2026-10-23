@@ -154,6 +154,14 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="下载指纹" min-width="190">
+          <template #default="{ row }">
+            <span v-if="row.fingerprint" class="mono fingerprint-code">
+              {{ row.fingerprint.code }}
+            </span>
+            <span v-else class="muted">—</span>
+          </template>
+        </el-table-column>
         <el-table-column v-if="scope === 'all'" label="下载用户" width="140">
           <template #default="{ row }">
             {{ row.user?.nickname || row.user?.username || (row.channel === 'share' ? '匿名分享' : '—') }}
@@ -217,6 +225,9 @@
               超范围拒绝
             </el-tag>
           </header>
+          <div v-if="row.fingerprint" class="mobile-fingerprint mono">
+            指纹 {{ row.fingerprint.code }}
+          </div>
           <router-link v-if="row.asset" :to="`/assets/${row.asset.id}`" class="mobile-asset">
             {{ row.asset.title }}
             <small class="mono">{{ row.asset.asset_code }}</small>
@@ -496,6 +507,19 @@ onMounted(loadRecords)
     height: 100%;
     object-fit: cover;
   }
+}
+
+.fingerprint-code {
+  font-size: 11px;
+  color: $primary-dark;
+  word-break: break-all;
+}
+
+.mobile-fingerprint {
+  margin-top: 6px;
+  font-size: 10px;
+  color: $primary-dark;
+  word-break: break-all;
 }
 
 .asset-text {

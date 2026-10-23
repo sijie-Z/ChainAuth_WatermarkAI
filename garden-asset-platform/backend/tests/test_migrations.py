@@ -15,7 +15,8 @@ EXPECTED_TABLES = {
     'license_contracts', 'certificates', 'blockchain_transactions',
     'operation_logs', 'system_configs', 'notification_reads',
     'notification_events', 'notification_preferences', 'notification_deliveries',
-    'async_tasks', 'infringement_reports', 'alembic_version',
+    'async_tasks', 'infringement_reports', 'download_fingerprints',
+    'alembic_version',
 }
 
 
@@ -83,6 +84,9 @@ def test_flask_db_upgrade_creates_full_schema(tmp_path):
         download_columns = {
             row[1] for row in connection.execute('PRAGMA table_info(download_records)')
         }
-        assert {'status', 'denial_reason', 'usage_purpose', 'territory'} <= download_columns
+        assert {
+            'status', 'denial_reason', 'usage_purpose', 'territory',
+            'fingerprint_id'
+        } <= download_columns
     finally:
         connection.close()

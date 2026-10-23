@@ -718,15 +718,33 @@ class AssetDownloadResource(Resource):
             return {'code': 403, 'message': denial_reason}, 403
 
         # 先确认文件存在，避免“下载失败但下载量已经增加”
-        file_path = os.path.abspath(asset.watermarked_path or asset.storage_path or '')
+        fingerprint = None
+        if selected_license and asset.asset_type == 'image':
+            try:
+                from app.services.fingerprint_service import (
+                    get_or_create_fingerprint
+                )
+                fingerprint, _ = get_or_create_fingerprint(
+                    asset, selected_license, user
+                )
+            except Exception:
+                current_app.logger.warning(
+                    '生成下载指纹失败，回退到普通水印副本', exc_info=True
+                )
+
+        file_path = (
+            fingerprint.file_path if fingerprint else
+            os.path.abspath(asset.watermarked_path or asset.storage_path or '')
+        )
         if not file_path or not os.path.exists(file_path):
             return {'code': 404, 'message': '文件不存在'}, 404
 
-        # 记录下载（关联本次使用的授权，便于后续审计）
+        # 记录下载（关联本次使用的授权与指纹副本，便于后续审计）
         record = DownloadRecord(
             asset_id=asset_id,
             user_id=user_id,
             license_id=selected_license.id if selected_license else None,
+            fingerprint_id=fingerprint.id if fingerprint else None,
             status='success',
             usage_purpose=purpose,
             territory=territory,
@@ -758,11 +776,16 @@ class AssetDownloadResource(Resource):
         download_ext = actual_ext or (asset.file_format or '').lower()
         download_name = f"{asset.asset_code}.{download_ext}" if download_ext else asset.asset_code
 
-        return flask_send_file(
+        response = flask_send_file(
             file_path,
             as_attachment=True,
             download_name=download_name
         )
+        if fingerprint:
+            response.headers['X-Download-Fingerprint'] = (
+                fingerprint.fingerprint_code
+            )
+        return response
 
 
 class FavoriteListResource(Resource):

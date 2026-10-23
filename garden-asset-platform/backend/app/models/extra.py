@@ -38,6 +38,9 @@ class DownloadRecord(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     asset_id = db.Column(db.String(36), db.ForeignKey('assets.id'), nullable=False)
     license_id = db.Column(db.Integer, db.ForeignKey('licenses.id'), nullable=True)
+    fingerprint_id = db.Column(
+        db.Integer, db.ForeignKey('download_fingerprints.id'), nullable=True
+    )
     ip_address = db.Column(db.String(50), nullable=True)
     user_agent = db.Column(db.String(500), nullable=True)
 
@@ -54,6 +57,9 @@ class DownloadRecord(db.Model):
     license = db.relationship(
         'License', backref=db.backref('download_records', lazy='dynamic')
     )
+    fingerprint = db.relationship(
+        'DownloadFingerprint', backref=db.backref('download_records', lazy='dynamic')
+    )
 
     def to_dict(self):
         return {
@@ -61,6 +67,10 @@ class DownloadRecord(db.Model):
             'user_id': self.user_id,
             'asset_id': self.asset_id,
             'license_id': self.license_id,
+            'fingerprint_id': self.fingerprint_id,
+            'fingerprint_code': (
+                self.fingerprint.fingerprint_code if self.fingerprint else None
+            ),
             'status': self.status or 'success',
             'denial_reason': self.denial_reason,
             'usage_purpose': self.usage_purpose,

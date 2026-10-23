@@ -8,7 +8,8 @@ from sqlalchemy import Integer, func, literal, or_, select
 
 from app.extensions import db
 from app.models import (
-    Asset, AssetShare, DownloadRecord, License, ShareDownload, User
+    Asset, AssetShare, DownloadFingerprint, DownloadRecord, License,
+    ShareDownload, User
 )
 
 ADMIN_ROLES = ('admin', 'asset_admin', 'license_admin', 'adm1', 'adm2')
@@ -86,7 +87,16 @@ def _serialize(record, include_user=False):
         'status': record.status or 'success',
         'denial_reason': record.denial_reason,
         'usage_purpose': record.usage_purpose,
-        'territory': record.territory
+        'territory': record.territory,
+        'fingerprint': (
+            {
+                'code': record.fingerprint.fingerprint_code,
+                'created_at': (
+                    record.fingerprint.created_at.isoformat()
+                    if record.fingerprint.created_at else None
+                ),
+            } if record.fingerprint else None
+        )
     }
     if include_user:
         item['user'] = {
@@ -189,6 +199,7 @@ class DownloadLedgerResource(Resource):
             DownloadRecord.asset_id.label('asset_id'),
             DownloadRecord.user_id.label('user_id'),
             DownloadRecord.license_id.label('license_id'),
+            DownloadRecord.fingerprint_id.label('fingerprint_id'),
             literal(None).cast(Integer).label('share_id'),
             DownloadRecord.status.label('status'),
             DownloadRecord.denial_reason.label('denial_reason'),
@@ -210,6 +221,7 @@ class DownloadLedgerResource(Resource):
             ShareDownload.asset_id.label('asset_id'),
             literal(None).cast(Integer).label('user_id'),
             literal(None).cast(Integer).label('license_id'),
+            literal(None).cast(Integer).label('fingerprint_id'),
             ShareDownload.share_id.label('share_id'),
             literal('success').label('status'),
             literal(None).cast(db.String(300)).label('denial_reason'),
@@ -291,6 +303,14 @@ class DownloadLedgerResource(Resource):
                 })
             ).all()
         } if rows else {}
+        fingerprint_map = {
+            item.id: item for item in DownloadFingerprint.query.filter(
+                DownloadFingerprint.id.in_({
+                    row.fingerprint_id for row in rows
+                    if row.fingerprint_id is not None
+                })
+            ).all()
+        } if rows else {}
 
         items = []
         for row in rows:
@@ -298,6 +318,7 @@ class DownloadLedgerResource(Resource):
             account = user_map.get(row.user_id)
             license_row = license_map.get(row.license_id)
             share = share_map.get(row.share_id)
+            fingerprint = fingerprint_map.get(row.fingerprint_id)
             items.append({
                 'id': f'{row.channel}-{row.record_id}',
                 'record_id': row.record_id,
@@ -332,7 +353,11 @@ class DownloadLedgerResource(Resource):
                 'status': row.status or 'success',
                 'denial_reason': row.denial_reason,
                 'usage_purpose': row.usage_purpose,
-                'territory': row.territory
+                'territory': row.territory,
+                'fingerprint': {
+                    'id': fingerprint.id,
+                    'code': fingerprint.fingerprint_code
+                } if fingerprint else None
             })
 
         license_total = license_query.count() if include_license else 0

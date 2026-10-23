@@ -446,7 +446,10 @@ async function downloadAsset(row) {
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
-    ElMessage.success('下载开始')
+    const fingerprint = response.headers?.['x-download-fingerprint']
+    ElMessage.success(
+      fingerprint ? `下载开始，指纹 ${fingerprint}` : '下载开始'
+    )
   } catch (error) {
     let message = '下载失败，请确认授权仍然有效'
     const data = error.response?.data
