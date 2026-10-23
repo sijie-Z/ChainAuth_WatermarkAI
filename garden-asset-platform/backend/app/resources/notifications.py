@@ -15,8 +15,9 @@ from flask_restful import Resource
 
 from app.extensions import db
 from app.models import (
-    Asset, AssetComment, InfringementReport, License, LicenseApplication,
-    NotificationEvent, NotificationPreference, NotificationRead, User
+    Asset, AssetComment, AssetVersion, InfringementReport, License,
+    LicenseApplication, NotificationEvent, NotificationPreference,
+    NotificationRead, User
 )
 from app.services.email_service import mail_configured, send_test_email
 from app.utils.middleware import rate_limit
@@ -28,6 +29,30 @@ DEFAULT_EMAIL_GROUPS = ['asset', 'license', 'task', 'infringement']
 
 _sse_connections = {}
 _sse_lock = threading.Lock()
+
+
+def _outdated_license_count(now):
+    licenses = License.query.filter(
+        License.status == 'active',
+        License.version_id.isnot(None),
+        or_(License.end_time.is_(None), License.end_time > now),
+    ).all()
+    if not licenses:
+        return 0
+    asset_ids = {row.asset_id for row in licenses}
+    versions = AssetVersion.query.filter(
+        AssetVersion.asset_id.in_(list(asset_ids))
+    ).order_by(
+        AssetVersion.asset_id.asc(), AssetVersion.version_no.desc()
+    ).all()
+    latest = {}
+    for version in versions:
+        latest.setdefault(version.asset_id, version)
+    return sum(
+        1 for row in licenses
+        if not latest.get(row.asset_id)
+        or latest[row.asset_id].id != row.version_id
+    )
 
 
 def _build_items(user):
@@ -93,6 +118,19 @@ def _build_items(user):
                 'description': '核实疑似盗用并确认或驳回',
                 'link': '/admin/infringements',
                 'count': pending_reports,
+                'time': None
+            })
+
+        outdated_licenses = _outdated_license_count(now)
+        if outdated_licenses:
+            items.append({
+                'id': f'outdated-licenses-{outdated_licenses}',
+                'key': f'outdated-licenses-{outdated_licenses}',
+                'type': 'warning',
+                'title': f'{outdated_licenses} 条授权对应历史版本',
+                'description': '资产已更新，相关授权需要重新申请或处理',
+                'link': '/admin/license/usage?version_outdated=1',
+                'count': outdated_licenses,
                 'time': None
             })
 

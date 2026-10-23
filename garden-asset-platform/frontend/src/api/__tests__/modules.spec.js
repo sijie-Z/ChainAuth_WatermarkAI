@@ -44,6 +44,14 @@ describe('api modules', () => {
     expect(api.get).toHaveBeenCalledWith('/license/my-applications', { params: { page: 1 } })
   })
 
+  it('licenseApi.usageReport fetches admin usage metrics', () => {
+    licenseApi.usageReport({ days: 30, version_outdated: '1' })
+
+    expect(api.get).toHaveBeenCalledWith('/license/usage-report', {
+      params: { days: 30, version_outdated: '1' }
+    })
+  })
+
   it('userApi.create posts a new user payload', () => {
     const payload = {
       username: 'new-user',

@@ -118,11 +118,17 @@ FLASK_APP=run.py flask db upgrade
 ### 运行测试
 
 ```bash
-# 后端测试（300个用例，覆盖API/模型/安全/迁移/异步任务/版本证书/通知渠道/授权范围/侵权线索/批量巡检）
+# 后端测试（302个用例，覆盖API/模型/安全/迁移/异步任务/版本证书/通知渠道/授权范围/侵权线索/批量巡检）
 cd backend && python -m pytest tests/ -v
 
 # Windows 内存受限时：逐文件隔离子进程运行（推荐）
 cd backend && python scripts/run_tests.py
+
+# 前端单元测试（48 个用例）
+cd frontend && npm run test:ci
+
+# Windows 内存受限时：逐文件运行前端测试
+cd frontend && npm run test:ci:safe
 
 # 前端生产构建
 cd frontend && npm run build
@@ -153,7 +159,7 @@ garden-asset-platform/
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
 │   ├── migrations/                # Alembic 迁移（baseline + versions）
-│   ├── tests/                     # pytest测试（300个用例）
+│   ├── tests/                     # pytest测试（302个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -304,6 +310,7 @@ garden-asset-platform/
 | POST | `/api/license/applications/:id/cancel` | 撤回申请 |
 | POST | `/api/license/:id/revoke` | 撤销授权（授权方/资产所有者/授权管理员） |
 | POST | `/api/license/:id/renew` | 授权续期 |
+| GET | `/api/license/usage-report` | 授权使用报表（状态、配额、拒绝原因、版本过期、趋势） |
 | GET | `/api/license/:id/contract` | 查看授权合同 |
 
 ## 安全特性

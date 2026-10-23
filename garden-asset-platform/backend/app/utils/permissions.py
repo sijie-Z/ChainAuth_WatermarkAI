@@ -44,6 +44,7 @@ API_PERMISSIONS = {
         '/api/users/<id>',
         '/api/watermark/logs',
         '/api/blockchain/history',
+        '/api/license/usage-report',
         '/api/infringements',
         '/api/infringements/<id>',
         '/api/infringements/<id>/review',

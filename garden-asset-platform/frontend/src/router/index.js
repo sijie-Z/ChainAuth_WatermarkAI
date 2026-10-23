@@ -184,6 +184,12 @@ const routes = [
         meta: { title: '已审批', roles: ADMIN_ROLES }
       },
       {
+        path: 'license/usage',
+        name: 'AdminLicenseUsage',
+        component: page(() => import('@/views/admin/license-usage.vue'), false),
+        meta: { title: '使用报表', roles: ADMIN_ROLES }
+      },
+      {
         path: 'blockchain',
         name: 'AdminBlockchain',
         component: page(() => import('@/views/admin/blockchain.vue'), false),

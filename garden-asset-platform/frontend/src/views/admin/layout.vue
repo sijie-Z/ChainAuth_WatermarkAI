@@ -270,7 +270,8 @@ const menuItems = shallowRef([
     roles: LICENSE_ROLES,
     children: [
       { path: '/admin/license/pending', label: '待审批' },
-      { path: '/admin/license/approved', label: '已审批' }
+      { path: '/admin/license/approved', label: '已审批' },
+      { path: '/admin/license/usage', label: '使用报表' }
     ]
   },
   { path: '/admin/gardens', label: '园林档案', icon: Place, roles: WATERMARK_ROLES },

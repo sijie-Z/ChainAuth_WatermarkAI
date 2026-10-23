@@ -258,7 +258,7 @@ import { useUserStore } from '@/stores/user'
 import { useRouter } from 'vue-router'
 import { assetApi, licenseApi, systemApi } from '@/api/modules'
 import {
-  Picture, Stamp, Link, Document, Upload, Clock,
+  Picture, Stamp, Link, Document, Upload, Clock, DataLine,
   ArrowUp, ArrowDown, User, Reading,
   CircleCheck, Timer, Download, Place, Warning
 } from '@element-plus/icons-vue'
@@ -317,6 +317,7 @@ const quickActionDefs = [
   { label: '水印处理', icon: Stamp, path: '/admin/watermark', gradient: 'linear-gradient(135deg, #4c6e8a, #34506a)', roles: ['admin', 'asset_admin'] },
   { label: '存证管理', icon: Link, path: '/admin/blockchain', gradient: 'linear-gradient(135deg, #6d5b7a, #584765)', roles: ['admin', 'asset_admin'] },
   { label: '授权审批', icon: Document, path: '/admin/license/pending', gradient: 'linear-gradient(135deg, #b07a2a, #8f6322)', roles: LICENSE_ROLES },
+  { label: '使用报表', icon: DataLine, path: '/admin/license/usage', gradient: 'linear-gradient(135deg, #2f6b5a, #1c5145)', roles: LICENSE_ROLES },
   { label: '侵权线索', icon: Warning, path: '/admin/infringements', gradient: 'linear-gradient(135deg, #a6402f, #7c2d21)', roles: LICENSE_ROLES },
   { label: '园林档案', icon: Place, path: '/admin/gardens', gradient: 'linear-gradient(135deg, #4a7c59, #365c42)', roles: ['admin', 'asset_admin'] },
   { label: '下载台账', icon: Download, path: '/admin/downloads', gradient: 'linear-gradient(135deg, #5b7f8a, #45616a)', roles: LICENSE_ROLES },

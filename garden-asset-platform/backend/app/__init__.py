@@ -301,6 +301,10 @@ def register_api_resources(app):
     api.add_resource(MyLicenseResource, '/license/my')
     api.add_resource(MyApplicationsResource, '/license/my-applications')
 
+    # 授权使用报表
+    from app.resources.license_usage import LicenseUsageReportResource
+    api.add_resource(LicenseUsageReportResource, '/license/usage-report')
+
     # 站内待办提醒与通知渠道
     from app.resources.notifications import (
         NotificationsResource, NotificationReadResource,

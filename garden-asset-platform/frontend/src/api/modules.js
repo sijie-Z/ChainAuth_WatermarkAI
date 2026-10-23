@@ -164,7 +164,8 @@ export const licenseApi = {
   renew: (licenseId, data) => api.post(`/license/${licenseId}/renew`, data),
   getContract: (licenseId) => api.get(`/license/${licenseId}/contract`),
   getMyLicenses: (params) => api.get('/license/my', { params }),
-  myApplications: (params) => api.get('/license/my-applications', { params })
+  myApplications: (params) => api.get('/license/my-applications', { params }),
+  usageReport: (params) => api.get('/license/usage-report', { params })
 }
 
 // 站内待办提醒

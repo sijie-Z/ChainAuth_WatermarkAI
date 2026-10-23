@@ -14,16 +14,18 @@ from datetime import datetime
 from flask import current_app, request, send_file
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restful import Resource
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from app.extensions import db
 from app.models.asset import Asset, AssetVersion
 from app.models.blockchain import Certificate
+from app.models.license import License
 from app.models.log import OperationLog
 from app.models.task import AsyncTask
 from app.models.user import User
 from app.resources.asset import allowed_file, calculate_file_hash, validate_magic_bytes
 from app.services.blockchain_service import blockchain_service
+from app.services.notification_service import add_notification_event
 
 VERSION_ADMIN_ROLES = ('admin', 'asset_admin')
 VERSION_DIRNAME = 'versions'
@@ -85,6 +87,31 @@ def _cancel_queued_tasks(asset_id):
         'error_message': '文件已更新，旧版本任务自动取消',
         'finished_at': datetime.utcnow(),
     }, synchronize_session=False)
+
+
+def _notify_version_outdated(asset, version):
+    """资产换版后提醒仍绑定旧版本的有效授权，避免用户下载时才发现"""
+    now = datetime.utcnow()
+    licenses = License.query.filter(
+        License.asset_id == asset.id,
+        License.status == 'active',
+        License.version_id.isnot(None),
+        or_(License.end_time.is_(None), License.end_time > now),
+    ).all()
+    for license_row in licenses:
+        if license_row.version_id == version.id:
+            continue
+        add_notification_event(
+            license_row.licensee_id,
+            'license_version_outdated',
+            f'资产已更新为 v{version.version_no}',
+            (
+                f'授权 {license_row.license_code} 对应 v'
+                f'{license_row.version_no or "历史版本"}，'
+                f'当前文件为 v{version.version_no}；如需继续下载请重新申请授权。'
+            ),
+            f'/assets/{asset.id}?tab=versions',
+        )
 
 
 def _version_save_dir(asset_id):
@@ -163,10 +190,12 @@ def _create_version(asset, user_id, file_path, file_name, file_format,
         created_by=user_id
     )
     db.session.add(version)
+    db.session.flush()
     _apply_version_file(
         asset, file_path, file_hash, file_size, file_format, thumbnail_path
     )
     _cancel_queued_tasks(asset.id)
+    _notify_version_outdated(asset, version)
 
     # 新文件未经水印与审核，不能继续以已发布/待审状态对外分发。
     # 退回草稿，要求重新水印 → 提交发布 → 审核。
