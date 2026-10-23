@@ -276,6 +276,7 @@ const menuItems = shallowRef([
   },
   { path: '/admin/gardens', label: '园林档案', icon: Place, roles: WATERMARK_ROLES },
   { path: '/admin/downloads', label: '下载台账', icon: Download, roles: ADMIN_ROLES },
+  { path: '/admin/notifications', label: '通知渠道', icon: Bell, roles: ['admin'] },
   { path: '/admin/users', label: '用户管理', icon: User, roles: ['admin'] },
   { path: '/admin/logs', label: '操作日志', icon: Document, roles: ADMIN_ROLES }
 ])

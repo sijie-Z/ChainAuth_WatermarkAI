@@ -540,6 +540,11 @@ def _worker_loop(app):
                             dispatch_pending_emails()
                         except Exception:
                             logger.exception('邮件通知派发失败')
+                        try:
+                            from app.services.webhook_service import dispatch_pending_webhooks
+                            dispatch_pending_webhooks()
+                        except Exception:
+                            logger.exception('Webhook 通知派发失败')
                 db.session.remove()
         except Exception:
             logger.exception('异步任务 worker 轮询异常')

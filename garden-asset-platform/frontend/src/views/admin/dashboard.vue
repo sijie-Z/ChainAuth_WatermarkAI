@@ -260,7 +260,7 @@ import { assetApi, licenseApi, systemApi } from '@/api/modules'
 import {
   Picture, Stamp, Link, Document, Upload, Clock, DataLine,
   ArrowUp, ArrowDown, User, Reading,
-  CircleCheck, Timer, Download, Place, Warning
+  CircleCheck, Timer, Download, Place, Warning, Bell
 } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 
@@ -321,7 +321,8 @@ const quickActionDefs = [
   { label: '侵权线索', icon: Warning, path: '/admin/infringements', gradient: 'linear-gradient(135deg, #a6402f, #7c2d21)', roles: LICENSE_ROLES },
   { label: '园林档案', icon: Place, path: '/admin/gardens', gradient: 'linear-gradient(135deg, #4a7c59, #365c42)', roles: ['admin', 'asset_admin'] },
   { label: '下载台账', icon: Download, path: '/admin/downloads', gradient: 'linear-gradient(135deg, #5b7f8a, #45616a)', roles: LICENSE_ROLES },
-  { label: '用户管理', icon: User, path: '/admin/users', gradient: 'linear-gradient(135deg, #5b675f, #414b43)', roles: ['admin'] }
+  { label: '用户管理', icon: User, path: '/admin/users', gradient: 'linear-gradient(135deg, #5b675f, #414b43)', roles: ['admin'] },
+  { label: '通知渠道', icon: Bell, path: '/admin/notifications', gradient: 'linear-gradient(135deg, #4c6e8a, #34506a)', roles: ['admin'] }
 ]
 
 const quickActions = computed(() => {

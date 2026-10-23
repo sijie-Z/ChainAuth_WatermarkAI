@@ -12,7 +12,7 @@ vi.mock('@/api/index', () => ({
 import api from '@/api/index'
 import {
   assetApi, blockchainApi, infringementApi, licenseApi, notificationApi,
-  taskApi, userApi
+  systemApi, taskApi, userApi
 } from '@/api/modules'
 
 describe('api modules', () => {
@@ -109,6 +109,17 @@ describe('api modules', () => {
     expect(api.post).toHaveBeenCalledWith(
       '/infringements/patrol', form, { timeout: 0 }
     )
+  })
+
+  it('systemApi manages webhook config and test delivery', () => {
+    systemApi.updateWebhook({ enabled: true, url: 'https://example.com/hook' })
+    systemApi.testWebhook()
+
+    expect(api.put).toHaveBeenCalledWith('/system/notification-webhook', {
+      enabled: true,
+      url: 'https://example.com/hook'
+    })
+    expect(api.post).toHaveBeenCalledWith('/system/notification-webhook/test')
   })
 
   it('keeps the existing method signatures', () => {

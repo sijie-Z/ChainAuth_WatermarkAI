@@ -341,8 +341,17 @@ def register_api_resources(app):
     api.add_resource(LogListResource, '/logs')
 
     # 系统能力状态（管理员）
-    from app.resources.system import SystemStatusResource
+    from app.resources.system import (
+        SystemStatusResource, NotificationWebhookResource,
+        NotificationWebhookTestResource
+    )
     api.add_resource(SystemStatusResource, '/system/status')
+    api.add_resource(
+        NotificationWebhookResource, '/system/notification-webhook'
+    )
+    api.add_resource(
+        NotificationWebhookTestResource, '/system/notification-webhook/test'
+    )
 
     # 异步任务（水印/存证）
     from app.resources.tasks import (

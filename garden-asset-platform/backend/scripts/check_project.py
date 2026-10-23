@@ -88,6 +88,7 @@ CRITICAL_FILES = {
         'src/views/admin/tasks.vue',
         'src/views/admin/infringements.vue',
         'src/views/admin/license-usage.vue',
+        'src/views/admin/notifications.vue',
         'src/views/admin/users.vue',
         'package.json',
         'vite.config.js',

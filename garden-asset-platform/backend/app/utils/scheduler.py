@@ -114,6 +114,21 @@ def init_scheduler(app):
             except Exception as exc:
                 app.logger.error(f'邮件通知派发失败: {exc}')
 
+    @scheduler.scheduled_job('interval', minutes=1)
+    def dispatch_webhook_notifications():
+        """每分钟派发到期的 Webhook 通知"""
+        with app.app_context():
+            try:
+                from app.services.webhook_service import dispatch_pending_webhooks
+                result = dispatch_pending_webhooks()
+                if result.get('sent') or result.get('failed'):
+                    app.logger.info(
+                        f"Webhook 通知: 发送 {result.get('sent', 0)}, "
+                        f"失败 {result.get('failed', 0)}"
+                    )
+            except Exception as exc:
+                app.logger.error(f'Webhook 通知派发失败: {exc}')
+
     scheduler.start()
     app.logger.info('任务调度器已启动')
 

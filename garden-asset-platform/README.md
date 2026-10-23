@@ -19,7 +19,7 @@
 | AI 辅助（可选） | 以图搜图、侵权辅助检测、智能问答；默认关闭，需安装模型与 API Key | CLIP + Milvus + 智谱 GLM（可选） |
 | 授权分发 | 在线申请→双重审批→合同管理→下载控制；用途/渠道/格式/地域/下载次数作为可执行范围，授权绑定签发时的文件版本 | Flask + JWT |
 | 侵权线索 | 公开提交疑似盗用文件/链接，水印匹配资产后进入后台研判，确认或驳回时通知举报人与权利人 | Vue3 + Flask |
-| 通知渠道 | 站内 SSE 实时推送 + 可选 SMTP 邮件通知，按用户偏好分组发送 | SSE + SMTP |
+| 通知渠道 | 站内 SSE 实时推送 + 可选 SMTP 邮件 + 系统 Webhook（兼容企业微信群机器人，支持签名与重试） | SSE + SMTP + Webhook |
 | 协作与版本 | 评论/回复、影像区域标注、版本上传/恢复 | Vue3 + Flask |
 
 ### 技术架构
@@ -118,13 +118,13 @@ FLASK_APP=run.py flask db upgrade
 ### 运行测试
 
 ```bash
-# 后端测试（302个用例，覆盖API/模型/安全/迁移/异步任务/版本证书/通知渠道/授权范围/侵权线索/批量巡检）
+# 后端测试（308个用例，覆盖API/模型/安全/迁移/异步任务/版本证书/通知渠道/授权范围/侵权线索/批量巡检）
 cd backend && python -m pytest tests/ -v
 
 # Windows 内存受限时：逐文件隔离子进程运行（推荐）
 cd backend && python scripts/run_tests.py
 
-# 前端单元测试（48 个用例）
+# 前端单元测试（49 个用例）
 cd frontend && npm run test:ci
 
 # Windows 内存受限时：逐文件运行前端测试
@@ -159,7 +159,7 @@ garden-asset-platform/
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
 │   ├── migrations/                # Alembic 迁移（baseline + versions）
-│   ├── tests/                     # pytest测试（302个用例）
+│   ├── tests/                     # pytest测试（308个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -295,7 +295,9 @@ garden-asset-platform/
 | POST | `/api/infringements/:id/review` | 受理/确认/驳回（确认与驳回通知举报人与权利人） |
 | GET | `/api/infringements/:id/file` | 下载举报文件（管理员） |
 | GET | `/api/logs` | 操作日志（管理员，支持模块/结果/日期/关键词筛选） |
-| GET | `/api/system/status` | 系统能力状态（管理员：AI/链/Redis/调度器真实启用情况） |
+| GET | `/api/system/status` | 系统能力状态（管理员：AI/链/Redis/调度器/通知真实启用情况） |
+| GET/PUT | `/api/system/notification-webhook` | 系统 Webhook 配置（管理员） |
+| POST | `/api/system/notification-webhook/test` | 发送测试 Webhook |
 
 ### 授权管理
 
@@ -354,6 +356,7 @@ Docker 部署见 `garden-asset-platform/.env.example`；本地开发见 `backend
 | `MAIL_FROM` | 发件人地址 | 同 `MAIL_USERNAME` |
 | `MAIL_USE_TLS` / `MAIL_USE_SSL` | SMTP 加密方式 | `true` / `false` |
 | `PUBLIC_BASE_URL` | 邮件中链接使用的前端地址 | `http://localhost:5173` |
+| `WEBHOOK_ALLOW_PRIVATE` | 是否允许 Webhook 指向内网地址（默认拒绝以防 SSRF） | `false` |
 
 > 多 worker 部署（4 个 gunicorn worker）默认关闭任务调度器，避免备份/授权过期任务重复执行。如需启用，设置 `SCHEDULER_ENABLED=true`，并确保只运行一个调度进程（或改用外部 cron）。
 

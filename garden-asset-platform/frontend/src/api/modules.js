@@ -203,7 +203,10 @@ export const infringementApi = {
 
 // 系统能力状态
 export const systemApi = {
-  getStatus: () => api.get('/system/status')
+  getStatus: () => api.get('/system/status'),
+  getWebhook: () => api.get('/system/notification-webhook'),
+  updateWebhook: (data) => api.put('/system/notification-webhook', data),
+  testWebhook: () => api.post('/system/notification-webhook/test')
 }
 
 // 用户管理API

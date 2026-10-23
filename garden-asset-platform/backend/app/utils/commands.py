@@ -90,6 +90,7 @@ def tasks_run(once, interval, limit, no_email):
     """启动队列 worker（生产环境用它替代进程内线程）"""
     from app.services import task_service
     from app.services.email_service import dispatch_pending_emails
+    from app.services.webhook_service import dispatch_pending_webhooks
 
     click.echo('任务 worker 已启动，按 Ctrl+C 停止')
     last_email_dispatch = 0.0
@@ -116,6 +117,12 @@ def tasks_run(once, interval, limit, no_email):
                 click.echo(
                     f"邮件通知: 发送 {result.get('sent', 0)}, "
                     f"失败 {result.get('failed', 0)}"
+                )
+            webhook_result = dispatch_pending_webhooks()
+            if webhook_result.get('sent') or webhook_result.get('failed'):
+                click.echo(
+                    f"Webhook 通知: 发送 {webhook_result.get('sent', 0)}, "
+                    f"失败 {webhook_result.get('failed', 0)}"
                 )
 
         if once:
@@ -170,17 +177,26 @@ def notifications_group():
 @click.option('--limit', default=20, type=int)
 @with_appcontext
 def notifications_dispatch(limit):
-    """派发到期的邮件通知"""
+    """派发到期的邮件与 Webhook 通知"""
     from app.services.email_service import dispatch_pending_emails
+    from app.services.webhook_service import dispatch_pending_webhooks
 
     result = dispatch_pending_emails(limit=limit)
+    webhook_result = dispatch_pending_webhooks(limit=limit)
     if not result.get('mail_configured'):
         click.echo('SMTP 未配置（MAIL_ENABLED/MAIL_HOST），未发送邮件')
-        return
-    click.echo(
-        f"发送 {result['sent']}，跳过 {result['skipped']}，"
-        f"失败 {result['failed']}，待重试 {result['retried']}"
-    )
+    else:
+        click.echo(
+            f"邮件：发送 {result['sent']}，跳过 {result['skipped']}，"
+            f"失败 {result['failed']}，待重试 {result['retried']}"
+        )
+    if not webhook_result.get('configured'):
+        click.echo('Webhook 未启用，未发送 Webhook')
+    else:
+        click.echo(
+            f"Webhook：发送 {webhook_result['sent']}，跳过 {webhook_result['skipped']}，"
+            f"失败 {webhook_result['failed']}，待重试 {webhook_result['retried']}"
+        )
 
 
 @notifications_group.command('test')

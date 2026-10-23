@@ -25,4 +25,10 @@ def add_notification_event(user_id, event_type, title, description=None, link=No
         channel='email',
         status='pending',
     ))
+    try:
+        from app.services.webhook_service import create_webhook_delivery
+        create_webhook_delivery(event)
+    except Exception:
+        # Webhook 配置异常不能阻断业务事件
+        pass
     return event

@@ -220,6 +220,12 @@ const routes = [
         meta: { title: '用户管理', roles: ['admin'] }
       },
       {
+        path: 'notifications',
+        name: 'AdminNotifications',
+        component: page(() => import('@/views/admin/notifications.vue'), false),
+        meta: { title: '通知渠道', roles: ['admin'] }
+      },
+      {
         path: 'downloads',
         name: 'AdminDownloads',
         component: page(() => import('@/views/download/index.vue'), false),

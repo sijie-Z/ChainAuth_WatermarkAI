@@ -159,6 +159,11 @@ class Config:
     MAIL_TIMEOUT = int(os.environ.get('MAIL_TIMEOUT', '10'))
     PUBLIC_BASE_URL = os.environ.get('PUBLIC_BASE_URL', 'http://localhost:5173')
 
+    # Webhook 默认禁止内网地址，避免 SSRF；内部自动化场景可显式开启
+    WEBHOOK_ALLOW_PRIVATE = os.environ.get(
+        'WEBHOOK_ALLOW_PRIVATE', 'false'
+    ).lower() == 'true'
+
 
 class DevelopmentConfig(Config):
     """开发环境配置"""
@@ -193,6 +198,7 @@ class TestingConfig(Config):
     SSE_MAX_SECONDS = 1
     SSE_POLL_INTERVAL = 0.2
     MAIL_ENABLED = False
+    WEBHOOK_ALLOW_PRIVATE = True
 
 
 config = {
