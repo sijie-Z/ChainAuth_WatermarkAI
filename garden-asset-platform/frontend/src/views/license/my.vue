@@ -256,6 +256,7 @@
       <pre class="contract-content">{{ contractContent }}</pre>
       <template #footer>
         <el-button type="primary" @click="copyContract">复制全文</el-button>
+        <el-button @click="printContract">打印 / 另存 PDF</el-button>
         <el-button @click="contractVisible = false">关闭</el-button>
       </template>
     </el-dialog>
@@ -286,6 +287,7 @@ const detail = ref({})
 const contractVisible = ref(false)
 const contractContent = ref('')
 const contractLoading = ref(false)
+const contractMeta = ref({ code: '', asset: '' })
 
 const LICENSE_STATUS_OPTIONS = [
   { value: '', label: '全部' },
@@ -399,6 +401,10 @@ async function openContract(row) {
     const response = await licenseApi.getContract(row.id)
     if (response.data?.code === 200) {
       contractContent.value = response.data.data?.contract_content || '合同内容暂不可用'
+      contractMeta.value = {
+        code: row.license_code || row.application_code || '',
+        asset: row.asset_title || ''
+      }
       contractVisible.value = true
     } else {
       ElMessage.error(response.data?.message || '合同加载失败')
@@ -417,6 +423,69 @@ async function copyContract() {
   } catch {
     ElMessage.warning('浏览器未允许复制，请手动选择文本')
   }
+}
+
+function printContract() {
+  if (!contractContent.value) return
+  const popup = window.open('', '_blank', 'width=860,height=960')
+  if (!popup) {
+    ElMessage.warning('浏览器拦截了打印窗口，请允许弹窗后重试')
+    return
+  }
+  const escapeHtml = (value) => String(value ?? '').replace(
+    /[&<>"']/g,
+    ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch])
+  )
+  const meta = contractMeta.value
+  const printedAt = new Date().toLocaleString('zh-CN')
+  popup.document.open()
+  popup.document.write(`<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>授权合同 ${escapeHtml(meta.code)}</title>
+<style>
+  @page { size: A4; margin: 22mm 18mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 32px 28px; color: #1c261f; font-family: "Songti SC", "SimSun", "Noto Serif SC", serif; font-size: 13px; line-height: 1.9; }
+  @media print { body { padding: 0; } }
+  .brand { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding-bottom: 12px; margin-bottom: 18px; border-bottom: 2px solid #245346; }
+  .brand strong { font-size: 19px; letter-spacing: .06em; }
+  .brand .sub { margin-top: 4px; font-size: 12px; color: #5b675f; letter-spacing: .18em; }
+  .brand .code { font-family: "Consolas", monospace; font-size: 12px; color: #245346; }
+  .meta { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 18px; padding: 8px 12px; background: #f4f7f4; border: 1px solid #d9e2da; font-size: 12px; color: #4a554d; }
+  pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: inherit; }
+  .signatures { display: flex; justify-content: space-between; gap: 40px; margin-top: 56px; }
+  .signature { width: 45%; padding-top: 10px; border-top: 1px solid #333; font-size: 12px; }
+  .foot { margin-top: 36px; padding-top: 10px; border-top: 1px solid #d9e2da; font-size: 11px; color: #6b756e; }
+</style>
+</head>
+<body>
+  <div class="brand">
+    <div><strong>苏州园林数字资产平台</strong><div class="sub">数字资产使用授权合同</div></div>
+    <div class="code">${escapeHtml(meta.code)}</div>
+  </div>
+  <div class="meta">
+    <span>资产：${escapeHtml(meta.asset || '—')}</span>
+    <span>打印时间：${escapeHtml(printedAt)}</span>
+  </div>
+  <pre>${escapeHtml(contractContent.value)}</pre>
+  <div class="signatures">
+    <div class="signature">授权方（盖章）</div>
+    <div class="signature">被授权方（盖章）</div>
+  </div>
+  <div class="foot">本页由平台根据授权记录生成，合同内容以平台存证版本为准。</div>
+</body>
+</html>`)
+  popup.document.close()
+  popup.focus()
+  setTimeout(() => {
+    try {
+      popup.print()
+    } catch {
+      // 用户可能已关闭打印窗口
+    }
+  }, 350)
 }
 
 function viewDetail(row) {

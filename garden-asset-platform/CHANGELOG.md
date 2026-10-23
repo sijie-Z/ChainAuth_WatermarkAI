@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- 授权合同打印/另存 PDF：合同弹窗新增打印视图（平台抬头、合同编号、资产、签署栏）；合同正文改为按当前授权实时生成，续期、范围调整与中文授权类型即时反映
 - 三维模型在线预览：详情页支持 GLB/GLTF/STL/OBJ 拖拽旋转与缩放，three.js 按代码分割懒加载，预览仍受授权与版本校验且不计下载量
 - worker 心跳与队列健康度：`worker_heartbeats` 记录进程内线程/独立 worker 的存活与处理量；`GET /api/tasks/health` 与后台“任务队列”页展示在线 worker、最老排队任务、积压阈值、无 worker 消费与超时处理告警；`flask tasks status [--check]` 支持命令行巡检与容器健康检查（compose worker 已接入）
 - 后台资产批量能力：多选待审资产批量通过/驳回，当前页数据导出 CSV

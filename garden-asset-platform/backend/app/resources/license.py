@@ -247,7 +247,12 @@ class LicenseContractResource(Resource):
             db.session.commit()
 
         data = contract.to_dict()
-        data['contract_content'] = contract.contract_content
+        # 合同正文按当前授权记录实时生成，确保续期、范围调整与中文枚举
+        # 不会因为历史存档文本而过期；资产缺失时回退到已存文本。
+        data['contract_content'] = (
+            build_contract_content(license, asset, application)
+            if asset else contract.contract_content
+        )
         data['license_code'] = license.license_code
         data['license_type'] = license.license_type
         data['usage_scope'] = license.usage_scope
