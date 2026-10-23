@@ -62,7 +62,8 @@
           effect="plain"
           :title="worker.worker_id"
         >
-          {{ worker.kind_label }} · {{ formatDuration(worker.last_seen_seconds, true) }}前
+          {{ worker.online ? '在线' : '离线' }} · {{ worker.kind_label }} ·
+          {{ formatDuration(worker.last_seen_seconds) }}前
         </el-tag>
       </div>
     </section>
@@ -103,9 +104,14 @@
         </el-table-column>
         <el-table-column label="资产" min-width="180">
           <template #default="{ row }">
-            <router-link v-if="row.asset_id" :to="`/assets/${row.asset_id}`" class="asset-link">
-              {{ row.asset_title || row.asset_code || '查看资产' }}
+            <router-link
+              v-if="row.asset_id && (row.asset_title || row.asset_code)"
+              :to="`/assets/${row.asset_id}`"
+              class="asset-link"
+            >
+              {{ row.asset_title || row.asset_code }}
             </router-link>
+            <span v-else-if="!row.asset_id" class="muted">全局任务</span>
             <span v-else class="muted">资产已删除</span>
           </template>
         </el-table-column>

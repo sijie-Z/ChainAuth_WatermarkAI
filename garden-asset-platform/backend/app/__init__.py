@@ -68,6 +68,10 @@ def create_app(config_name='default'):
     if hasattr(config_cls, 'init_app'):
         config_cls.init_app(app)
 
+    if config_name == 'production' and not app.config.get('TESTING'):
+        from app.config import validate_production_config
+        validate_production_config(app)
+
     # 健康检查端点
     @app.route('/health')
     def health_check():

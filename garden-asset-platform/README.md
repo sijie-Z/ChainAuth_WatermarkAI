@@ -64,6 +64,8 @@
 ```bash
 # 配置环境变量
 cp .env.example .env
+# 生成随机密钥，把输出替换 .env 里的 SECRET_KEY / JWT_SECRET_KEY 占位值
+python backend/scripts/generate_secrets.py
 # 编辑 .env，填入数据库密码等 Docker Compose 变量
 
 # 启动所有服务（后端、任务 worker、前端、PostgreSQL、Redis、MinIO）
@@ -138,9 +140,9 @@ cd frontend && npm run build
 
 ### 默认账号
 
-管理员 `admin / admin123` · 审批员 `adm1, adm2 / 123456` · 用户 `user1, user2 / 123456`
+开发环境初始化后：管理员 `admin / admin123` · 审批员 `adm1, adm2 / 123456` · 用户 `user1, user2 / 123456`
 
-> 正式部署前请通过 `ADMIN_INITIAL_PASSWORD` 指定初始管理员密码，或登录后立即修改；演示账号可用 `python -m flask reset-password` 重置。
+> 生产环境（`FLASK_ENV=production`）初始化时不再创建 `123456` 演示账号；未设置 `ADMIN_INITIAL_PASSWORD` 会生成一次性随机管理员密码并打印在初始化输出中。演示部署可显式设置 `SEED_DEMO_USERS=true`。正式部署前请立即修改管理员密码。
 
 ## 项目结构
 
@@ -321,6 +323,7 @@ garden-asset-platform/
 
 ## 安全特性
 
+- 生产配置强制校验 `SECRET_KEY`/`JWT_SECRET_KEY`：示例占位文本或不足 32 位时拒绝启动
 - JWT双Token认证（Access 24h + Refresh 30d）；登出同时撤销 refresh token，改密/重置密码后旧 token 立即失效
 - 请求频率限制（Redis计数器，可配置阈值；Redis异常不影响业务执行）
 - 文件上传魔数字节校验（17种文件类型）
@@ -337,12 +340,12 @@ Docker 部署见 `garden-asset-platform/.env.example`；本地开发见 `backend
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| `SECRET_KEY` | Flask密钥 | - |
-| `JWT_SECRET_KEY` | JWT签名密钥 | - |
+| `SECRET_KEY` | Flask密钥（生产需 ≥32 位随机值，拒绝示例占位文本） | - |
+| `JWT_SECRET_KEY` | JWT签名密钥（同样校验强度） | - |
 | `DATABASE_URL` | 数据库连接串 | `sqlite:///garden_asset.db` |
 | `REDIS_URL` | Redis连接串 | `redis://localhost:6379/0` |
 | `BLOCKCHAIN_ENABLED` | 启用区块链 | `false` |
-| `AI_ENABLED` | 启用AI功能 | `true` |
+| `AI_ENABLED` | 启用AI功能 | `false` |
 | `ZHIPU_API_KEY` | 智谱AI密钥 | - |
 | `BAIDU_OCR_API_KEY` | 百度OCR密钥 | - |
 | `ADMIN_INITIAL_PASSWORD` | 初始化脚本创建 admin 时使用的密码 | `admin123`（仅演示） |

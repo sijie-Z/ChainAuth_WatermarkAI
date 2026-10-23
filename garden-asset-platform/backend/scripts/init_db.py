@@ -4,6 +4,7 @@
 """
 import sys
 import os
+import secrets
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -18,6 +19,20 @@ from app.models import (
 
 # 迁移基线：旧库没有 alembic_version 时先 stamp 到此版本，再执行后续迁移
 BASELINE_REVISION = 'be3bcbd6313e'
+
+# 本次初始化实际使用的管理员密码（仅用于一次性提示，历史密码不回显）
+_ADMIN_PASSWORD = None
+_ADMIN_PASSWORD_GENERATED = False
+_TEST_USERS_CREATED = 0
+
+
+def _is_production():
+    env = os.environ.get('FLASK_CONFIG') or os.environ.get('FLASK_ENV') or ''
+    return env.lower() == 'production'
+
+
+def _app_config_name():
+    return 'production' if _is_production() else 'development'
 
 
 def create_tables():
@@ -39,11 +54,25 @@ def create_tables():
 
 
 def create_admin_user():
-    """创建管理员账号"""
+    """创建管理员账号
+
+    生产环境未提供 ADMIN_INITIAL_PASSWORD 时生成一次性随机密码，
+    不再回落到演示密码 admin123。
+    """
+    global _ADMIN_PASSWORD, _ADMIN_PASSWORD_GENERATED
+
     print("Creating admin user...")
 
     if not User.query.filter_by(username='admin').first():
-        admin_password = os.environ.get('ADMIN_INITIAL_PASSWORD', 'admin123')
+        configured = os.environ.get('ADMIN_INITIAL_PASSWORD')
+        if configured:
+            admin_password = configured
+        elif _is_production():
+            admin_password = secrets.token_urlsafe(18)
+            _ADMIN_PASSWORD_GENERATED = True
+        else:
+            admin_password = 'admin123'
+
         admin = User(
             username='admin',
             email='admin@szgarden.cn',
@@ -56,8 +85,13 @@ def create_admin_user():
 
         db.session.add(admin)
         db.session.commit()
-        if os.environ.get('ADMIN_INITIAL_PASSWORD'):
+        _ADMIN_PASSWORD = admin_password
+        if configured:
             print("Admin user created with ADMIN_INITIAL_PASSWORD.")
+        elif _ADMIN_PASSWORD_GENERATED:
+            print("Admin user created with a generated random password.")
+            print(f"  Initial admin password: {admin_password}")
+            print("  请保存该密码，并在首次登录后立即修改。")
         else:
             print("Admin user created! Username: admin, Password: admin123 (change it before deployment)")
     else:
@@ -87,8 +121,18 @@ def create_gardens():
 
 
 def create_test_users():
-    """创建测试用户"""
+    """创建测试用户
+
+    生产环境默认不创建演示账号（123456 弱口令），
+    需要演示数据时显式设置 SEED_DEMO_USERS=true。
+    """
+    global _TEST_USERS_CREATED
+
     print("Creating test users...")
+
+    if _is_production() and os.environ.get('SEED_DEMO_USERS', '').lower() != 'true':
+        print("Skipped demo users in production (set SEED_DEMO_USERS=true to create them).")
+        return
 
     test_users = [
         {'username': 'adm1', 'email': 'adm1@szgarden.cn', 'role': 'adm1', 'user_number': 'ADM1001'},
@@ -99,6 +143,7 @@ def create_test_users():
         {'username': 'user2', 'email': 'user2@test.com', 'role': 'user'},
     ]
 
+    created = 0
     for user_data in test_users:
         if not User.query.filter_by(username=user_data['username']).first():
             user = User(
@@ -110,9 +155,11 @@ def create_test_users():
             )
             user.set_password('123456')
             db.session.add(user)
+            created += 1
 
     db.session.commit()
-    print(f"Created {len(test_users)} test users! Password: 123456")
+    _TEST_USERS_CREATED = created
+    print(f"Created {created} test users! Password: 123456")
 
 
 def create_watermark_dir():
@@ -180,7 +227,7 @@ def ensure_asset_versions():
 
 def init_database():
     """初始化数据库"""
-    app = create_app('development')
+    app = create_app(_app_config_name())
 
     with app.app_context():
         # 创建目录
@@ -199,9 +246,17 @@ def init_database():
         print("\n" + "="*50)
         print("Database initialization completed!")
         print("="*50)
-        print("\nDefault accounts:")
-        print("  Admin: admin / admin123")
-        print("  Test users: adm1, adm2, user1, user2 / 123456")
+        print("\nAccounts:")
+        if _ADMIN_PASSWORD:
+            print(f"  Admin: admin / {_ADMIN_PASSWORD}")
+            if _ADMIN_PASSWORD_GENERATED:
+                print("  （随机初始密码，请立即保存并在首次登录后修改）")
+        else:
+            print("  Admin: admin（已存在，密码保持不变）")
+        if _TEST_USERS_CREATED:
+            print(f"  Test users: adm1, adm2, user1, user2 / 123456（本次创建 {_TEST_USERS_CREATED} 个）")
+        elif _is_production():
+            print("  Demo users: 未创建（生产环境默认关闭，SEED_DEMO_USERS=true 可开启）")
 
 
 if __name__ == '__main__':

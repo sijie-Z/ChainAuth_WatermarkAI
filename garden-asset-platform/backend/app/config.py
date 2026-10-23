@@ -87,7 +87,7 @@ class Config:
     PRIVATE_KEY = os.environ.get('PRIVATE_KEY', '')
 
     # AI配置
-    AI_ENABLED = os.environ.get('AI_ENABLED', 'true').lower() == 'true'
+    AI_ENABLED = os.environ.get('AI_ENABLED', 'false').lower() == 'true'
     ZHIPU_API_KEY = os.environ.get('ZHIPU_API_KEY', '')
     MILVUS_DB_PATH = os.environ.get('MILVUS_DB_PATH', './data/milvus.db')
 
@@ -215,3 +215,26 @@ config = {
     'testing': TestingConfig,
     'default': DevelopmentConfig
 }
+
+
+PLACEHOLDER_SECRET_MARKERS = (
+    'change-me', 'changeme', 'your-secret', 'secret-key',
+    'example', 'admin123', 'password',
+)
+
+
+def validate_production_config(app):
+    """生产环境拒绝示例/过短密钥，避免用可猜测的 SECRET_KEY 签发 Token。"""
+    problems = []
+    for key in ('SECRET_KEY', 'JWT_SECRET_KEY'):
+        value = str(app.config.get(key) or '')
+        lowered = value.lower()
+        if len(value) < 32:
+            problems.append(f'{key} 长度不足 32 位')
+        elif any(marker in lowered for marker in PLACEHOLDER_SECRET_MARKERS):
+            problems.append(f'{key} 仍包含示例占位文本')
+    if problems:
+        raise RuntimeError(
+            '生产配置不安全：' + '；'.join(problems)
+            + '。请运行 python scripts/generate_secrets.py 生成随机密钥并写入环境变量。'
+        )
