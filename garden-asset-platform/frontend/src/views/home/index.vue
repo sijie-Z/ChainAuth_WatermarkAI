@@ -707,16 +707,20 @@ onUnmounted(() => {
 }
 
 .btn-login {
+  flex-shrink: 0;
   padding: 8px 14px;
   font-size: 14px;
+  white-space: nowrap;
   color: rgba(252, 253, 251, 0.9);
 
   &:hover { color: #fcfdfb; }
 }
 
 .btn-register {
+  flex-shrink: 0;
   padding: 8px 18px;
   font-size: 14px;
+  white-space: nowrap;
   color: $primary-dark;
   background: #fcfdfb;
   border: 1px solid #fcfdfb;
@@ -1412,6 +1416,22 @@ onUnmounted(() => {
 
 @media (max-width: 768px) {
   .navbar { padding: 0 20px; }
+  .navbar-container { gap: 10px; }
+  .navbar-brand {
+    gap: 8px;
+
+    .brand-mark {
+      width: 32px;
+      height: 32px;
+      font-size: 16px;
+    }
+
+    .brand-name {
+      font-size: 15px;
+      letter-spacing: 0;
+    }
+  }
+  .navbar-actions { gap: 6px; }
   .navbar-menu { display: none; }
   .brand-sub { display: none; }
   .mobile-nav-toggle { display: inline-flex; }

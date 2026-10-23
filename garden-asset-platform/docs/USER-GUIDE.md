@@ -179,6 +179,8 @@ cd backend
 python scripts/seed_demo_assets.py --reset
 ```
 
+默认会给全部演示资产嵌入水印并模拟存证；想跳过耗时处理可加 `--watermark-count 0 --chain-count 0`。
+
 ## 7. 测试
 
 ```bash

@@ -4,6 +4,9 @@
     python scripts/seed_demo_assets.py --reset
     python scripts/seed_demo_assets.py --reset --watermark-count 4 --chain-count 2
 
+默认给所有演示资产嵌入水印并模拟存证；`--watermark-count 0 --chain-count 0`
+可跳过耗时处理。
+
 依赖 .scratch/demo/photos 下的照片与 manifest.json（由 scripts/fetch_demo_photos.py 生成），
 照片只用于本地演示，不进入仓库。
 """
@@ -399,6 +402,11 @@ def process_assets(assets, admin, watermark_count, chain_count):
     from app.services.watermark_service import WatermarkService
     from app.services.blockchain_service import blockchain_service
 
+    if watermark_count < 0:
+        watermark_count = len(assets)
+    if chain_count < 0:
+        chain_count = len(assets)
+
     watermarked = 0
     chained = 0
     for asset in assets[:watermark_count]:
@@ -425,8 +433,14 @@ def main():
     parser.add_argument('--manifest', default=str(DEFAULT_MANIFEST))
     parser.add_argument('--meta', default=str(DEFAULT_META))
     parser.add_argument('--reset', action='store_true', help='清空现有资产与授权后重建')
-    parser.add_argument('--watermark-count', type=int, default=4, help='自动嵌入水印的资产数')
-    parser.add_argument('--chain-count', type=int, default=2, help='自动上链存证的资产数')
+    parser.add_argument(
+        '--watermark-count', type=int, default=-1,
+        help='自动嵌入水印的资产数，默认全部；0 表示跳过'
+    )
+    parser.add_argument(
+        '--chain-count', type=int, default=-1,
+        help='自动上链存证的资产数，默认全部；0 表示跳过'
+    )
     args = parser.parse_args()
 
     app = create_app('development')
@@ -479,8 +493,8 @@ def main():
         if args.watermark_count or args.chain_count:
             watermarked, chained = process_assets(
                 assets, admin,
-                max(args.watermark_count, 0),
-                max(args.chain_count, 0)
+                args.watermark_count,
+                args.chain_count
             )
 
         licenses = 0

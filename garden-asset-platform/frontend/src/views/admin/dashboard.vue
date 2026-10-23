@@ -635,10 +635,40 @@ function initCharts() {
     if (assetChart) assetChart.dispose()
     assetChart = echarts.init(assetChartRef.value)
     const pieData = buildPieData()
+    const pieTotal = pieData.reduce((sum, item) => sum + (item.value || 0), 0)
     const defaultPieData = [
       { value: 0, name: '暂无数据', itemStyle: { color: '#d8e1da' } }
     ]
     const option = {
+      graphic: pieTotal > 0
+        ? [
+            {
+              type: 'text',
+              left: 'center',
+              top: '39%',
+              silent: true,
+              style: {
+                text: String(pieTotal),
+                fill: '#17201c',
+                fontSize: 26,
+                fontWeight: 600,
+                textAlign: 'center'
+              }
+            },
+            {
+              type: 'text',
+              left: 'center',
+              top: '49%',
+              silent: true,
+              style: {
+                text: '件资产',
+                fill: '#5b675f',
+                fontSize: 12,
+                textAlign: 'center'
+              }
+            }
+          ]
+        : [],
       tooltip: {
         trigger: 'item',
         backgroundColor: '#fcfdfb',
