@@ -378,9 +378,16 @@ const systemItems = computed(() => {
       description: data.tasks
         ? `排队 ${data.tasks.counts?.queued || 0} · 处理中 ${data.tasks.counts?.running || 0} · 失败 ${data.tasks.counts?.failed || 0}`
         : '',
-      type: (data.tasks?.counts?.failed || 0) > 0
+      type: data.tasks?.healthy === 'critical'
         ? 'danger'
-        : (data.tasks?.enabled ? 'success' : 'warning')
+        : (data.tasks?.healthy === 'warning' ? 'warning' : 'success')
+    },
+    {
+      key: 'storage',
+      name: '文件存储',
+      label: data.storage?.label || '未统计',
+      description: data.storage?.description || '',
+      type: 'info'
     },
     {
       key: 'notifications',

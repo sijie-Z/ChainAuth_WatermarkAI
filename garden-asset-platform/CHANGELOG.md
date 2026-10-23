@@ -8,6 +8,7 @@
 - worker 心跳与队列健康度：`worker_heartbeats` 记录进程内线程/独立 worker 的存活与处理量；`GET /api/tasks/health` 与后台“任务队列”页展示在线 worker、最老排队任务、积压阈值、无 worker 消费与超时处理告警；`flask tasks status [--check]` 支持命令行巡检与容器健康检查（compose worker 已接入）
 - 后台资产批量能力：多选待审资产批量通过/驳回，当前页数据导出 CSV
 - 数据库备份/恢复命令 `flask backup create/list/restore`：备份目录可配置，Docker 增加 backups 卷与 `postgresql-client`；SQLite 恢复前自动保留回滚副本
+- 存储巡检：`flask storage report` 盘点上传/水印/提取目录占用与数据库未引用文件（只读清单，不自动删除），`/api/system/storage` 供后台查询，仪表盘“系统能力”显示存储占用
 - 检索增强：关键词同时匹配标题、编码、描述、标签、园林名称/编码与上传者，未指定排序时按相关度优先
 - 多格式预览：视频在线播放、PDF 内嵌预览，预览按授权控制且不计下载量；补充 CSP blob 媒体/框架白名单
 - 下载指纹：授权用户下载影像时生成带资产编码、授权编号、账号和唯一指纹码的可见页脚副本，原盲水印保留；台账记录指纹码，重复下载复用副本

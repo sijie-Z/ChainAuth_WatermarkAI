@@ -12,6 +12,9 @@ from app.services.ai_service import ai_service
 from app.services.blockchain_service import blockchain_service
 from app.services.email_service import delivery_counts, mail_configured
 from app.services.task_service import queue_health, task_counts
+from app.services.storage_service import (
+    find_orphans, storage_summary, storage_summary_cached
+)
 from app.services.webhook_service import (
     config_for_api as webhook_config_for_api,
     get_webhook_config,
@@ -43,6 +46,7 @@ class SystemStatusResource(Resource):
         deliveries = delivery_counts()
         webhook_config = webhook_config_for_api()
         webhook_deliveries = webhook_delivery_counts()
+        storage = storage_summary_cached()
 
         return {
             'code': 200,
@@ -127,6 +131,14 @@ class SystemStatusResource(Resource):
                         else 'Webhook 未启用'
                     ),
                     'deliveries': webhook_deliveries
+                },
+                'storage': {
+                    **storage,
+                    'label': (
+                        f"{storage['files']} 个文件 · "
+                        f"{storage['bytes'] / 1024 / 1024:.1f} MB"
+                    ),
+                    'description': '上传、水印与提取目录占用；孤儿文件可用 flask storage report 巡检'
                 }
             }
         }, 200
@@ -204,3 +216,26 @@ class NotificationWebhookTestResource(Resource):
             current_app.logger.warning('测试 Webhook 失败: %s', exc)
             return {'code': 502, 'message': f'Webhook 发送失败: {exc}'}, 502
         return {'code': 200, 'message': '测试 Webhook 已发送'}, 200
+
+
+class SystemStorageResource(Resource):
+    """存储盘点与孤儿文件报告（管理员，只读）"""
+
+    @jwt_required()
+    def get(self):
+        user = User.query.get(get_jwt_identity())
+        if not user or user.role not in ADMIN_ROLES:
+            return {'code': 403, 'message': '无权限查看存储占用'}, 403
+
+        min_age_hours = request.args.get('min_age_hours', 24, type=int)
+        limit = request.args.get('limit', 100, type=int)
+        return {
+            'code': 200,
+            'data': {
+                'summary': storage_summary(),
+                'orphans': find_orphans(
+                    min_age_hours=min_age_hours,
+                    limit=min(limit or 100, 1000),
+                ),
+            }
+        }, 200

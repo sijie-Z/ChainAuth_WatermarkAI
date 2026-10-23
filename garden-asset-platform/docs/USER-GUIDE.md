@@ -194,6 +194,9 @@ cd backend && python scripts/run_tests.py
 cd backend && python -m flask backup create
 cd backend && python -m flask backup list
 
+# 存储巡检（只读，不删除文件）
+cd backend && python -m flask storage report
+
 # 前端 49 个单元测试（单 worker，降低内存占用）
 cd frontend && npm run test:ci
 

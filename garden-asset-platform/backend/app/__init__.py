@@ -347,10 +347,11 @@ def register_api_resources(app):
 
     # 系统能力状态（管理员）
     from app.resources.system import (
-        SystemStatusResource, NotificationWebhookResource,
+        SystemStatusResource, SystemStorageResource, NotificationWebhookResource,
         NotificationWebhookTestResource
     )
     api.add_resource(SystemStatusResource, '/system/status')
+    api.add_resource(SystemStorageResource, '/system/storage')
     api.add_resource(
         NotificationWebhookResource, '/system/notification-webhook'
     )

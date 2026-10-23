@@ -1041,8 +1041,10 @@ class AssetStatsResource(Resource):
         ).all()
 
         # 最近活动
+        # 最近活动只展示业务操作；登录/登出次数多且信息量低
         recent_activities = OperationLog.query.filter(
-            OperationLog.status == 'success'
+            OperationLog.status == 'success',
+            OperationLog.action.notin_(('login', 'logout')),
         ).order_by(OperationLog.created_at.desc()).limit(10).all()
 
         # 最近上传

@@ -68,7 +68,7 @@
 ### P0 生产可用性
 
 1. **备份可恢复**：SQLite 改用在线备份 API 并做完整性校验，PostgreSQL 恢复带 `ON_ERROR_STOP` 与单事务；`flask backup create/list/restore`、Docker 备份卷和 SQLite 回滚副本已具备，并有“备份→删数据→恢复→校验”的自动化回环测试；仍需在真实部署环境做一次完整恢复演练，并把备份复制到独立存储。
-2. **存储抽象**：本地磁盘/MinIO 统一为 object key；补孤儿文件清理与文件级校验。
+2. **存储抽象**：本地磁盘/MinIO 尚未统一为 object key；已提供 `flask storage report` 与 `/api/system/storage` 的只读巡检（目录占用、数据库未引用文件清单），清理仍需人工核对。
 3. **独立 worker 运维**：已补 worker 心跳、队列健康度、积压/离线/超时告警与 compose 健康检查；仍缺多队列隔离与跨主机 worker 负载视图（当前按 worker 展示心跳与处理量）。
 
 ### P1 业务闭环

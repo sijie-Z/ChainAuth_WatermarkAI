@@ -343,6 +343,45 @@ def backup_restore(filename, yes):
         click.echo(f'恢复前备份: {safety}')
 
 
+@click.group('storage')
+def storage_group():
+    """存储盘点与孤儿文件报告（只读，不删除）"""
+
+
+@storage_group.command('report')
+@click.option('--min-age-hours', default=24, type=int, help='只报告早于该小时数的文件')
+@click.option('--limit', default=30, type=int, help='最多列出的孤儿文件数')
+@with_appcontext
+def storage_report(min_age_hours, limit):
+    """盘点上传/水印目录与数据库未引用的文件"""
+    from app.services.storage_service import find_orphans, storage_summary
+
+    summary = storage_summary()
+    click.echo(f"合计 {summary['files']} 个文件，{summary['bytes'] / 1024 / 1024:.2f} MB")
+    for root in summary['roots']:
+        state = '' if root['exists'] else '（目录不存在）'
+        click.echo(
+            f"  {root['key']:<10} {root['files']:>7} 个 "
+            f"{root['bytes'] / 1024 / 1024:>9.2f} MB  {root['path']}{state}"
+        )
+
+    orphans = find_orphans(min_age_hours=min_age_hours, limit=limit)
+    click.echo(
+        f"\n孤儿候选：{orphans['count']} 个，"
+        f"{orphans['total_bytes'] / 1024 / 1024:.2f} MB "
+        f"（数据库已引用 {orphans['referenced_files']} 个文件）"
+    )
+    for item in orphans['items']:
+        click.echo(
+            f"  [{item['root']}] {item['relative']}  "
+            f"{item['bytes'] / 1024 / 1024:.2f} MB  {item['modified_at']}"
+        )
+    if orphans['truncated']:
+        click.echo(f"  …仅显示前 {len(orphans['items'])} 个")
+    if orphans['count']:
+        click.echo('\n注意：本命令只报告，不删除任何文件；请人工核对后再走部署清理流程。')
+
+
 def register_commands(app):
     """注册命令"""
     app.cli.add_command(create_admin)
@@ -351,3 +390,4 @@ def register_commands(app):
     app.cli.add_command(tasks_group)
     app.cli.add_command(notifications_group)
     app.cli.add_command(backup_group)
+    app.cli.add_command(storage_group)

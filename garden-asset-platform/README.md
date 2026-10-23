@@ -301,7 +301,8 @@ garden-asset-platform/
 | POST | `/api/infringements/:id/review` | 受理/确认/驳回（确认与驳回通知举报人与权利人） |
 | GET | `/api/infringements/:id/file` | 下载举报文件（管理员） |
 | GET | `/api/logs` | 操作日志（管理员，支持模块/结果/日期/关键词筛选） |
-| GET | `/api/system/status` | 系统能力状态（管理员：AI/链/Redis/调度器/通知真实启用情况） |
+| GET | `/api/system/status` | 系统能力状态（管理员：AI/链/Redis/调度器/通知/存储真实启用情况） |
+| GET | `/api/system/storage` | 存储占用与孤儿文件报告（管理员，只读，不删除） |
 | GET/PUT | `/api/system/notification-webhook` | 系统 Webhook 配置（管理员） |
 | POST | `/api/system/notification-webhook/test` | 发送测试 Webhook |
 
@@ -373,6 +374,8 @@ Docker 部署见 `garden-asset-platform/.env.example`；本地开发见 `backend
 > 水印与存证任务默认进入 `async_tasks` 表，由 `docker compose` 中的 `worker` 服务执行；开发环境由 API 进程内 worker 执行。任务领取使用条件更新，多 worker 并发也不会重复处理。worker 每次轮询写入 `worker_heartbeats`，后台“任务队列”页展示在线 worker、积压与超时告警；也可运行 `flask tasks status`（`--check` 在无在线 worker 或健康度异常时返回非零，compose worker 已用作健康检查）。
 
 > 备份目录默认 `backend/backups`（Docker 挂载为 `/app/backups`）。使用 `flask backup create`、`flask backup list`、`flask backup restore <文件名>`；SQLite 恢复前会自动保留 `pre_restore_*.db` 回滚副本。生产环境仍建议定期把备份复制到独立存储并做恢复演练。
+
+> 存储巡检使用 `flask storage report`（可加 `--min-age-hours`、`--limit`）：统计上传/水印/提取目录占用，并列出数据库未引用且超过保护期的文件。该命令只读，不会自动删除文件；确认清单后再按部署流程清理。
 
 > 站内实时通知使用 SSE，Docker 后端已切换为 `gthread` worker 并放宽超时；每个在线连接占用一个线程。大规模部署建议改用 Redis Pub/Sub + gevent/eventlet，或把 SSE 拆成独立服务。邮件通知默认关闭，配置 `MAIL_ENABLED`/`MAIL_HOST` 后由 worker 每分钟派发。
 
