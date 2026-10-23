@@ -1,6 +1,7 @@
 """资产证据链接口"""
 import os
 import shutil
+import uuid
 from urllib.parse import quote
 
 from flask import Response, current_app, request
@@ -11,6 +12,7 @@ from app.models import Asset, User
 from app.models.log import OperationLog
 from app.services.evidence_service import build_evidence
 from app.services.evidence_package_service import build_evidence_package
+from app.services.evidence_verify_service import verify_evidence_package
 from app.utils.middleware import rate_limit
 
 ADMIN_ROLES = ('admin', 'asset_admin', 'license_admin', 'adm1', 'adm2')
@@ -137,3 +139,51 @@ class AssetEvidencePackageResource(Resource):
             lambda: shutil.rmtree(package['workdir'], ignore_errors=True)
         )
         return response
+
+
+class EvidencePackageVerifyResource(Resource):
+    """公开核验证据包（结构、校验和与平台登记匹配）"""
+
+    @rate_limit(limit=10, window=60)
+    def post(self):
+        if 'file' not in request.files:
+            return {'code': 400, 'message': '未上传证据包'}, 400
+        file = request.files['file']
+        if not file.filename or not file.filename.lower().endswith('.zip'):
+            return {'code': 400, 'message': '请上传 ZIP 证据包'}, 400
+
+        max_bytes = current_app.config.get(
+            'EVIDENCE_VERIFY_MAX_BYTES', 20 * 1024 * 1024
+        )
+        file.seek(0, os.SEEK_END)
+        size = file.tell()
+        file.seek(0)
+        if size > max_bytes:
+            return {
+                'code': 400,
+                'message': f'证据包大小超过限制 ({max_bytes // 1024 // 1024}MB)'
+            }, 400
+
+        temp_root = os.path.join(
+            current_app.config.get('UPLOAD_FOLDER', './uploads'),
+            'evidence_verify_tmp'
+        )
+        os.makedirs(temp_root, exist_ok=True)
+        temp_path = os.path.join(temp_root, f'verify_{uuid.uuid4().hex}.zip')
+        file.save(temp_path)
+
+        try:
+            result = verify_evidence_package(temp_path)
+            return {
+                'code': 200,
+                'message': '证据包核验完成',
+                'data': result,
+            }, 200
+        except ValueError as exc:
+            return {'code': 400, 'message': str(exc)}, 400
+        except Exception:
+            current_app.logger.exception('证据包核验失败')
+            return {'code': 500, 'message': '证据包核验失败，请稍后重试'}, 500
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)

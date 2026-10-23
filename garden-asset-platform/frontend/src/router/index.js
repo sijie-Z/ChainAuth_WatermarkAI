@@ -99,6 +99,12 @@ const routes = [
     meta: { title: '水印实验室', requiresAuth: true, siteHeader: true }
   },
   {
+    path: '/verify-package',
+    name: 'VerifyEvidencePackage',
+    component: page(() => import('@/views/evidence/verify.vue')),
+    meta: { title: '证据包核验', siteHeader: true }
+  },
+  {
     path: '/guide',
     name: 'Guide',
     component: page(() => import('@/views/guide/index.vue')),

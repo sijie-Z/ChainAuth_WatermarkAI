@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import fs from 'node:fs'
 
 test.describe('资产证据包', () => {
   test('资产管理员可以从详情页导出 ZIP 证据包', async ({ page }) => {
@@ -28,5 +29,23 @@ test.describe('资产证据包', () => {
 
     const download = await downloadPromise
     expect(download.suggestedFilename()).toMatch(/-evidence(-\d{14})?\.zip$/)
+
+    // 把刚导出的证据包重新上传到公开核验页，验证完整闭环
+    const downloadPath = await download.path()
+    await page.goto('/verify-package')
+    await expect(page.getByRole('heading', { name: '证据包核验' })).toBeVisible()
+    await page.setInputFiles('.verify-upload input[type=file]', {
+      name: 'evidence.zip',
+      mimeType: 'application/zip',
+      buffer: fs.readFileSync(downloadPath)
+    })
+    await expect(page.locator('.file-summary')).toBeVisible()
+    await page.getByRole('button', { name: '开始核验' }).click()
+
+    await expect(
+      page.getByRole('heading', { name: '证据包核验通过' })
+    ).toBeVisible({ timeout: 20000 })
+    await expect(page.getByText('完整性通过', { exact: true })).toBeVisible()
+    await expect(page.getByText('登记一致', { exact: true })).toBeVisible()
   })
 })

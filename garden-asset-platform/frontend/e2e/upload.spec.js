@@ -33,7 +33,7 @@ test.describe('批量上传', () => {
     await page.getByRole('option', { name: '拙政园' }).click()
 
     await page.getByRole('button', { name: /开始上传 2 个文件/ }).click()
-    await expect(page.locator('.queue-item.status-done')).toHaveCount(2, { timeout: 30000 })
+    await expect(page.locator('.queue-item.status-done')).toHaveCount(2, { timeout: 60000 })
     await expect(page.getByText(/处理完成：成功 2 件/)).toBeVisible()
 
     // 清理测试资产

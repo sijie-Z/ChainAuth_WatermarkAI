@@ -4,7 +4,10 @@ import api from './index'
 export const publicApi = {
   // 首页/目录页会自行降级展示，静默失败避免刷屏
   getStats: () => api.get('/stats', { silent: true }),
-  getTags: () => api.get('/tags', { silent: true })
+  getTags: () => api.get('/tags', { silent: true }),
+  verifyEvidencePackage: (formData) => api.post('/evidence/verify-package', formData, {
+    timeout: 60000
+  })
 }
 
 // 认证相关API

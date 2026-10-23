@@ -122,6 +122,17 @@
         </template>
       </section>
 
+      <!-- 证据包核验入口 -->
+      <section class="report-card">
+        <div class="report-copy">
+          <h2>已有证据包？</h2>
+          <p>
+            上传平台导出的 ZIP 证据包，核验文件 SHA-256、资产编码、水印编号、证书与版本记录是否与平台台账一致。
+          </p>
+        </div>
+        <el-button type="primary" plain @click="$router.push('/verify-package')">核验证据包</el-button>
+      </section>
+
       <!-- 侵权线索入口 -->
       <section class="report-card">
         <div class="report-copy">

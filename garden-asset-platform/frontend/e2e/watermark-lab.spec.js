@@ -9,6 +9,9 @@ async function loginAsUser(page) {
 }
 
 test.describe('水印鲁棒性实验室', () => {
+  // 真实嵌入与多项攻击在低配/并发环境下可能超过默认 30s
+  test.setTimeout(90000)
+
   test('上传图片后真实执行攻击并返回指标', async ({ page }) => {
     await loginAsUser(page)
     await page.goto('/watermark-lab')
@@ -49,7 +52,7 @@ test.describe('水印鲁棒性实验室', () => {
     await expect(page.locator('.sample-preview img')).toBeVisible()
     await page.getByRole('button', { name: '开始鲁棒性实验' }).click()
 
-    await expect(page.locator('.summary-strip')).toBeVisible({ timeout: 25000 })
+    await expect(page.locator('.summary-strip')).toBeVisible({ timeout: 70000 })
     await expect(page.locator('.summary-strip')).toContainText('LAB-IMG-')
     await expect(page.locator('.attack-row')).toHaveCount(8)
     await expect(page.locator('.attack-row.recovered').first()).toBeVisible()

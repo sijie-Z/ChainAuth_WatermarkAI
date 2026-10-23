@@ -114,6 +114,9 @@ class Config:
     EVIDENCE_PACKAGE_MAX_BYTES = int(
         os.environ.get('EVIDENCE_PACKAGE_MAX_BYTES', str(200 * 1024 * 1024))
     )
+    EVIDENCE_VERIFY_MAX_BYTES = int(
+        os.environ.get('EVIDENCE_VERIFY_MAX_BYTES', str(20 * 1024 * 1024))
+    )
 
     # 文件上传大小限制 (500MB)
     MAX_CONTENT_LENGTH = int(os.environ.get('MAX_CONTENT_LENGTH', str(500 * 1024 * 1024)))

@@ -111,6 +111,8 @@ frontend/
 │       │   └── index.vue        # 溯源查询
 │       ├── watermark/
 │       │   └── lab.vue          # 水印鲁棒性实验室
+│       ├── evidence/
+│       │   └── verify.vue       # 证据包核验
 │       ├── license/
 │       │   ├── apply.vue        # 申请授权
 │       │   └── my.vue           # 我的授权
@@ -484,7 +486,7 @@ flask reset-password user1 newpassword
 | 授权审批 | ✅ | 95% | 双重审批、合同生成、5种授权类型 |
 | AI分析 | ✅ | 80% | GLM-4/CLIP集成，需配置API Key |
 | 前端界面 | ✅ | 90% | 19页面+骨架屏+设计系统 |
-| 单元测试 | ✅ | 95% | 后端 344 个用例 + 前端 49 个用例 + 20 个 Playwright 用例，CI 全量执行 |
+| 单元测试 | ✅ | 95% | 后端 348 个用例 + 前端 49 个用例 + 20 个 Playwright 用例，CI 全量执行 |
 | Docker部署 | ✅ | 90% | 多服务编排、健康检查、HTTPS待配置 |
 | CI/CD | ✅ | 100% | Git Flow + 16 个工作流 + 机器人体系 |
 

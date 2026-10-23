@@ -145,6 +145,15 @@ const pageActions = computed(() => {
       keywords: 'watermark lab 水印 鲁棒性 实验 PSNR NC'
     },
     {
+      id: 'page-verify-package',
+      title: '证据包核验',
+      subtitle: '上传 ZIP 核对完整性与平台登记',
+      path: '/verify-package',
+      icon: Document,
+      tone: 'secondary',
+      keywords: 'evidence verify 证据包 核验 ZIP SHA256'
+    },
+    {
       id: 'page-guide',
       title: '使用指南',
       subtitle: '三分钟了解完整流程',

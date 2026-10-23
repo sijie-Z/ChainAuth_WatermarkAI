@@ -21,6 +21,7 @@
 | 授权分发 | 在线申请→双重审批→合同管理→下载控制；用途/渠道/格式/地域/下载次数作为可执行范围，授权绑定签发时的文件版本 | Vue3 + Flask |
 | 下载指纹 | 授权用户下载影像时生成带资产编码、授权编号、账号与唯一指纹码的可见副本，原盲水印保留；台账可回溯 | Pillow + Flask |
 | 证据包导出 | 所有者/资产管理员一键打包当前版本原件与水印副本、证据链、版本证书、SHA-256 清单与核验说明；超出 200MB 时仅导出清单与证书 | Flask + ZIP |
+| 证据包核验 | 公开上传 ZIP，独立核对结构、SHA-256、资产编码、水印、证书与当前/历史版本哈希，区分“完整性失败”与“登记不一致” | Flask + ZIP |
 | 多格式预览 | 图片/矢量缩略图、视频在线播放、PDF 内嵌预览、三维模型（GLB/GLTF/STL/OBJ）旋转缩放；预览按授权控制且不计下载量 | Vue3 + Flask + three.js |
 | 侵权线索 | 公开提交疑似盗用文件/链接，水印匹配资产后进入后台研判，确认或驳回时通知举报人与权利人 | Vue3 + Flask |
 | 通知渠道 | 站内 SSE 实时推送 + 可选 SMTP 邮件 + 系统 Webhook（兼容企业微信群机器人，支持签名与重试） | SSE + SMTP + Webhook |
@@ -124,7 +125,7 @@ FLASK_APP=run.py flask db upgrade
 ### 运行测试
 
 ```bash
-# 后端测试（344个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/侵权线索/批量巡检/备份恢复/存储巡检/水印鲁棒性实验/证据包）
+# 后端测试（348个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/侵权线索/批量巡检/备份恢复/存储巡检/水印鲁棒性实验/证据包导出与核验）
 cd backend && python -m pytest tests/ -v
 
 # Windows 内存受限时：逐文件隔离子进程运行（推荐）
@@ -165,7 +166,7 @@ garden-asset-platform/
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
 │   ├── migrations/                # Alembic 迁移（baseline + versions）
-│   ├── tests/                     # pytest测试（344个用例）
+│   ├── tests/                     # pytest测试（348个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -217,6 +218,7 @@ garden-asset-platform/
 | GET | `/api/assets/:id/related` | 同园林相关资产 |
 | GET | `/api/assets/:id/evidence` | 资产证据链（上传/水印/存证/证书/发布/授权/下载） |
 | GET | `/api/assets/:id/evidence-package` | 导出证据包 ZIP（所有者/资产管理员；`include_files=0` 仅导出清单） |
+| POST | `/api/evidence/verify-package` | 公开核验证据包 ZIP（结构、SHA-256、平台资产/水印/证书/版本） |
 | GET/POST | `/api/assets/:id/versions` | 版本历史（含各版本证书）/ 上传新版本（文件替换并重置水印与当前存证） |
 | GET | `/api/assets/:id/versions/:version_id/download` | 下载指定历史版本 |
 | POST | `/api/assets/:id/versions/:version_id/restore` | 恢复历史版本（生成新版本，不删除历史） |
@@ -374,6 +376,7 @@ Docker 部署见 `garden-asset-platform/.env.example`；本地开发见 `backend
 | `WEBHOOK_ALLOW_PRIVATE` | 是否允许 Webhook 指向内网地址（默认拒绝以防 SSRF） | `false` |
 | `BACKUP_DIR` | 数据库备份目录 | `./backups` |
 | `EVIDENCE_PACKAGE_MAX_BYTES` | 证据包允许打包的二进制总大小，超出时仅导出清单与证书 | `209715200`（200MB） |
+| `EVIDENCE_VERIFY_MAX_BYTES` | 证据包核验上传大小上限 | `20971520`（20MB） |
 
 > 多 worker 部署（4 个 gunicorn worker）默认关闭任务调度器，避免备份/授权过期任务重复执行。如需启用，设置 `SCHEDULER_ENABLED=true`，并确保只运行一个调度进程（或改用外部 cron）。
 

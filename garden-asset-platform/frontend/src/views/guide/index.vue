@@ -178,6 +178,11 @@
               <h3>水印实验室</h3>
               <p>上传图片真实执行压缩、噪声与缩放攻击，查看 PSNR、NC 与水印 ID 恢复结果。</p>
             </router-link>
+            <router-link to="/verify-package" class="map-card">
+              <span class="map-kicker">验证据</span>
+              <h3>证据包核验</h3>
+              <p>上传平台导出的 ZIP，核对文件哈希、资产、水印、证书与版本记录是否一致。</p>
+            </router-link>
             <router-link to="/license/my" class="map-card">
               <span class="map-kicker">看进度</span>
               <h3>我的授权</h3>

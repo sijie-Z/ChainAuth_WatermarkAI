@@ -18,7 +18,8 @@ def _prepare_asset(app, tmp_path, asset_id, username='testuser'):
     original = tmp_path / 'garden-photo.jpg'
     watermarked = tmp_path / 'garden-photo-watermarked.png'
     original.write_bytes(b'original-garden-photo-bytes')
-    watermarked.write_bytes(b'watermarked-garden-photo-bytes')
+    # 水印副本刻意超过 2MB，覆盖校验器对大文件的读取路径
+    watermarked.write_bytes(b'watermarked-garden-photo-bytes' * 100000)
     original_hash = _sha256(original.read_bytes())
 
     with app.app_context():
@@ -169,3 +170,103 @@ def test_evidence_package_missing_asset_returns_404(client, auth_header):
     )
 
     assert response.status_code == 404
+
+
+def _export_package(client, auth_header, asset_id):
+    response = client.get(
+        f'/api/assets/{asset_id}/evidence-package',
+        headers=auth_header,
+    )
+    assert response.status_code == 200
+    data = response.data
+    response.close()
+    return data
+
+
+def _rewrite_zip(data, mutate=None):
+    source = zipfile.ZipFile(io.BytesIO(data))
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED) as target:
+        for info in source.infolist():
+            content = source.read(info.filename)
+            if mutate:
+                content = mutate(info.filename, content)
+            target.writestr(info, content)
+    return output.getvalue()
+
+
+def test_uploaded_package_can_be_verified(client, app, auth_header, sample_asset, tmp_path):
+    app.config['UPLOAD_FOLDER'] = str(tmp_path / 'uploads')
+    _prepare_asset(app, tmp_path, sample_asset)
+    package = _export_package(client, auth_header, sample_asset)
+
+    response = client.post(
+        '/api/evidence/verify-package',
+        data={'file': (io.BytesIO(package), 'evidence.zip')},
+        content_type='multipart/form-data',
+    )
+
+    assert response.status_code == 200
+    result = response.get_json()['data']
+    assert result['verified'] is True
+    assert result['integrity_ok'] is True
+    assert result['registry_ok'] is True
+    assert result['package']['asset_code'] == 'ZY-IMG-20260101-001'
+    assert result['registry']['asset_found'] is True
+    assert not any(item['status'] == 'fail' for item in result['checks'])
+    assert any('模拟存证' in warning for warning in result['warnings'])
+
+    verify_root = tmp_path / 'uploads' / 'evidence_verify_tmp'
+    assert not list(verify_root.glob('verify_*'))
+
+
+def test_tampered_package_fails_integrity(client, app, auth_header, sample_asset, tmp_path):
+    app.config['UPLOAD_FOLDER'] = str(tmp_path / 'uploads')
+    _prepare_asset(app, tmp_path, sample_asset)
+    package = _export_package(client, auth_header, sample_asset)
+
+    def mutate(name, content):
+        return b'tampered' if name.startswith('files/') else content
+
+    tampered = _rewrite_zip(package, mutate)
+    response = client.post(
+        '/api/evidence/verify-package',
+        data={'file': (io.BytesIO(tampered), 'tampered.zip')},
+        content_type='multipart/form-data',
+    )
+
+    assert response.status_code == 200
+    result = response.get_json()['data']
+    assert result['verified'] is False
+    assert result['integrity_ok'] is False
+    assert any(
+        item['key'] in ('checksums', 'files') and item['status'] == 'fail'
+        for item in result['checks']
+    )
+
+
+def test_verify_rejects_non_zip_and_path_traversal(client):
+    response = client.post(
+        '/api/evidence/verify-package',
+        data={'file': (io.BytesIO(b'not a zip'), 'bad.zip')},
+        content_type='multipart/form-data',
+    )
+    assert response.status_code == 400
+
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, 'w') as archive:
+        archive.writestr('../evil.txt', b'x')
+    response = client.post(
+        '/api/evidence/verify-package',
+        data={'file': (io.BytesIO(output.getvalue()), 'evil.zip')},
+        content_type='multipart/form-data',
+    )
+    assert response.status_code == 400
+    assert '非法路径' in response.get_json()['message']
+
+
+def test_verify_requires_uploaded_file(client):
+    response = client.post('/api/evidence/verify-package')
+
+    assert response.status_code == 400
+    assert '未上传' in response.get_json()['message']
