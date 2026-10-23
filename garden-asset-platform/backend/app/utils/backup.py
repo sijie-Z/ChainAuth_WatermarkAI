@@ -7,8 +7,9 @@ from datetime import datetime
 from flask import current_app
 
 
-def backup_database(output_dir='./backups'):
-    """备份数据库"""
+def backup_database(output_dir=None):
+    """备份数据库；默认目录取 BACKUP_DIR 配置。"""
+    output_dir = output_dir or current_app.config.get('BACKUP_DIR', './backups')
     os.makedirs(output_dir, exist_ok=True)
 
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -62,7 +63,9 @@ def backup_database(output_dir='./backups'):
 
 
 def restore_database(backup_file):
-    """恢复数据库"""
+    """恢复数据库；SQLite 覆盖前自动保留一份当前库作为回滚副本。"""
+    if not backup_file or not os.path.isfile(backup_file):
+        raise ValueError('备份文件不存在')
     db_url = current_app.config.get('SQLALCHEMY_DATABASE_URI', '')
 
     if db_url.startswith('postgresql'):
@@ -99,27 +102,41 @@ def restore_database(backup_file):
         if not os.path.isabs(db_path):
             db_path = os.path.join(current_app.instance_path, db_path)
         import shutil
+        backup_dir = current_app.config.get('BACKUP_DIR', './backups')
+        os.makedirs(backup_dir, exist_ok=True)
+        safety = os.path.join(
+            backup_dir,
+            f"pre_restore_{datetime.now():%Y%m%d_%H%M%S}.db"
+        )
+        shutil.copy(db_path, safety)
         shutil.copy(backup_file, db_path)
+        return safety
 
     else:
         raise ValueError(f'不支持的数据库类型')
 
 
-def list_backups(backup_dir='./backups'):
-    """列出所有备份"""
+def list_backups(backup_dir=None):
+    """列出 SQLite .db 和 PostgreSQL .sql 备份，按时间倒序。"""
+    backup_dir = backup_dir or current_app.config.get('BACKUP_DIR', './backups')
     if not os.path.exists(backup_dir):
         return []
 
     backups = []
-    for f in os.listdir(backup_dir):
-        if f.startswith('backup_') and f.endswith('.sql'):
-            path = os.path.join(backup_dir, f)
-            stat = os.stat(path)
-            backups.append({
-                'filename': f,
-                'path': path,
-                'size': stat.st_size,
-                'created_at': datetime.fromtimestamp(stat.st_mtime).isoformat()
-            })
+    for filename in os.listdir(backup_dir):
+        if not filename.startswith('backup_'):
+            continue
+        if not (filename.endswith('.sql') or filename.endswith('.db')):
+            continue
+        path = os.path.join(backup_dir, filename)
+        if not os.path.isfile(path):
+            continue
+        stat = os.stat(path)
+        backups.append({
+            'filename': filename,
+            'path': path,
+            'size': stat.st_size,
+            'created_at': datetime.fromtimestamp(stat.st_mtime).isoformat()
+        })
 
-    return sorted(backups, key=lambda x: x['created_at'], reverse=True)
+    return sorted(backups, key=lambda item: item['created_at'], reverse=True)

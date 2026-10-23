@@ -96,8 +96,25 @@
             </div>
 
             <figure class="preview-area">
+              <div v-if="previewLoading" class="preview-placeholder">
+                <el-icon class="is-loading" :size="40"><Loading /></el-icon>
+                <span>正在加载预览…</span>
+              </div>
+              <video
+                v-else-if="asset.asset_type === 'video' && previewUrl"
+                class="asset-video"
+                :src="previewUrl"
+                controls
+                preload="metadata"
+              ></video>
+              <iframe
+                v-else-if="asset.asset_type === 'document' && isPdfAsset && previewUrl"
+                class="asset-pdf"
+                :src="previewUrl"
+                title="文档预览"
+              ></iframe>
               <el-image
-                v-if="asset.asset_type === 'image' || asset.asset_type === 'vector'"
+                v-else-if="asset.asset_type === 'image' || asset.asset_type === 'vector'"
                 class="asset-photo"
                 :src="getAssetUrl(asset)"
                 :preview-src-list="asset.asset_type === 'image' ? [getAssetUrl(asset)] : []"
@@ -114,7 +131,7 @@
               </el-image>
               <div v-else class="preview-placeholder">
                 <el-icon :size="56"><Document /></el-icon>
-                <span>{{ typeLabel(asset.asset_type) }} · {{ asset.file_format || '文件' }}</span>
+                <span>{{ previewPlaceholderText }}</span>
               </div>
               <figcaption class="preview-caption">
                 <span>{{ asset.garden_name || '未归类园林' }}</span>
@@ -762,7 +779,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowLeft, Collection, CopyDocument, Document, Link, Picture, Star, StarFilled, Share,
-  Download, UploadFilled
+  Download, UploadFilled, Loading
 } from '@element-plus/icons-vue'
 import { assetApi, collectionApi, licenseApi, watermarkApi, blockchainApi, taskApi } from '@/api/modules'
 import { useUserStore } from '@/stores/user'
@@ -824,6 +841,9 @@ const versionProgress = ref(0)
 const versionDownloadingId = ref(null)
 const versionRestoringId = ref(null)
 const activeTask = ref(null)
+const previewUrl = ref('')
+const previewLoading = ref(false)
+const previewError = ref(false)
 const downloadDialogVisible = ref(false)
 const downloadForm = reactive({
   purpose: 'personal_learning',
@@ -886,6 +906,27 @@ const rejectedApplication = computed(() => myApplications.value.find(application
   application.status === 'rejected'
 ) || null)
 const canDownload = computed(() => Boolean(canManage.value || activeLicense.value))
+const isPdfAsset = computed(() =>
+  asset.value.asset_type === 'document'
+  && ['pdf'].includes((asset.value.file_format || '').toLowerCase())
+)
+const previewSupported = computed(() =>
+  asset.value.asset_type === 'video' || isPdfAsset.value
+)
+const previewPlaceholderText = computed(() => {
+  if (previewSupported.value) {
+    if (!canDownload.value) return '获得授权后可在线预览'
+    if (previewError.value) return '预览加载失败，可下载后查看'
+    return '预览加载中…'
+  }
+  if (asset.value.asset_type === 'model') {
+    return '三维模型暂不支持在线预览，可下载后查看'
+  }
+  if (asset.value.asset_type === 'document') {
+    return '该文档格式暂不支持在线预览，可下载后查看'
+  }
+  return `${typeLabel(asset.value.asset_type)}预览暂不可用`
+})
 const canSubmitPublish = computed(() =>
   isOwner.value && ['draft', 'rejected'].includes(asset.value.status)
 )
@@ -1555,7 +1596,43 @@ async function registerChain() {
   }
 }
 
-onBeforeUnmount(stopTaskPolling)
+function revokePreview() {
+  if (previewUrl.value) {
+    URL.revokeObjectURL(previewUrl.value)
+    previewUrl.value = ''
+  }
+}
+
+async function loadPreviewFile() {
+  if (
+    !asset.value.id || !previewSupported.value || !canDownload.value
+    || previewUrl.value || previewLoading.value
+  ) return
+  previewLoading.value = true
+  previewError.value = false
+  try {
+    const response = await assetApi.preview(asset.value.id)
+    revokePreview()
+    previewUrl.value = URL.createObjectURL(response.data)
+  } catch {
+    previewError.value = true
+  } finally {
+    previewLoading.value = false
+  }
+}
+
+watch(
+  [canDownload, () => asset.value.id, previewSupported],
+  () => {
+    revokePreview()
+    if (previewSupported.value && canDownload.value) loadPreviewFile()
+  }
+)
+
+onBeforeUnmount(() => {
+  stopTaskPolling()
+  revokePreview()
+})
 
 function viewCertificate() {
   router.push(`/certificate/${asset.value.certificate_id}`)
@@ -1732,6 +1809,20 @@ watch(() => route.query.tab, tab => {
     height: 100%;
     object-fit: contain;
   }
+}
+
+.asset-video,
+.asset-pdf {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  background: #111;
+  border: 1px solid $border-light;
+  border-radius: $radius-md;
+}
+
+.asset-pdf {
+  background: $bg-secondary;
 }
 
 .preview-placeholder {

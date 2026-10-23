@@ -78,3 +78,17 @@ def test_filter_by_date_and_uploader(client, auth_header, facet_assets):
 def test_invalid_date_filter_returns_400(client, auth_header, facet_assets):
     response = client.get('/api/assets?date_from=not-a-date', headers=auth_header)
     assert response.status_code == 400
+
+
+def test_keyword_searches_tags_garden_and_uploader(client, auth_header, facet_assets):
+    by_tag = client.get('/api/assets?keyword=古典建筑', headers=auth_header)
+    assert by_tag.get_json()['data']['total'] == 2
+
+    by_garden = client.get('/api/assets?keyword=分面测试园', headers=auth_header)
+    assert by_garden.get_json()['data']['total'] == 3
+
+    by_uploader = client.get('/api/assets?keyword=testuser', headers=auth_header)
+    assert by_uploader.get_json()['data']['total'] == 3
+
+    relevance = client.get('/api/assets?keyword=FAC-DOC-003', headers=auth_header)
+    assert relevance.get_json()['data']['items'][0]['asset_code'] == 'FAC-DOC-003'

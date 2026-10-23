@@ -33,6 +33,10 @@ export const assetApi = {
     responseType: 'blob',
     timeout: 0
   }),
+  preview: (id) => api.get(`/assets/${id}/preview`, {
+    responseType: 'blob',
+    timeout: 0
+  }),
   my: (params) => api.get('/assets/my', { params }),
   publish: (id) => api.post(`/assets/${id}/publish`),
   approve: (id, data) => api.post(`/assets/${id}/approve`, data),

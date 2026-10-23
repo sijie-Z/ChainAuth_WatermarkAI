@@ -152,13 +152,14 @@ def register_api_resources(app):
         AssetDownloadResource, AssetFavoriteResource, AssetStatsResource,
         MyAssetsResource, AssetTagsResource, AssetPublishResource, AssetApproveResource,
         AssetThumbnailResource, AssetRelatedResource, FavoriteListResource,
-        PublicStatsResource, TagListResource
+        PublicStatsResource, TagListResource, AssetPreviewResource
     )
     api.add_resource(PublicStatsResource, '/stats')
     api.add_resource(TagListResource, '/tags')
     api.add_resource(AssetListResource, '/assets')
     api.add_resource(AssetResource, '/assets/<string:asset_id>')
     api.add_resource(AssetThumbnailResource, '/assets/<string:asset_id>/thumbnail')
+    api.add_resource(AssetPreviewResource, '/assets/<string:asset_id>/preview')
     api.add_resource(AssetRelatedResource, '/assets/<string:asset_id>/related')
     api.add_resource(FavoriteListResource, '/favorites')
     api.add_resource(AssetUploadResource, '/assets/upload')
@@ -405,6 +406,7 @@ def create_folders(app):
         app.config.get('UPLOAD_FOLDER', './uploads'),
         app.config.get('WATERMARK_FOLDER', './watermarks'),
         app.config.get('EXTRACTED_FOLDER', './extracted'),
+        app.config.get('BACKUP_DIR', './backups'),
         './logs',
         './data/watermark',
         './data/models',

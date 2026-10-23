@@ -100,6 +100,7 @@ class Config:
     UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', './uploads')
     WATERMARK_FOLDER = os.environ.get('WATERMARK_FOLDER', './watermarks')
     EXTRACTED_FOLDER = os.environ.get('EXTRACTED_FOLDER', './extracted')
+    BACKUP_DIR = os.environ.get('BACKUP_DIR', './backups')
 
     # 文件上传大小限制 (500MB)
     MAX_CONTENT_LENGTH = int(os.environ.get('MAX_CONTENT_LENGTH', str(500 * 1024 * 1024)))

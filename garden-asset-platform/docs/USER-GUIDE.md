@@ -34,7 +34,7 @@
 
 - `/assets` 资产档案：搜索、标签/格式/上传日期/上传者、类型/园林/状态筛选，按最新/浏览/下载排序。
 - `/assets/upload` 上传资产：一次选择多个文件，逐件显示上传/水印/存证进度，失败不影响其余文件。
-- `/assets/:id` 资产详情：收藏、复制链接、下载、申请授权、同园林相关资产、证据链、图纸/影像标注、版本历史、讨论、编辑著录信息。
+- `/assets/:id` 资产详情：收藏、复制链接、下载、申请授权、同园林相关资产、证据链、图纸/影像标注、版本历史、讨论、编辑著录信息；视频可直接播放，PDF 可内嵌预览（需授权，预览不计下载量）。
 - `/my-assets` 我的资产：查看草稿、待审、已发布、已驳回，提交发布/重新提交/删除。
 - `/favorites` 我的收藏：集中查看收藏并取消。
 - `/collections` 我的合集：按主题组织资产，可在资产详情“加入合集”；合集可设为公开或私有。
@@ -47,6 +47,7 @@
 - `/admin/notifications` 通知渠道（超级管理员）：查看 SSE/邮件/Webhook 状态，配置系统 Webhook（通用 JSON 或企业微信群机器人）、订阅事件分组并发送测试。
 - `/admin/gardens` 园林档案（管理员）：新建、编辑园林名称、历史、坐标与文保信息。
 - `/admin/downloads` 下载台账（管理员）：全平台下载明细与汇总。
+- `/admin/assets` 资产管理（管理员）：批量嵌水印/上链、批量通过/驳回待审资产，并可导出当前页 CSV。
 - `/admin/tasks` 任务队列（管理员）：查看水印/存证的排队、处理中、失败任务，支持重试与取消。
 - `/admin/logs` 操作日志（管理员）：按模块、结果、日期和关键词筛选审计记录。
 
@@ -178,11 +179,15 @@ python scripts/seed_demo_assets.py --reset
 ## 7. 测试
 
 ```bash
-# 后端 309 个用例
+# 后端 313 个用例
 cd backend && python -m pytest tests/ -q
 
 # Windows 内存不足时：每个测试文件独立进程运行
 cd backend && python scripts/run_tests.py
+
+# 数据库备份 / 恢复
+cd backend && python -m flask backup create
+cd backend && python -m flask backup list
 
 # 前端 49 个单元测试（单 worker，降低内存占用）
 cd frontend && npm run test:ci

@@ -6,6 +6,9 @@
         <p class="page-subtitle">登记、检索与维护园林数字资产档案</p>
       </div>
       <div class="page-actions">
+        <el-button plain :disabled="assets.length === 0" @click="exportCurrentPage">
+          导出当前页
+        </el-button>
         <el-button type="primary" @click="goToUpload">
           <el-icon><Upload /></el-icon>
           上传资产
@@ -84,6 +87,28 @@
           @click="bulkChain"
         >
           批量上链
+        </el-button>
+        <el-button
+          v-if="canApprove && pendingSelected.length"
+          size="small"
+          type="success"
+          plain
+          :loading="batchRunning === 'approve'"
+          :disabled="!!batchRunning"
+          @click="bulkApprove"
+        >
+          批量通过（{{ pendingSelected.length }}）
+        </el-button>
+        <el-button
+          v-if="canApprove && pendingSelected.length"
+          size="small"
+          type="danger"
+          plain
+          :loading="batchRunning === 'reject'"
+          :disabled="!!batchRunning"
+          @click="bulkReject"
+        >
+          批量驳回
         </el-button>
         <el-button size="small" text :disabled="!!batchRunning" @click="clearSelection">取消选择</el-button>
       </div>
@@ -255,6 +280,10 @@ function canApproveRow(row) {
   return canApprove.value && !isOwner(row)
 }
 
+const pendingSelected = computed(() =>
+  selectedRows.value.filter(row => row.status === 'pending' && canApproveRow(row))
+)
+
 const loading = ref(false)
 const actionState = reactive({})
 const tableRef = ref(null)
@@ -377,6 +406,109 @@ function handleSelectionChange(rows) {
 function clearSelection() {
   tableRef.value?.clearSelection()
   selectedRows.value = []
+}
+
+async function bulkApprove() {
+  if (!pendingSelected.value.length || batchRunning.value) return
+  try {
+    await ElMessageBox.confirm(
+      `将一次通过 ${pendingSelected.value.length} 件待审资产，确定继续？`,
+      '批量通过',
+      { type: 'warning', confirmButtonText: '全部通过', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  batchRunning.value = 'approve'
+  let ok = 0
+  let failed = 0
+  for (const row of pendingSelected.value) {
+    try {
+      const response = await assetApi.approve(row.id, { action: 'approve' })
+      if (response.data?.code === 200) ok += 1
+      else failed += 1
+    } catch {
+      failed += 1
+    }
+  }
+  batchRunning.value = ''
+  ElMessage.success(`批量审核完成：通过 ${ok} 件${failed ? `，失败 ${failed} 件` : ''}`)
+  clearSelection()
+  loadAssets()
+}
+
+async function bulkReject() {
+  if (!pendingSelected.value.length || batchRunning.value) return
+  let reason = ''
+  try {
+    const result = await ElMessageBox.prompt(
+      `将一次驳回 ${pendingSelected.value.length} 件待审资产，可填写统一原因。`,
+      '批量驳回',
+      {
+        confirmButtonText: '全部驳回',
+        cancelButtonText: '取消',
+        inputPlaceholder: '驳回原因（可选）'
+      }
+    )
+    reason = result.value || ''
+  } catch {
+    return
+  }
+  batchRunning.value = 'reject'
+  let ok = 0
+  let failed = 0
+  for (const row of pendingSelected.value) {
+    try {
+      const response = await assetApi.approve(row.id, {
+        action: 'reject',
+        reason
+      })
+      if (response.data?.code === 200) ok += 1
+      else failed += 1
+    } catch {
+      failed += 1
+    }
+  }
+  batchRunning.value = ''
+  ElMessage.success(`批量审核完成：驳回 ${ok} 件${failed ? `，失败 ${failed} 件` : ''}`)
+  clearSelection()
+  loadAssets()
+}
+
+function exportCurrentPage() {
+  const headers = [
+    '资产编码', '标题', '类型', '格式', '状态', '水印状态', '存证状态',
+    '所属园林', '上传者', '浏览', '下载', '创建时间'
+  ]
+  const rows = assets.value.map(row => [
+    row.asset_code,
+    row.title,
+    row.asset_type,
+    row.file_format,
+    ASSET_STATUS[row.status]?.label || row.status,
+    WATERMARK_STATUS[row.watermark_status]?.label || row.watermark_status,
+    CHAIN_STATUS[row.chain_status]?.label || row.chain_status,
+    row.garden_name || '',
+    row.uploader_name || row.creator_name || '',
+    row.view_count || 0,
+    row.download_count || 0,
+    row.created_at || ''
+  ])
+  const csv = [headers, ...rows].map(line =>
+    line.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(',')
+  ).join('\n')
+  const blob = new Blob(
+    [String.fromCharCode(0xFEFF) + csv],
+    { type: 'text/csv;charset=utf-8' }
+  )
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `assets-${new Date().toISOString().slice(0, 10)}.csv`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
 }
 
 async function batchWatermark(row) {

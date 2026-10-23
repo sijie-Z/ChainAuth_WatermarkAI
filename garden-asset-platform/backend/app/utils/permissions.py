@@ -24,6 +24,7 @@ API_PERMISSIONS = {
         '/api/user/current',
         '/api/assets',
         '/api/assets/<id>',
+        '/api/assets/<id>/preview',
         '/api/assets/upload',
         '/api/watermark/embed',
         '/api/watermark/extract',

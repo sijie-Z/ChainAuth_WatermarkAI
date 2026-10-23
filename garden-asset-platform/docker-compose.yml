@@ -14,10 +14,12 @@ services:
       - TRUST_PROXY_HEADERS=true
       - BLOCKCHAIN_ENABLED=${BLOCKCHAIN_ENABLED:-false}
       - AI_ENABLED=${AI_ENABLED:-false}
+      - BACKUP_DIR=/app/backups
     volumes:
       - ./backend/uploads:/app/uploads
       - ./backend/watermarks:/app/watermarks
       - ./backend/extracted:/app/extracted
+      - ./backend/backups:/app/backups
       - ./backend/instance:/app/instance
       - ./backend/data:/app/data
     depends_on:
@@ -51,10 +53,12 @@ services:
       - BLOCKCHAIN_ENABLED=${BLOCKCHAIN_ENABLED:-false}
       - AI_ENABLED=${AI_ENABLED:-false}
       - TASK_WORKER_ENABLED=false
+      - BACKUP_DIR=/app/backups
     volumes:
       - ./backend/uploads:/app/uploads
       - ./backend/watermarks:/app/watermarks
       - ./backend/extracted:/app/extracted
+      - ./backend/backups:/app/backups
       - ./backend/instance:/app/instance
       - ./backend/data:/app/data
     depends_on:

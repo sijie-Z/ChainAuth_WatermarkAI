@@ -17,7 +17,7 @@ from app.models.license import LicenseApplication, License
 from app.models.log import OperationLog
 from app.utils.middleware import rate_limit
 from app.services.notification_service import add_notification_event
-from sqlalchemy import func, or_
+from sqlalchemy import case, func, or_
 
 
 ADMIN_ROLES = ('admin', 'asset_admin', 'license_admin', 'adm1', 'adm2')
@@ -227,6 +227,15 @@ class AssetListResource(Resource):
                 Asset.title.ilike(like),
                 Asset.asset_code.ilike(like),
                 Asset.description.ilike(like),
+                Asset.tags.any(or_(
+                    AssetTag.name.ilike(like), AssetTag.tag_name.ilike(like)
+                )),
+                Asset.garden.has(or_(
+                    Garden.name.ilike(like), Garden.code.ilike(like)
+                )),
+                Asset.uploader.has(or_(
+                    User.username.ilike(like), User.nickname.ilike(like)
+                )),
             ))
         if tag:
             query = query.filter(Asset.tags.any(AssetTag.name == tag))
@@ -252,14 +261,23 @@ class AssetListResource(Resource):
             except ValueError:
                 return {'code': 400, 'message': '结束日期格式无效'}, 400
 
-        # 排序
-        sort = (request.args.get('sort') or 'newest').strip()
+        # 排序：带关键词且未指定排序时按相关度，标题/编码命中优先
+        sort = (request.args.get('sort') or ('relevance' if keyword else 'newest')).strip()
         if sort == 'oldest':
             query = query.order_by(Asset.created_at.asc())
         elif sort == 'popular':
             query = query.order_by(Asset.view_count.desc(), Asset.created_at.desc())
         elif sort == 'downloads':
             query = query.order_by(Asset.download_count.desc(), Asset.created_at.desc())
+        elif sort == 'relevance' and keyword:
+            like = f'%{keyword}%'
+            relevance = case(
+                (Asset.title.ilike(like), 5),
+                (Asset.asset_code.ilike(like), 4),
+                (Asset.description.ilike(like), 2),
+                else_=1,
+            )
+            query = query.order_by(relevance.desc(), Asset.created_at.desc())
         else:
             query = query.order_by(Asset.created_at.desc())
 
@@ -786,6 +804,69 @@ class AssetDownloadResource(Resource):
                 fingerprint.fingerprint_code
             )
         return response
+
+
+class AssetPreviewResource(Resource):
+    """在线预览（视频/PDF/文档）
+
+    预览不写入下载台账、不增加下载量；已发布资产需要有效授权才能预览，
+    草稿仅所有者与管理员可用。
+    """
+
+    @jwt_required()
+    def get(self, asset_id):
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        asset = Asset.query.get(asset_id)
+        if not asset:
+            return {'code': 404, 'message': '资产不存在'}, 404
+
+        is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
+        is_admin = user.role in ADMIN_ROLES
+        if asset.status == 'deleted' and not is_admin:
+            return {'code': 404, 'message': '资产不存在'}, 404
+        if asset.status != 'published' and not (is_owner or is_admin):
+            return {'code': 403, 'message': '资产未发布'}, 403
+
+        if asset.status == 'published' and not (is_owner or is_admin):
+            now = datetime.utcnow()
+            license_row = License.query.filter(
+                License.asset_id == asset_id,
+                License.licensee_id == user_id,
+                License.status == 'active',
+                License.start_time <= now,
+                or_(License.end_time.is_(None), License.end_time > now),
+            ).first()
+            if not license_row:
+                return {'code': 403, 'message': '获得授权后可在线预览'}, 403
+            current_version = AssetVersion.query.filter_by(
+                asset_id=asset_id
+            ).order_by(AssetVersion.version_no.desc()).first()
+            if (
+                license_row.version_id
+                and (
+                    not current_version
+                    or current_version.id != license_row.version_id
+                )
+            ):
+                return {
+                    'code': 403,
+                    'message': '授权对应历史版本，请重新申请后再预览'
+                }, 403
+
+        file_path = os.path.abspath(asset.watermarked_path or asset.storage_path or '')
+        if not file_path or not os.path.exists(file_path):
+            return {'code': 404, 'message': '文件不存在'}, 404
+
+        ext = os.path.splitext(file_path)[1].lstrip('.').lower()
+        download_name = f"{asset.asset_code}.{ext}" if ext else asset.asset_code
+        from flask import send_file as flask_send_file
+        return flask_send_file(
+            file_path,
+            as_attachment=False,
+            download_name=download_name,
+            conditional=True,
+        )
 
 
 class FavoriteListResource(Resource):

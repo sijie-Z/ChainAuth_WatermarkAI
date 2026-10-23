@@ -19,6 +19,7 @@
 | AI 辅助（可选） | 以图搜图、侵权辅助检测、智能问答；默认关闭，需安装模型与 API Key | CLIP + Milvus + 智谱 GLM（可选） |
 | 授权分发 | 在线申请→双重审批→合同管理→下载控制；用途/渠道/格式/地域/下载次数作为可执行范围，授权绑定签发时的文件版本 |
 | 下载指纹 | 授权用户下载影像时生成带资产编码、授权编号、账号与唯一指纹码的可见副本，原盲水印保留；台账可回溯 |
+| 多格式预览 | 图片/矢量缩略图、视频在线播放、PDF 内嵌预览；预览按授权控制且不计下载量 | Vue3 + Flask |
 | 侵权线索 | 公开提交疑似盗用文件/链接，水印匹配资产后进入后台研判，确认或驳回时通知举报人与权利人 | Vue3 + Flask |
 | 通知渠道 | 站内 SSE 实时推送 + 可选 SMTP 邮件 + 系统 Webhook（兼容企业微信群机器人，支持签名与重试） | SSE + SMTP + Webhook |
 | 协作与版本 | 评论/回复、影像区域标注、版本上传/恢复 | Vue3 + Flask |
@@ -119,7 +120,7 @@ FLASK_APP=run.py flask db upgrade
 ### 运行测试
 
 ```bash
-# 后端测试（309个用例，覆盖API/模型/安全/迁移/异步任务/版本证书/通知渠道/授权范围/侵权线索/批量巡检）
+# 后端测试（313个用例，覆盖API/模型/安全/迁移/异步任务/版本证书/通知渠道/授权范围/侵权线索/批量巡检）
 cd backend && python -m pytest tests/ -v
 
 # Windows 内存受限时：逐文件隔离子进程运行（推荐）
@@ -160,7 +161,7 @@ garden-asset-platform/
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
 │   ├── migrations/                # Alembic 迁移（baseline + versions）
-│   ├── tests/                     # pytest测试（309个用例）
+│   ├── tests/                     # pytest测试（313个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -208,6 +209,7 @@ garden-asset-platform/
 | GET | `/api/assets/stats` | 资产统计（含水印趋势） |
 | GET | `/api/assets/my` | 我的资产 |
 | GET | `/api/assets/:id/thumbnail` | 资产缩略图（`?size=card` 返回列表卡片图） |
+| GET | `/api/assets/:id/preview` | 在线预览（已发布资产需有效授权；不计下载量） |
 | GET | `/api/assets/:id/related` | 同园林相关资产 |
 | GET | `/api/assets/:id/evidence` | 资产证据链（上传/水印/存证/证书/发布/授权/下载） |
 | GET/POST | `/api/assets/:id/versions` | 版本历史（含各版本证书）/ 上传新版本（文件替换并重置水印与当前存证） |
@@ -358,10 +360,13 @@ Docker 部署见 `garden-asset-platform/.env.example`；本地开发见 `backend
 | `MAIL_USE_TLS` / `MAIL_USE_SSL` | SMTP 加密方式 | `true` / `false` |
 | `PUBLIC_BASE_URL` | 邮件中链接使用的前端地址 | `http://localhost:5173` |
 | `WEBHOOK_ALLOW_PRIVATE` | 是否允许 Webhook 指向内网地址（默认拒绝以防 SSRF） | `false` |
+| `BACKUP_DIR` | 数据库备份目录 | `./backups` |
 
 > 多 worker 部署（4 个 gunicorn worker）默认关闭任务调度器，避免备份/授权过期任务重复执行。如需启用，设置 `SCHEDULER_ENABLED=true`，并确保只运行一个调度进程（或改用外部 cron）。
 
 > 水印与存证任务默认进入 `async_tasks` 表，由 `docker compose` 中的 `worker` 服务执行；开发环境由 API 进程内 worker 执行。任务领取使用条件更新，多 worker 并发也不会重复处理。
+
+> 备份目录默认 `backend/backups`（Docker 挂载为 `/app/backups`）。使用 `flask backup create`、`flask backup list`、`flask backup restore <文件名>`；SQLite 恢复前会自动保留 `pre_restore_*.db` 回滚副本。生产环境仍建议定期把备份复制到独立存储并做恢复演练。
 
 > 站内实时通知使用 SSE，Docker 后端已切换为 `gthread` worker 并放宽超时；每个在线连接占用一个线程。大规模部署建议改用 Redis Pub/Sub + gevent/eventlet，或把 SSE 拆成独立服务。邮件通知默认关闭，配置 `MAIL_ENABLED`/`MAIL_HOST` 后由 worker 每分钟派发。
 

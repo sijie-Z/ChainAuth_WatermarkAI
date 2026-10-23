@@ -241,6 +241,68 @@ def notifications_deliveries(status, limit):
         )
 
 
+@click.group('backup')
+def backup_group():
+    """数据库备份与恢复"""
+
+
+@backup_group.command('create')
+@click.option('--output-dir', default=None, help='备份目录（默认 BACKUP_DIR）')
+@with_appcontext
+def backup_create(output_dir):
+    """创建数据库备份"""
+    from app.utils.backup import backup_database
+
+    path = backup_database(output_dir=output_dir)
+    click.echo(f'备份完成: {path}')
+
+
+@backup_group.command('list')
+@with_appcontext
+def backup_list():
+    """列出可用备份"""
+    from app.utils.backup import list_backups
+
+    rows = list_backups()
+    if not rows:
+        click.echo('暂无备份')
+        return
+    for row in rows:
+        click.echo(
+            f"{row['filename']}  {row['size'] / 1024 / 1024:.2f}MB  "
+            f"{row['created_at']}"
+        )
+
+
+@backup_group.command('restore')
+@click.argument('filename')
+@click.option('--yes', is_flag=True, help='跳过确认（危险操作）')
+@with_appcontext
+def backup_restore(filename, yes):
+    """恢复数据库（会覆盖当前数据库）"""
+    import os
+    from flask import current_app
+    from app.utils.backup import restore_database
+
+    path = filename
+    if not os.path.isabs(path):
+        path = os.path.join(
+            current_app.config.get('BACKUP_DIR', './backups'), filename
+        )
+    if not os.path.isfile(path):
+        click.echo(f'备份文件不存在: {path}')
+        return
+    if not yes and not click.confirm(
+        f'将用 {path} 覆盖当前数据库，是否继续？', default=False
+    ):
+        click.echo('已取消')
+        return
+    safety = restore_database(path)
+    click.echo(f'恢复完成: {path}')
+    if safety:
+        click.echo(f'恢复前备份: {safety}')
+
+
 def register_commands(app):
     """注册命令"""
     app.cli.add_command(create_admin)
@@ -248,3 +310,4 @@ def register_commands(app):
     app.cli.add_command(reset_password)
     app.cli.add_command(tasks_group)
     app.cli.add_command(notifications_group)
+    app.cli.add_command(backup_group)
