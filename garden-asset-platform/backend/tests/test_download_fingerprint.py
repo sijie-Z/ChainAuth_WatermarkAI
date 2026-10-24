@@ -1,4 +1,5 @@
 """下载指纹副本测试"""
+import uuid
 from datetime import datetime, timedelta
 from io import BytesIO
 
@@ -126,3 +127,103 @@ def test_licensed_download_creates_and_reuses_fingerprint(
     items = ledger.get_json()['data']['items']
     entry = next(item for item in items if item['license'])
     assert entry['fingerprint']['code'] == code
+
+
+def test_download_ticket_streams_with_fingerprint(
+    client, app, tmp_path, auth_header
+):
+    asset_id, license_id, licensee_id, licensee_header = setup_licensed_asset(
+        client, app, tmp_path, auth_header
+    )
+
+    issued = client.post(
+        f'/api/assets/{asset_id}/download-ticket',
+        json={'territory': '中国大陆'},
+        headers=licensee_header,
+    )
+    assert issued.status_code == 200, issued.get_json()
+    data = issued.get_json()['data']
+    assert data['ticket']
+    assert data['expires_in'] > 0
+    code = data['fingerprint_code']
+    assert code and code.startswith('FP-')
+
+    # 票据方式无需 Authorization 头，浏览器可直接流式下载
+    download = client.get(
+        f"/api/assets/{asset_id}/download?ticket={data['ticket']}"
+    )
+    assert download.status_code == 200, download.get_json()
+    assert download.headers.get('X-Download-Fingerprint') == code
+    assert 'attachment' in download.headers.get('Content-Disposition', '')
+
+    with app.app_context():
+        fingerprint = DownloadFingerprint.query.filter_by(
+            license_id=license_id, asset_id=asset_id
+        ).one()
+        assert fingerprint.fingerprint_code == code
+        record = DownloadRecord.query.filter_by(
+            license_id=license_id, status='success'
+        ).one()
+        assert record.fingerprint_id == fingerprint.id
+        assert db.session.get(License, license_id).download_count == 1
+
+
+def test_download_ticket_rejects_tampering_and_wrong_asset(
+    client, app, tmp_path, auth_header
+):
+    asset_id, _license_id, _licensee_id, _licensee_header = setup_licensed_asset(
+        client, app, tmp_path, auth_header
+    )
+
+    issued = client.post(
+        f'/api/assets/{asset_id}/download-ticket',
+        json={},
+        headers=auth_header,
+    )
+    ticket = issued.get_json()['data']['ticket']
+
+    tampered = client.get(
+        f'/api/assets/{asset_id}/download?ticket={ticket}x'
+    )
+    assert tampered.status_code == 401
+
+    wrong_asset = client.get(
+        f'/api/assets/{uuid.uuid4()}/download?ticket={ticket}'
+    )
+    assert wrong_asset.status_code == 401
+
+    missing = client.get(
+        f'/api/assets/{asset_id}/download?ticket=not-a-ticket'
+    )
+    assert missing.status_code == 401
+
+
+def test_download_ticket_denies_user_without_license(
+    client, app, tmp_path, auth_header
+):
+    asset_id, _license_id, _licensee_id, _licensee_header = setup_licensed_asset(
+        client, app, tmp_path, auth_header
+    )
+    outsider_header = register_and_login(client, 'ticket_outsider')
+
+    issued = client.post(
+        f'/api/assets/{asset_id}/download-ticket',
+        json={'territory': '中国大陆'},
+        headers=outsider_header,
+    )
+    assert issued.status_code == 403
+    assert '授权' in issued.get_json()['message']
+
+    with app.app_context():
+        outsider = User.query.filter_by(username='ticket_outsider').one()
+        denied = DownloadRecord.query.filter_by(
+            user_id=outsider.id, status='denied'
+        ).one()
+        assert '授权' in denied.denial_reason
+
+    invalid = client.post(
+        f'/api/assets/{asset_id}/download-ticket',
+        json={'purpose': 'not-a-purpose'},
+        headers=outsider_header,
+    )
+    assert invalid.status_code == 400

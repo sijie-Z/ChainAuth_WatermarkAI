@@ -126,13 +126,13 @@ FLASK_APP=run.py flask db upgrade
 ### 运行测试
 
 ```bash
-# 后端测试（366个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/授权视图/资产回收站/侵权线索/批量巡检/备份恢复/存储巡检/水印鲁棒性实验/证据包导出与核验/审计日志完整性/HTTP错误处理/对象级可见性）
+# 后端测试（369个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/授权视图/资产回收站/侵权线索/批量巡检/备份恢复/存储巡检/水印鲁棒性实验/证据包导出与核验/审计日志完整性/HTTP错误处理/对象级可见性）
 cd backend && python -m pytest tests/ -v
 
 # Windows 内存受限时：逐文件隔离子进程运行（推荐）
 cd backend && python scripts/run_tests.py
 
-# 前端单元测试（49 个用例）
+# 前端单元测试（50 个用例）
 cd frontend && npm run test:ci
 
 # Windows 内存受限时：逐文件运行前端测试
@@ -167,7 +167,7 @@ garden-asset-platform/
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
 │   ├── migrations/                # Alembic 迁移（baseline + versions）
-│   ├── tests/                     # pytest测试（366个用例）
+│   ├── tests/                     # pytest测试（369个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -213,7 +213,8 @@ garden-asset-platform/
 | GET | `/api/assets/:id` | 资产详情 |
 | PUT | `/api/assets/:id` | 编辑标题、著录说明与标签（所有者/资产管理员，标签整体替换） |
 | POST | `/api/assets/:id/restore` | 恢复已删除资产为草稿（所有者/资产管理员） |
-| GET | `/api/assets/:id/download` | 下载资产（授权用户需传 `purpose`/`territory` 申报范围；影像会生成可见指纹副本，响应头 `X-Download-Fingerprint`） |
+| GET | `/api/assets/:id/download` | 下载资产（授权用户需传 `purpose`/`territory` 申报范围；影像会生成可见指纹副本，响应头 `X-Download-Fingerprint`；也接受短时 `ticket` 参数） |
+| POST | `/api/assets/:id/download-ticket` | 申请 120 秒短时下载票据（绑定资产/用户/用途/地域），浏览器可凭票据直接流式下载大文件 |
 | GET | `/api/assets/stats` | 资产统计（含水印趋势） |
 | GET | `/api/assets/my` | 我的资产 |
 | GET | `/api/assets/:id/thumbnail` | 资产缩略图（`?size=card` 返回列表卡片图） |
@@ -383,6 +384,7 @@ Docker 部署见 `garden-asset-platform/.env.example`；本地开发见 `backend
 | `BACKUP_DIR` | 数据库备份目录 | `./backups` |
 | `EVIDENCE_PACKAGE_MAX_BYTES` | 证据包允许打包的二进制总大小，超出时仅导出清单与证书 | `209715200`（200MB） |
 | `EVIDENCE_VERIFY_MAX_BYTES` | 证据包核验上传大小上限 | `20971520`（20MB） |
+| `DOWNLOAD_TICKET_MAX_AGE` | 下载票据有效期（秒），过期需重新申请 | `120` |
 | `AUDIT_HMAC_KEY` | 审计日志 HMAC 密钥；留空时回退到 `SECRET_KEY` | 空 |
 
 > 多 worker 部署（4 个 gunicorn worker）默认关闭任务调度器，避免备份/授权过期任务重复执行。如需启用，设置 `SCHEDULER_ENABLED=true`，并确保只运行一个调度进程（或改用外部 cron）。

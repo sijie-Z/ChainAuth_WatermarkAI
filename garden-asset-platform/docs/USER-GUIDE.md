@@ -118,6 +118,9 @@
 **打开视频/PDF/三维模型会立刻下载整个文件吗？**
 不会。超过 25MB 的预览会先显示文件大小与“加载预览”按钮，由你决定是否消耗流量；小于 25MB 的视频、PDF 与三维模型仍会自动加载。图片始终使用缩略图，点击后才查看原图。
 
+**下载大文件会把整个文件读进浏览器内存吗？**
+不会。详情页与“我的授权”下载会先申请一个 120 秒有效的短时票据，再由浏览器直接访问下载地址流式写入磁盘；票据绑定资产、账号、用途与地域，实际下载时服务端会重新校验授权并写入台账，因此不能拿旧票据继续下载已撤销的授权。影像的指纹码仍在开始下载时提示，并记录在下载台账中。
+
 **水印/存证任务提交后页面能关吗？**  
 可以。任务已写入数据库队列，后台 worker 会继续执行；重新打开资产详情会看到最新状态。任务卡在排队时可运行 `flask tasks status` 查看是否有在线 worker、是否积压或超时；失败任务可在接口或页面重试；超时任务由 `flask tasks reconcile` 或调度器重新排队。
 
@@ -206,7 +209,7 @@ python scripts/seed_demo_assets.py --reset
 ## 7. 测试
 
 ```bash
-# 后端 366 个用例
+# 后端 369 个用例
 cd backend && python -m pytest tests/ -q
 
 # Windows 内存不足时：每个测试文件独立进程运行
@@ -219,13 +222,13 @@ cd backend && python -m flask backup list
 # 存储巡检（只读，不删除文件）
 cd backend && python -m flask storage report
 
-# 前端 49 个单元测试（单 worker，降低内存占用）
+# 前端 50 个单元测试（单 worker，降低内存占用）
 cd frontend && npm run test:ci
 
 # Windows 内存不足时：逐文件运行前端测试
 cd frontend && npm run test:ci:safe
 
-# 22 个 Playwright 点击流
+# 23 个 Playwright 点击流
 cd frontend && npx playwright test
 ```
 

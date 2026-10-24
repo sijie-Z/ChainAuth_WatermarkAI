@@ -93,6 +93,18 @@ describe('api modules', () => {
     })
   })
 
+  it('assetApi.createDownloadTicket posts declared usage scope', () => {
+    assetApi.createDownloadTicket('asset-1', {
+      purpose: 'teaching_research',
+      territory: '中国大陆'
+    })
+
+    expect(api.post).toHaveBeenCalledWith('/assets/asset-1/download-ticket', {
+      purpose: 'teaching_research',
+      territory: '中国大陆'
+    })
+  })
+
   it('notificationApi exposes server preferences and SSE URL', () => {
     notificationApi.updatePreferences({ email_enabled: true, email_groups: ['license'] })
     expect(api.put).toHaveBeenCalledWith('/notifications/preferences', {

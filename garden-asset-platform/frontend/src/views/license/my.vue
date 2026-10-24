@@ -266,9 +266,10 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { parseBackendDate } from '@/utils'
+import { startAssetDownload } from '@/utils/download'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
-import { licenseApi, assetApi } from '@/api/modules'
+import { licenseApi } from '@/api/modules'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
@@ -506,33 +507,16 @@ async function downloadAsset(row) {
     if (['中国大陆', '中国港澳台', '全球', '海外'].includes(row.territory)) {
       params.territory = row.territory
     }
-    const response = await assetApi.download(row.asset_id, params)
-    const url = window.URL.createObjectURL(new Blob([response.data]))
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', `${row.asset_code}.${(row.file_format || 'bin').toLowerCase()}`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.URL.revokeObjectURL(url)
-    const fingerprint = response.headers?.['x-download-fingerprint']
+    const ticket = await startAssetDownload(row.asset_id, params)
     ElMessage.success(
-      fingerprint ? `下载开始，指纹 ${fingerprint}` : '下载开始'
+      ticket.fingerprint_code
+        ? `下载开始，指纹 ${ticket.fingerprint_code}`
+        : '下载开始'
     )
   } catch (error) {
-    let message = '下载失败，请确认授权仍然有效'
-    const data = error.response?.data
-    if (data instanceof Blob) {
-      try {
-        const parsed = JSON.parse(await data.text())
-        message = parsed.message || message
-      } catch {
-        // 保留默认提示
-      }
-    } else if (data?.message) {
-      message = data.message
-    }
-    ElMessage.error(message)
+    ElMessage.error(
+      error.response?.data?.message || error.message || '下载失败，请确认授权仍然有效'
+    )
   } finally {
     downloadingId.value = null
   }

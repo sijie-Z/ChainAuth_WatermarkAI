@@ -225,7 +225,8 @@ def register_api_resources(app):
     # 资产相关
     from app.resources.asset import (
         AssetListResource, AssetResource, AssetUploadResource,
-        AssetDownloadResource, AssetFavoriteResource, AssetStatsResource,
+        AssetDownloadResource, AssetDownloadTicketResource,
+        AssetFavoriteResource, AssetStatsResource,
         MyAssetsResource, AssetTagsResource, AssetPublishResource, AssetApproveResource,
         AssetThumbnailResource, AssetRelatedResource, FavoriteListResource,
         PublicStatsResource, TagListResource, AssetPreviewResource,
@@ -242,6 +243,10 @@ def register_api_resources(app):
     api.add_resource(FavoriteListResource, '/favorites')
     api.add_resource(AssetUploadResource, '/assets/upload')
     api.add_resource(AssetDownloadResource, '/assets/<string:asset_id>/download')
+    api.add_resource(
+        AssetDownloadTicketResource,
+        '/assets/<string:asset_id>/download-ticket'
+    )
     api.add_resource(AssetFavoriteResource, '/assets/<string:asset_id>/favorite')
     api.add_resource(AssetStatsResource, '/assets/stats')
     api.add_resource(MyAssetsResource, '/assets/my')

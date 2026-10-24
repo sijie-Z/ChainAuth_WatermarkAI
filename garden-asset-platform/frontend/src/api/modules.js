@@ -38,6 +38,7 @@ export const assetApi = {
     responseType: 'blob',
     timeout: 0
   }),
+  createDownloadTicket: (id, data) => api.post(`/assets/${id}/download-ticket`, data),
   preview: (id) => api.get(`/assets/${id}/preview`, {
     responseType: 'blob',
     timeout: 0

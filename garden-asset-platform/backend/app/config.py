@@ -117,6 +117,9 @@ class Config:
     EVIDENCE_VERIFY_MAX_BYTES = int(
         os.environ.get('EVIDENCE_VERIFY_MAX_BYTES', str(20 * 1024 * 1024))
     )
+    DOWNLOAD_TICKET_MAX_AGE = int(
+        os.environ.get('DOWNLOAD_TICKET_MAX_AGE', '120')
+    )
 
     # 审计日志 HMAC 密钥；留空时回退到 SECRET_KEY
     AUDIT_HMAC_KEY = os.environ.get('AUDIT_HMAC_KEY', '')

@@ -742,122 +742,202 @@ class AssetThumbnailResource(Resource):
         )
 
 
-class AssetDownloadResource(Resource):
-    """资产下载"""
+def _download_ticket_serializer():
+    from itsdangerous import URLSafeTimedSerializer
+    return URLSafeTimedSerializer(
+        current_app.config['SECRET_KEY'],
+        salt='asset-download-ticket'
+    )
 
-    @jwt_required()
+
+DOWNLOAD_TICKET_MAX_AGE = 120
+
+
+def _download_ticket_max_age():
+    return int(current_app.config.get(
+        'DOWNLOAD_TICKET_MAX_AGE', DOWNLOAD_TICKET_MAX_AGE
+    ))
+
+
+def _verify_download_ticket(ticket):
+    try:
+        return _download_ticket_serializer().loads(
+            ticket, max_age=_download_ticket_max_age()
+        )
+    except Exception:
+        return None
+
+
+def _asset_download_error(asset, user, user_id):
+    """资产基础可下载性检查；None 表示通过。"""
+    if not asset:
+        return {'code': 404, 'message': '资产不存在'}, 404
+
+    is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
+    if asset.status == 'deleted' and user.role not in ADMIN_ROLES:
+        return {'code': 404, 'message': '资产不存在'}, 404
+    if asset.status != 'published' and not (is_owner or user.role in ADMIN_ROLES):
+        return {'code': 403, 'message': '资产未发布'}, 403
+    return None
+
+
+def _download_scope_decision(asset, user_id, user, purpose, territory):
+    """返回 (可用授权, 拒绝原因, 台账使用的授权ID)。"""
+    now = datetime.utcnow()
+    licenses = License.query.filter(
+        License.asset_id == asset.id,
+        License.licensee_id == user_id,
+        License.status == 'active',
+        License.start_time <= now,
+        or_(License.end_time.is_(None), License.end_time > now),
+    ).order_by(License.id.asc()).all()
+
+    is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
+    bypass_scope = is_owner or user.role in ADMIN_ROLES
+    current_version = AssetVersion.query.filter_by(
+        asset_id=asset.id
+    ).order_by(AssetVersion.version_no.desc()).first()
+
+    selected_license = None
+    denial_reason = None
+    if not bypass_scope:
+        if not licenses:
+            denial_reason = '无下载权限，请先申请授权'
+        else:
+            from app.services.license_scope import scope_violation
+            reasons = []
+            for license_row in licenses:
+                reason = scope_violation(
+                    license_row,
+                    source_format=asset.file_format,
+                    purpose=purpose,
+                    territory=territory,
+                    current_version_id=current_version.id if current_version else None,
+                    current_version_no=current_version.version_no if current_version else None,
+                )
+                if not reason:
+                    selected_license = license_row
+                    break
+                reasons.append(reason)
+            if not selected_license:
+                denial_reason = reasons[0] if reasons else '无下载权限'
+
+    return selected_license, denial_reason, (licenses[0].id if licenses else None)
+
+
+def _record_denied_download(asset, user, user_id, purpose, territory,
+                            denial_reason, license_id):
+    from app.models.extra import DownloadRecord
+
+    record = DownloadRecord(
+        asset_id=asset.id,
+        user_id=user_id,
+        license_id=license_id,
+        status='denied',
+        denial_reason=denial_reason[:300],
+        usage_purpose=purpose,
+        territory=territory,
+        ip_address=request.remote_addr,
+        user_agent=request.headers.get('User-Agent', '')[:500]
+    )
+    db.session.add(record)
+    db.session.commit()
+    OperationLog.log(
+        user=user,
+        action='download_denied',
+        module='license',
+        description=f'下载被拒: {asset.asset_code} · {denial_reason}',
+        target_type='asset',
+        target_id=asset.id,
+        request=request,
+        status='failed',
+        error_message=denial_reason
+    )
+
+
+def _download_file_path(asset, license_row, user):
+    """生成（或复用）指纹副本并返回实际文件路径与指纹。"""
+    fingerprint = None
+    if license_row and asset.asset_type == 'image':
+        try:
+            from app.services.fingerprint_service import get_or_create_fingerprint
+            fingerprint, _ = get_or_create_fingerprint(asset, license_row, user)
+        except Exception:
+            current_app.logger.warning(
+                '生成下载指纹失败，回退到普通水印副本', exc_info=True
+            )
+
+    file_path = (
+        fingerprint.file_path if fingerprint else
+        os.path.abspath(asset.watermarked_path or asset.storage_path or '')
+    )
+    return file_path, fingerprint
+
+
+def _download_display_name(asset, file_path):
+    actual_ext = os.path.splitext(file_path)[1].lstrip('.').lower()
+    download_ext = actual_ext or (asset.file_format or '').lower()
+    if not download_ext:
+        return asset.asset_code
+    return f'{asset.asset_code}.{download_ext}'
+
+
+class AssetDownloadResource(Resource):
+    """资产下载（支持 JWT 或短时下载票据，浏览器可直接流式落盘）"""
+
+    @jwt_required(optional=True)
     def get(self, asset_id):
         """下载资产"""
-        user_id = get_jwt_identity()
-        user = User.query.get(user_id)
+        ticket = (request.args.get('ticket') or '').strip()
+        if ticket:
+            payload = _verify_download_ticket(ticket)
+            if not payload or payload.get('asset_id') != asset_id:
+                return {
+                    'code': 401,
+                    'message': '下载凭证无效或已过期，请重新发起下载'
+                }, 401
+            user_id = payload.get('user_id')
+            user = User.query.get(user_id)
+            if not user or user.status != 'active':
+                return {'code': 401, 'message': '账号不可用，请重新登录'}, 401
+            purpose = payload.get('purpose') or None
+            territory = payload.get('territory') or None
+        else:
+            user_id = get_jwt_identity()
+            if not user_id:
+                return {'code': 401, 'message': '未授权访问'}, 401
+            user = User.query.get(user_id)
+            if not user:
+                return {'code': 401, 'message': '账号不存在或已被禁用'}, 401
+            purpose = (request.args.get('purpose') or '').strip() or None
+            territory = (request.args.get('territory') or '').strip() or None
+            from app.services.license_scope import PURPOSE_OPTIONS, TERRITORY_OPTIONS
+            if purpose and purpose not in PURPOSE_OPTIONS:
+                return {'code': 400, 'message': '使用目的选项无效'}, 400
+            if territory and territory not in TERRITORY_OPTIONS:
+                return {'code': 400, 'message': '使用地域选项无效'}, 400
+
         asset = Asset.query.get(asset_id)
-
-        if not asset:
-            return {'code': 404, 'message': '资产不存在'}, 404
-
-        is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
-
-        # 所有者与管理员可下载未发布资产；已删除仅管理员可见
-        if asset.status == 'deleted' and user.role not in ADMIN_ROLES:
-            return {'code': 404, 'message': '资产不存在'}, 404
-        if asset.status != 'published' and not (is_owner or user.role in ADMIN_ROLES):
-            return {'code': 403, 'message': '资产未发布'}, 403
+        error = _asset_download_error(asset, user, user_id)
+        if error:
+            return error
 
         # 检查下载权限：有效授权未过期且在授权范围内，或本人/管理员
-        from app.models.license import License
         from app.models.extra import DownloadRecord
-        from app.services.license_scope import (
-            PURPOSE_OPTIONS, TERRITORY_OPTIONS, scope_violation
+
+        selected_license, denial_reason, fallback_license_id = (
+            _download_scope_decision(asset, user_id, user, purpose, territory)
         )
-        now = datetime.utcnow()
-
-        purpose = (request.args.get('purpose') or '').strip() or None
-        territory = (request.args.get('territory') or '').strip() or None
-        if purpose and purpose not in PURPOSE_OPTIONS:
-            return {'code': 400, 'message': '使用目的选项无效'}, 400
-        if territory and territory not in TERRITORY_OPTIONS:
-            return {'code': 400, 'message': '使用地域选项无效'}, 400
-
-        licenses = License.query.filter(
-            License.asset_id == asset_id,
-            License.licensee_id == user_id,
-            License.status == 'active',
-            License.start_time <= now,
-            or_(License.end_time.is_(None), License.end_time > now),
-        ).order_by(License.id.asc()).all()
-
-        bypass_scope = is_owner or user.role in ADMIN_ROLES
-        current_version = AssetVersion.query.filter_by(
-            asset_id=asset_id
-        ).order_by(AssetVersion.version_no.desc()).first()
-        selected_license = None
-        denial_reason = None
-        if not bypass_scope:
-            if not licenses:
-                denial_reason = '无下载权限，请先申请授权'
-            else:
-                reasons = []
-                for license_row in licenses:
-                    reason = scope_violation(
-                        license_row,
-                        source_format=asset.file_format,
-                        purpose=purpose,
-                        territory=territory,
-                        current_version_id=current_version.id if current_version else None,
-                        current_version_no=current_version.version_no if current_version else None,
-                    )
-                    if not reason:
-                        selected_license = license_row
-                        break
-                    reasons.append(reason)
-                if not selected_license:
-                    denial_reason = reasons[0] if reasons else '无下载权限'
-
         if denial_reason:
-            record = DownloadRecord(
-                asset_id=asset_id,
-                user_id=user_id,
-                license_id=licenses[0].id if licenses else None,
-                status='denied',
-                denial_reason=denial_reason[:300],
-                usage_purpose=purpose,
-                territory=territory,
-                ip_address=request.remote_addr,
-                user_agent=request.headers.get('User-Agent', '')[:500]
-            )
-            db.session.add(record)
-            db.session.commit()
-            OperationLog.log(
-                user=user,
-                action='download_denied',
-                module='license',
-                description=f'下载被拒: {asset.asset_code} · {denial_reason}',
-                target_type='asset',
-                target_id=asset_id,
-                request=request,
-                status='failed',
-                error_message=denial_reason
+            _record_denied_download(
+                asset, user, user_id, purpose, territory,
+                denial_reason, fallback_license_id
             )
             return {'code': 403, 'message': denial_reason}, 403
 
         # 先确认文件存在，避免“下载失败但下载量已经增加”
-        fingerprint = None
-        if selected_license and asset.asset_type == 'image':
-            try:
-                from app.services.fingerprint_service import (
-                    get_or_create_fingerprint
-                )
-                fingerprint, _ = get_or_create_fingerprint(
-                    asset, selected_license, user
-                )
-            except Exception:
-                current_app.logger.warning(
-                    '生成下载指纹失败，回退到普通水印副本', exc_info=True
-                )
-
-        file_path = (
-            fingerprint.file_path if fingerprint else
-            os.path.abspath(asset.watermarked_path or asset.storage_path or '')
+        file_path, fingerprint = _download_file_path(
+            asset, selected_license, user
         )
         if not file_path or not os.path.exists(file_path):
             return {'code': 404, 'message': '文件不存在'}, 404
@@ -893,22 +973,91 @@ class AssetDownloadResource(Resource):
         )
 
         from flask import send_file as flask_send_file
-
-        # 水印副本可能被转成 PNG；下载名必须跟随实际文件，而不是原始扩展名
-        actual_ext = os.path.splitext(file_path)[1].lstrip('.').lower()
-        download_ext = actual_ext or (asset.file_format or '').lower()
-        download_name = f"{asset.asset_code}.{download_ext}" if download_ext else asset.asset_code
-
         response = flask_send_file(
             file_path,
             as_attachment=True,
-            download_name=download_name
+            download_name=_download_display_name(asset, file_path)
         )
         if fingerprint:
             response.headers['X-Download-Fingerprint'] = (
                 fingerprint.fingerprint_code
             )
         return response
+
+
+class AssetDownloadTicketResource(Resource):
+    """签发短时下载票据，供浏览器直接流式下载大文件"""
+
+    @rate_limit(limit=30, window=60)
+    @jwt_required()
+    def post(self, asset_id):
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        if not user:
+            return {'code': 401, 'message': '账号不存在或已被禁用'}, 401
+
+        asset = Asset.query.get(asset_id)
+        error = _asset_download_error(asset, user, user_id)
+        if error:
+            return error
+
+        data = request.get_json(silent=True) or {}
+        purpose = (data.get('purpose') or '').strip() or None
+        territory = (data.get('territory') or '').strip() or None
+        from app.services.license_scope import PURPOSE_OPTIONS, TERRITORY_OPTIONS
+        if purpose and purpose not in PURPOSE_OPTIONS:
+            return {'code': 400, 'message': '使用目的选项无效'}, 400
+        if territory and territory not in TERRITORY_OPTIONS:
+            return {'code': 400, 'message': '使用地域选项无效'}, 400
+
+        selected_license, denial_reason, fallback_license_id = (
+            _download_scope_decision(asset, user_id, user, purpose, territory)
+        )
+        if denial_reason:
+            _record_denied_download(
+                asset, user, user_id, purpose, territory,
+                denial_reason, fallback_license_id
+            )
+            return {'code': 403, 'message': denial_reason}, 403
+
+        file_path = os.path.abspath(
+            asset.watermarked_path or asset.storage_path or ''
+        )
+        if not file_path or not os.path.exists(file_path):
+            return {'code': 404, 'message': '文件不存在'}, 404
+
+        fingerprint_code = None
+        if selected_license and asset.asset_type == 'image':
+            try:
+                from app.services.fingerprint_service import (
+                    get_or_create_fingerprint
+                )
+                fingerprint, _ = get_or_create_fingerprint(
+                    asset, selected_license, user
+                )
+                fingerprint_code = fingerprint.fingerprint_code
+            except Exception:
+                current_app.logger.warning(
+                    '生成下载指纹失败，下载时将回退到普通水印副本',
+                    exc_info=True
+                )
+
+        payload = {
+            'asset_id': asset_id,
+            'user_id': user_id,
+            'purpose': purpose,
+            'territory': territory,
+            'nonce': uuid.uuid4().hex,
+        }
+        ticket = _download_ticket_serializer().dumps(payload)
+        return {
+            'code': 200,
+            'data': {
+                'ticket': ticket,
+                'expires_in': _download_ticket_max_age(),
+                'fingerprint_code': fingerprint_code,
+            }
+        }, 200
 
 
 class AssetPreviewResource(Resource):

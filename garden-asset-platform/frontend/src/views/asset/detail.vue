@@ -929,6 +929,7 @@ import {
 import { assetApi, collectionApi, licenseApi, watermarkApi, blockchainApi, taskApi } from '@/api/modules'
 import { useUserStore } from '@/stores/user'
 import { copyToClipboard, parseBackendDate } from '@/utils'
+import { startAssetDownload } from '@/utils/download'
 import EvidenceChain from '@/components/common/EvidenceChain.vue'
 import AnnotationBoard from '@/components/asset/AnnotationBoard.vue'
 import CommentSection from '@/components/asset/CommentSection.vue'
@@ -1697,34 +1698,15 @@ async function performDownload(params) {
   if (downloading.value) return
   downloading.value = true
   try {
-    const response = await assetApi.download(asset.value.id, params)
-    const url = URL.createObjectURL(response.data)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `${asset.value.asset_code}.${(asset.value.file_format || 'bin').toLowerCase()}`
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    URL.revokeObjectURL(url)
-    const fingerprint = response.headers?.['x-download-fingerprint']
+    const ticket = await startAssetDownload(asset.value.id, params)
     ElMessage.success(
-      fingerprint ? `下载已开始，指纹 ${fingerprint}` : '下载已开始'
+      ticket.fingerprint_code
+        ? `下载已开始，指纹 ${ticket.fingerprint_code}`
+        : '下载已开始'
     )
     loadExtras()
   } catch (error) {
-    let message = '下载失败'
-    const data = error.response?.data
-    if (data instanceof Blob) {
-      try {
-        const parsed = JSON.parse(await data.text())
-        message = parsed.message || message
-      } catch {
-        // 保留默认提示
-      }
-    } else if (data?.message) {
-      message = data.message
-    }
-    ElMessage.error(message)
+    ElMessage.error(error.response?.data?.message || error.message || '下载失败')
   } finally {
     downloading.value = false
   }
