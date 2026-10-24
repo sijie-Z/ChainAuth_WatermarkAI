@@ -160,7 +160,8 @@ def test_recertify_new_version_and_public_verify(client, app, tmp_path, auth_hea
 
     # 证书页明确标注旧证书对应历史版本
     old_cert = client.get(
-        f"/api/blockchain/certificate/{first['certificate_id']}"
+        f"/api/blockchain/certificate/{first['certificate_id']}",
+        headers=auth_header,
     ).get_json()['data']
     assert old_cert['certificate']['version_no'] == 1
     assert old_cert['is_current_version'] is False
@@ -169,7 +170,8 @@ def test_recertify_new_version_and_public_verify(client, app, tmp_path, auth_hea
     assert old_cert['certificate_count'] == 2
 
     new_cert = client.get(
-        f"/api/blockchain/certificate/{second_data['certificate_id']}"
+        f"/api/blockchain/certificate/{second_data['certificate_id']}",
+        headers=auth_header,
     ).get_json()['data']
     assert new_cert['is_current_version'] is True
     assert new_cert['version']['version_no'] == 2

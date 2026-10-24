@@ -184,8 +184,8 @@
             <el-checkbox v-model="form.auto_watermark" :disabled="!hasWatermarkable">
               上传后自动嵌入水印<template v-if="!hasWatermarkable">（仅影像/矢量）</template>
             </el-checkbox>
-            <el-checkbox v-model="form.auto_chain" :disabled="!form.auto_watermark">
-              水印嵌入后自动上链存证
+            <el-checkbox v-model="form.auto_chain" :disabled="!form.auto_watermark && hasWatermarkable">
+              自动上链存证（无盲水印类型按文件哈希存证）
             </el-checkbox>
           </div>
           <p class="watermark-hint">
@@ -309,7 +309,6 @@ watch(hasWatermarkable, supported => {
     form.value.auto_watermark = true
   } else {
     form.value.auto_watermark = false
-    form.value.auto_chain = false
   }
 }, { immediate: true })
 
@@ -534,9 +533,7 @@ async function processItem(item) {
 
     if (
       form.value.auto_chain
-      && form.value.auto_watermark
-      && item.watermarkReady
-      && needsWatermark
+      && (item.watermarkReady || !needsWatermark)
     ) {
       item.status = 'chaining'
       item.progress = 85

@@ -54,6 +54,19 @@ def _item(key, title, state, time=None, description=None, fields=None, link=None
 
 def _watermark_item(asset):
     status = asset.watermark_status or 'none'
+    if (
+        asset.asset_type not in ('image', 'vector')
+        and status not in ('embedded', 'verified')
+    ):
+        return _item(
+            'watermark',
+            '盲水印',
+            STATE_DONE,
+            None,
+            '该类型不适用盲水印，使用文件哈希与版本记录存证',
+            {'处理方式': '不适用（哈希存证）'}
+        )
+
     if status in ('embedded', 'verified'):
         state = STATE_DONE
         description = '水印已写入文件，可作为副本归属比对的依据'

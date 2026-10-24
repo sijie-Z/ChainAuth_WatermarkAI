@@ -88,8 +88,8 @@
             </div>
             <div class="info-item">
               <span class="info-label">水印状态</span>
-              <el-tag :type="certificate.watermark_id ? 'success' : 'info'" size="small">
-                {{ certificate.watermark_id ? '已嵌入' : '未嵌入' }}
+              <el-tag :type="certificate.watermark_id ? 'success' : (watermarkApplicable ? 'info' : 'warning')" size="small">
+                {{ certificate.watermark_id ? '已嵌入' : (watermarkApplicable ? '未嵌入' : '不适用（哈希存证）') }}
               </el-tag>
             </div>
           </div>
@@ -204,12 +204,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { parseBackendDate } from '@/utils'
+import { computed, ref, onMounted } from 'vue'
+import { copyToClipboard, parseBackendDate } from '@/utils'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Printer, Share, Link, CircleCheck, CircleClose } from '@element-plus/icons-vue'
-import QRCode from 'qrcode'
 import { blockchainApi } from '@/api/modules'
 
 const route = useRoute()
@@ -220,6 +219,9 @@ const loadError = ref(false)
 const certificate = ref({})
 const certBody = ref(null)
 const qrDataUrl = ref('')
+const watermarkApplicable = computed(() =>
+  ['image', 'vector'].includes(certificate.value.asset_type)
+)
 
 async function loadCertificate() {
   loading.value = true
@@ -266,6 +268,7 @@ async function buildQrCode() {
     return
   }
   try {
+    const { default: QRCode } = await import('qrcode')
     qrDataUrl.value = await QRCode.toDataURL(window.location.href, {
       margin: 1,
       width: 220,
@@ -277,10 +280,10 @@ async function buildQrCode() {
   }
 }
 
-function copyHash(hash) {
+async function copyHash(hash) {
   if (!hash) return
-  navigator.clipboard.writeText(hash)
-  ElMessage.success('已复制到剪贴板')
+  const ok = await copyToClipboard(hash)
+  ElMessage[ok ? 'success' : 'error'](ok ? '已复制到剪贴板' : '复制失败，请手动选择')
 }
 
 function printCertificate() {
@@ -293,9 +296,9 @@ function viewAsset() {
   }
 }
 
-function shareCertificate() {
-  navigator.clipboard.writeText(window.location.href)
-  ElMessage.success('证书链接已复制')
+async function shareCertificate() {
+  const ok = await copyToClipboard(window.location.href)
+  ElMessage[ok ? 'success' : 'error'](ok ? '证书链接已复制' : '复制失败，请手动复制地址栏链接')
 }
 
 function getTypeName(type) {

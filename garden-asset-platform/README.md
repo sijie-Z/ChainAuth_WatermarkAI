@@ -13,7 +13,7 @@
 | 模块 | 功能 | 技术实现 |
 |------|------|----------|
 | 资产管理 | 数字资产上传、浏览、分类、检索、下载 | Vue3 + Flask + MinIO |
-| 数字水印 | DCT + QIM 盲水印嵌入与提取，对 JPEG、噪声与 50%–150% 缩放具备恢复能力，具体以水印实验室实测为准 | Python OpenCV + NumPy |
+| 数字水印 | DCT + QIM 盲水印嵌入与提取，对 JPEG、噪声与 50%–150% 缩放具备恢复能力，具体以水印实验室实测为准；模型/文档/视频没有盲水印能力，按文件哈希与版本存证 | Python OpenCV + NumPy |
 | 水印实验室 | 上传图片后真实执行嵌入与 8 项攻击，返回 PSNR、NC、水印 ID 恢复情况与每项耗时，可下载 Markdown 报告 | DCT/QIM + Flask + Vue3 |
 | 区块链存证 | 按文件版本签发存证证书，支持历史版本证书追溯；默认本地模拟，可配置接入 FISCO BCOS | FISCO BCOS + Python SDK（可选） |
 | 异步任务 | 水印/存证任务持久化入队，后台 worker 执行，支持进度查询、失败重试与超时对账；worker 心跳与队列健康度可观测 | Flask + 数据库队列 + 进程内/独立 worker |
@@ -126,7 +126,7 @@ FLASK_APP=run.py flask db upgrade
 ### 运行测试
 
 ```bash
-# 后端测试（353个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/侵权线索/批量巡检/备份恢复/存储巡检/水印鲁棒性实验/证据包导出与核验/审计日志完整性）
+# 后端测试（360个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/授权视图/侵权线索/批量巡检/备份恢复/存储巡检/水印鲁棒性实验/证据包导出与核验/审计日志完整性/对象级可见性）
 cd backend && python -m pytest tests/ -v
 
 # Windows 内存受限时：逐文件隔离子进程运行（推荐）
@@ -167,7 +167,7 @@ garden-asset-platform/
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
 │   ├── migrations/                # Alembic 迁移（baseline + versions）
-│   ├── tests/                     # pytest测试（353个用例）
+│   ├── tests/                     # pytest测试（360个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -217,6 +217,7 @@ garden-asset-platform/
 | GET | `/api/assets/:id/thumbnail` | 资产缩略图（`?size=card` 返回列表卡片图） |
 | GET | `/api/assets/:id/preview` | 在线预览（视频/PDF/GLB/GLTF/STL/OBJ；已发布资产需有效授权；不计下载量） |
 | GET | `/api/assets/:id/related` | 同园林相关资产 |
+| GET | `/api/assets/:id/licenses` | 资产所有者/管理员查看该资产的授权与申请记录（含被授权方、配额、到期） |
 | GET | `/api/assets/:id/evidence` | 资产证据链（上传/水印/存证/证书/发布/授权/下载） |
 | GET | `/api/assets/:id/evidence-package` | 导出证据包 ZIP（所有者/资产管理员；`include_files=0` 仅导出清单） |
 | POST | `/api/evidence/verify-package` | 公开核验证据包 ZIP（结构、SHA-256、平台资产/水印/证书/版本） |
@@ -335,6 +336,7 @@ garden-asset-platform/
 - 生产配置强制校验 `SECRET_KEY`/`JWT_SECRET_KEY`：示例占位文本或不足 32 位时拒绝启动
 - JWT双Token认证（Access 24h + Refresh 30d）；登出同时撤销 refresh token，改密/重置密码后旧 token 立即失效
 - 非 debug 模式下缺失/过期/撤销的 Token 统一返回 401，不会因 Flask-RESTful 异常接管变成 500
+- 对象级可见性：证书、存证历史、标签、收藏与公开接口统一检查资产状态；草稿证据仅所有者/管理员可见，全平台证书列表仅管理员可读，公开链状态不返回 RPC 地址
 - 请求频率限制（Redis计数器，可配置阈值；Redis异常不影响业务执行）
 - 文件上传魔数字节校验（17种文件类型）
 - 文件大小限制（继承Flask MAX_CONTENT_LENGTH）

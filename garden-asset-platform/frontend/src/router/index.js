@@ -5,15 +5,11 @@ import { useUserStore } from '@/stores/user'
 // 管理员角色集合，与后端角色枚举保持一致（无 adm3 / super_admin）
 const ADMIN_ROLES = ['admin', 'asset_admin', 'license_admin', 'adm1', 'adm2']
 
-// 登记所有页面加载器：首屏渲染完成后在浏览器空闲时逐块预取，
-// 让后续点击不再等待路由分包下载，也不会阻塞首屏。
-const prefetchable = []
-const page = (loader, prefetch = true) => {
-  if (prefetch) {
-    prefetchable.push(loader)
-  }
-  return loader
-}
+// 页面加载器：保留统一入口，路由组件仍按需分包
+const page = (loader) => loader
+
+// 记录已触发过的加载器，悬停/聚焦与空闲预取不会重复请求
+const prefetchedLoaders = new WeakSet()
 
 const routes = [
   {
@@ -322,24 +318,58 @@ router.onError(() => {
 
 let prefetchStarted = false
 
+// 只预取最常用的几个页面；其余页面在用户悬停/聚焦链接时按需预取。
+const CORE_PREFETCH_PATHS = ['/assets', '/trace', '/guide']
+
 /**
- * 首屏渲染后逐块预取路由组件。
- * 每个页面加载完后才预约下一个空闲时段，避免一次性抢占带宽。
+ * 预取某个路径对应的路由分包。
+ * 会沿匹配链找到最后一个异步组件，避免漏掉后台子路由。
+ */
+export function prefetchRoute(path) {
+  if (!path || typeof window === 'undefined') return null
+  try {
+    const resolved = router.resolve(path)
+    const record = [...resolved.matched].reverse().find(item => {
+      const component = item.components?.default || item.component
+      return typeof component === 'function'
+    })
+    const loader = record?.components?.default || record?.component
+    if (typeof loader !== 'function' || prefetchedLoaders.has(loader)) {
+      return loader || null
+    }
+    prefetchedLoaders.add(loader)
+    Promise.resolve().then(loader).catch(() => {})
+    return loader
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 首屏稳定后只预取核心页面。
+ * 弱网/省流模式直接跳过；其余页面在用户表现出意图（悬停/焦点）时再取。
  */
 export function prefetchRoutes() {
   if (prefetchStarted || typeof window === 'undefined') return
   prefetchStarted = true
 
-  const schedule = (cb) => window.setTimeout(cb, 350)
+  const connection = navigator.connection
+  if (connection?.saveData) return
+  if (['slow-2g', '2g'].includes(connection?.effectiveType)) return
+
+  const schedule = (cb) => {
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(cb, { timeout: 2500 })
+    } else {
+      window.setTimeout(cb, 350)
+    }
+  }
 
   let index = 0
   const loadNext = () => {
-    if (index >= prefetchable.length) return
-    const loader = prefetchable[index++]
-    Promise.resolve()
-      .then(loader)
-      .catch(() => {})
-      .finally(() => schedule(loadNext))
+    if (index >= CORE_PREFETCH_PATHS.length) return
+    prefetchRoute(CORE_PREFETCH_PATHS[index++])
+    schedule(loadNext)
   }
 
   window.setTimeout(() => schedule(loadNext), 1200)

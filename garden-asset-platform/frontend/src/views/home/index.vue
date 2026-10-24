@@ -265,7 +265,12 @@
             v-for="(garden, index) in gardens"
             :key="garden.id"
             :class="{ featured: index === 0 }"
+            role="button"
+            tabindex="0"
+            :aria-label="`查看园林 ${garden.name}`"
             @click="goToGarden(garden.id)"
+            @keydown.enter.self.prevent="goToGarden(garden.id)"
+            @keydown.space.self.prevent="goToGarden(garden.id)"
           >
             <div class="garden-visual">
               <img
@@ -273,6 +278,8 @@
                 :src="garden.cover_image"
                 :alt="garden.name"
                 class="garden-image"
+                loading="lazy"
+                decoding="async"
               />
               <div v-else class="garden-placeholder lattice">
                 <span class="garden-glyph">{{ garden.name?.charAt(0) }}</span>

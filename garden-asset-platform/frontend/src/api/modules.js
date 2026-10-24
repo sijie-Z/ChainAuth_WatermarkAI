@@ -24,6 +24,7 @@ export const authApi = {
 export const assetApi = {
   getList: (params) => api.get('/assets', { params }),
   getDetail: (id) => api.get(`/assets/${id}`),
+  getLicenses: (id) => api.get(`/assets/${id}/licenses`),
   getRelated: (id) => api.get(`/assets/${id}/related`),
   getTags: (id) => api.get(`/assets/${id}/tags`),
   create: (formData, config) => config

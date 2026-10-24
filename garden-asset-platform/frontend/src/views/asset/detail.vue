@@ -189,7 +189,7 @@
             <section class="side-block">
               <header class="side-head">
                 <span class="side-kicker">水印状态</span>
-                <StatusTag :status="asset.watermark_status || 'none'" kind="watermark" />
+                <StatusTag :status="requiresWatermark ? (asset.watermark_status || 'none') : 'not_applicable'" kind="watermark" />
               </header>
               <dl class="side-meta">
                 <div v-if="asset.watermark_id" class="side-row">
@@ -206,7 +206,7 @@
                 </div>
               </dl>
               <el-button
-                v-if="canManage && !watermarkReady"
+                v-if="canManage && requiresWatermark && !watermarkReady"
                 type="primary"
                 class="side-action"
                 :loading="watermarking || asset.watermark_status === 'pending'"
@@ -216,13 +216,16 @@
                 {{ asset.watermark_status === 'pending' ? '水印处理中…' : '嵌入水印' }}
               </el-button>
               <el-button
-                v-else-if="canManage"
+                v-else-if="canManage && requiresWatermark"
                 class="side-action"
                 :loading="extracting"
                 @click="extractWatermark"
               >
                 提取并校验水印
               </el-button>
+              <p v-if="!requiresWatermark" class="side-hint">
+                该资产类型不适用盲水印，将使用文件哈希与版本记录存证。
+              </p>
               <p v-if="asset.watermark_status === 'pending'" class="side-hint task-hint">
                 后台水印任务处理中，可以离开此页，稍后回来查看结果。
               </p>
@@ -255,7 +258,7 @@
                 v-if="canManage && asset.chain_status !== 'confirmed'"
                 type="primary"
                 class="side-action"
-                :disabled="!watermarkReady || asset.chain_status === 'pending'"
+                :disabled="!chainReady || asset.chain_status === 'pending'"
                 :loading="chaining || asset.chain_status === 'pending'"
                 @click="registerChain"
               >
@@ -265,7 +268,7 @@
                 查看存证证书
               </el-button>
               <p v-if="!canManage" class="side-hint">存证操作由上传者或资产管理员完成。</p>
-              <p v-else-if="asset.chain_status !== 'confirmed' && !watermarkReady" class="side-hint">
+              <p v-else-if="asset.chain_status !== 'confirmed' && !chainReady" class="side-hint">
                 上链前需先完成水印嵌入
               </p>
               <p v-else-if="asset.chain_status === 'pending'" class="side-hint task-hint">
@@ -303,33 +306,44 @@
               <p v-else-if="canSubmitPublish" class="side-hint">
                 完成水印嵌入后才能提交发布
               </p>
-              <el-button
-                v-if="canDownload"
-                type="primary"
-                class="side-action"
-                :loading="downloading"
-                @click="downloadAsset"
-              >
-                <el-icon><Download /></el-icon>
-                下载资产
-              </el-button>
-              <el-button
-                v-else-if="pendingApplication"
-                class="side-action"
-                @click="goToMyLicenses"
-              >
-                查看审批进度
-              </el-button>
-              <el-button
-                v-else
-                type="primary"
-                class="side-action"
-                :disabled="licenseStatusError"
-                @click="applyLicense"
-              >
-                {{ rejectedApplication ? '重新申请授权' : '申请授权' }}
-              </el-button>
+              <el-skeleton
+                v-if="extrasLoading"
+                class="license-loading"
+                animated
+                :rows="1"
+              />
+              <template v-else>
+                <el-button
+                  v-if="canDownload"
+                  type="primary"
+                  class="side-action"
+                  :loading="downloading"
+                  @click="downloadAsset"
+                >
+                  <el-icon><Download /></el-icon>
+                  下载资产
+                </el-button>
+                <el-button
+                  v-else-if="pendingApplication"
+                  class="side-action"
+                  @click="goToMyLicenses"
+                >
+                  查看审批进度
+                </el-button>
+                <el-button
+                  v-else
+                  type="primary"
+                  class="side-action"
+                  :disabled="licenseStatusError"
+                  @click="applyLicense"
+                >
+                  {{ rejectedApplication ? '重新申请授权' : '申请授权' }}
+                </el-button>
+              </template>
               <el-button class="side-action" @click="goBack">返回资产列表</el-button>
+              <el-button v-if="canManage" text class="side-action" @click="openAssetLicenses">
+                授权与下载记录
+              </el-button>
               <el-button v-if="canManage" text class="side-action" @click="openEditDialog">
                 编辑著录信息
               </el-button>
@@ -351,6 +365,101 @@
             <el-button @click="editVisible = false">取消</el-button>
             <el-button type="primary" :loading="editSaving" @click="saveEdit">保存</el-button>
           </template>
+        </el-dialog>
+
+        <!-- 授权与下载记录 -->
+        <el-dialog
+          v-model="assetLicenseDialogVisible"
+          title="授权与下载记录"
+          width="min(900px, 94vw)"
+        >
+          <p class="asset-license-caption">
+            {{ asset.asset_code }} · {{ asset.title }}
+          </p>
+          <el-skeleton v-if="assetLicensesLoading" animated :rows="4" />
+          <div v-else-if="assetLicensesError" class="evidence-error">
+            <span>授权记录加载失败。</span>
+            <el-button type="primary" link @click="loadAssetLicenses">重试</el-button>
+          </div>
+          <el-tabs v-else>
+            <el-tab-pane :label="`授权记录（${assetLicenses.length}）`">
+              <el-table :data="assetLicenses" stripe row-key="id" style="width: 100%">
+                <el-table-column label="被授权方" min-width="120">
+                  <template #default="{ row }">{{ row.licensee_name || '-' }}</template>
+                </el-table-column>
+                <el-table-column label="状态" width="90">
+                  <template #default="{ row }">
+                    <el-tag size="small" :type="licenseStatusType(row.status)">
+                      {{ licenseStatusLabel(row.status) }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="到期时间" width="120">
+                  <template #default="{ row }">
+                    {{ row.end_time ? formatDate(row.end_time) : '长期' }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="下载 / 配额" width="110">
+                  <template #default="{ row }">
+                    {{ row.download_count || 0 }} / {{ row.max_downloads ?? '不限' }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="用途 / 地域" min-width="180" show-overflow-tooltip>
+                  <template #default="{ row }">
+                    {{ row.usage_purpose_code || row.usage_scope || '-' }} · {{ row.territory || '不限地域' }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作" width="130" fixed="right">
+                  <template #default="{ row }">
+                    <el-button
+                      v-if="row.can_renew"
+                      type="primary"
+                      link
+                      size="small"
+                      @click="renewAssetLicense(row)"
+                    >续期</el-button>
+                    <el-button
+                      v-if="row.can_revoke"
+                      type="danger"
+                      link
+                      size="small"
+                      @click="revokeAssetLicense(row)"
+                    >撤销</el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <el-empty
+                v-if="assetLicenses.length === 0"
+                description="该资产暂无授权记录"
+                :image-size="56"
+              />
+            </el-tab-pane>
+            <el-tab-pane :label="`申请记录（${assetApplications.length}）`">
+              <el-table :data="assetApplications" stripe row-key="id" style="width: 100%">
+                <el-table-column label="申请人" min-width="120">
+                  <template #default="{ row }">{{ row.applicant_name || '-' }}</template>
+                </el-table-column>
+                <el-table-column label="状态" width="100">
+                  <template #default="{ row }">
+                    <el-tag size="small" type="info">{{ applicationStatusLabel(row.status) }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="申请时间" width="120">
+                  <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
+                </el-table-column>
+                <el-table-column label="用途" min-width="220" show-overflow-tooltip>
+                  <template #default="{ row }">
+                    {{ row.usage_purpose || row.usage_scope || '-' }}
+                  </template>
+                </el-table-column>
+              </el-table>
+              <el-empty
+                v-if="assetApplications.length === 0"
+                description="该资产暂无申请记录"
+                :image-size="56"
+              />
+            </el-tab-pane>
+          </el-tabs>
         </el-dialog>
 
         <!-- 分享核验链接 -->
@@ -642,7 +751,7 @@
               </div>
             </el-tab-pane>
 
-            <el-tab-pane label="标注" name="annotations">
+            <el-tab-pane label="标注" name="annotations" lazy>
               <div class="collab-panel">
                 <AnnotationBoard
                   v-if="['image', 'vector'].includes(asset.asset_type)"
@@ -655,7 +764,7 @@
               </div>
             </el-tab-pane>
 
-            <el-tab-pane label="版本" name="versions">
+            <el-tab-pane label="版本" name="versions" lazy>
               <div class="collab-panel">
                 <!-- 版本历史 -->
                 <section class="version-section">
@@ -752,7 +861,7 @@
               </div>
             </el-tab-pane>
 
-            <el-tab-pane label="讨论" name="comments">
+            <el-tab-pane label="讨论" name="comments" lazy>
               <div class="collab-panel">
                 <CommentSection :asset-id="asset.id" />
               </div>
@@ -827,6 +936,12 @@ const favoriteLoading = ref(false)
 const tags = ref([])
 const related = ref([])
 const myLicenses = ref([])
+const extrasLoading = ref(true)
+const assetLicenseDialogVisible = ref(false)
+const assetLicenses = ref([])
+const assetApplications = ref([])
+const assetLicensesLoading = ref(false)
+const assetLicensesError = ref(false)
 const myApplications = ref([])
 const activeDetailTab = ref('evidence')
 const evidence = ref({ items: [], summary: null })
@@ -853,6 +968,7 @@ const collectionSaving = ref(false)
 const versions = ref([])
 const versionsLoading = ref(false)
 const versionsError = ref(false)
+const versionsLoaded = ref(false)
 const versionDialogVisible = ref(false)
 const versionFile = ref(null)
 const versionNote = ref('')
@@ -906,6 +1022,7 @@ const hasHistoricalCertificates = computed(() =>
 const requiresWatermark = computed(() =>
   ['image', 'vector'].includes(asset.value.asset_type)
 )
+const chainReady = computed(() => watermarkReady.value || !requiresWatermark.value)
 const isOwner = computed(() => {
   const userId = userStore.user?.id
   return Boolean(userId) && [asset.value.creator_id, asset.value.owner_id, asset.value.uploader_id].includes(userId)
@@ -1003,7 +1120,9 @@ async function loadAsset() {
       asset.value = response.data.data
       loadExtras()
       loadEvidence()
-      loadVersions()
+      if (activeDetailTab.value === 'versions') {
+        loadVersions()
+      }
     } else {
       loadError.value = true
     }
@@ -1016,6 +1135,7 @@ async function loadAsset() {
 
 async function loadExtras() {
   const id = route.params.id
+  extrasLoading.value = true
   const results = await Promise.allSettled([
     assetApi.getFavorite(id),
     assetApi.getTags(id),
@@ -1043,10 +1163,107 @@ async function loadExtras() {
   licenseStatusError.value = [results[3], results[4]].some(
     result => result.status !== 'fulfilled' || result.value.data?.code !== 200
   )
+  extrasLoading.value = false
 }
 
-async function loadEvidence() {
+async function openAssetLicenses() {
+  assetLicenseDialogVisible.value = true
+  await loadAssetLicenses()
+}
+
+async function loadAssetLicenses() {
   if (!asset.value.id) return
+  assetLicensesLoading.value = true
+  assetLicensesError.value = false
+  try {
+    const response = await assetApi.getLicenses(asset.value.id)
+    if (response.data?.code === 200) {
+      assetLicenses.value = response.data.data?.licenses || []
+      assetApplications.value = response.data.data?.applications || []
+    } else {
+      assetLicensesError.value = true
+    }
+  } catch {
+    assetLicensesError.value = true
+  } finally {
+    assetLicensesLoading.value = false
+  }
+}
+
+function licenseStatusLabel(status) {
+  return { active: '生效中', expired: '已过期', revoked: '已撤销' }[status] || status
+}
+
+function licenseStatusType(status) {
+  return { active: 'success', expired: 'info', revoked: 'danger' }[status] || 'info'
+}
+
+function applicationStatusLabel(status) {
+  return {
+    pending: '待一级审批',
+    adm1_approved: '待二级审批',
+    approved: '已通过',
+    rejected: '已驳回',
+    cancelled: '已撤回'
+  }[status] || status
+}
+
+async function renewAssetLicense(row) {
+  let endDate
+  try {
+    const result = await ElMessageBox.prompt(
+      '请输入新的到期日期（YYYY-MM-DD）',
+      '授权续期',
+      {
+        inputValue: row.end_time ? row.end_time.slice(0, 10) : '',
+        inputPattern: /^\d{4}-\d{2}-\d{2}$/,
+        inputErrorMessage: '日期格式为 YYYY-MM-DD',
+        confirmButtonText: '续期',
+        cancelButtonText: '取消'
+      }
+    )
+    endDate = result.value
+  } catch {
+    return
+  }
+  try {
+    await licenseApi.renew(row.id, { end_time: `${endDate}T23:59:59` })
+    ElMessage.success('授权已续期')
+    await loadAssetLicenses()
+    loadExtras()
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '续期失败')
+  }
+}
+
+async function revokeAssetLicense(row) {
+  let reason = ''
+  try {
+    const result = await ElMessageBox.prompt(
+      '撤销后对方将立即无法继续下载，历史下载记录仍保留。可填写原因：',
+      '撤销授权',
+      {
+        inputPlaceholder: '撤销原因（可选）',
+        confirmButtonText: '撤销',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    reason = result.value || ''
+  } catch {
+    return
+  }
+  try {
+    await licenseApi.revoke(row.id, { reason })
+    ElMessage.success('授权已撤销')
+    await loadAssetLicenses()
+    loadExtras()
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '撤销失败')
+  }
+}
+
+async function loadEvidence() {  if (!asset.value.id) return
   evidenceLoading.value = true
   evidenceError.value = false
   try {
@@ -1264,6 +1481,7 @@ async function loadVersions() {
     const response = await assetApi.getVersions(asset.value.id)
     if (response.data?.code === 200) {
       versions.value = response.data.data?.items || []
+      versionsLoaded.value = true
     } else {
       versionsError.value = true
     }
@@ -1768,6 +1986,13 @@ watch(() => route.query.tab, tab => {
     activeDetailTab.value = tab
   }
 })
+
+// 版本列表只在用户真正打开“版本”页签时加载，避免详情首屏多打一次接口
+watch(activeDetailTab, tab => {
+  if (tab === 'versions' && asset.value.id && !versionsLoaded.value && !versionsLoading.value) {
+    loadVersions()
+  }
+})
 </script>
 
 <style lang="scss" scoped>
@@ -2167,8 +2392,18 @@ watch(() => route.query.tab, tab => {
   color: $text-secondary;
 }
 
-.license-state-error {
+.license-loading {
   margin: 8px 0 12px;
+}
+
+.asset-license-caption {
+  margin: -4px 0 14px;
+  font-family: $font-mono;
+  font-size: 12px;
+  color: $text-placeholder;
+}
+
+.license-state-error {  margin: 8px 0 12px;
   padding: 8px 10px;
   border-radius: $radius-sm;
   background: $warning-bg;

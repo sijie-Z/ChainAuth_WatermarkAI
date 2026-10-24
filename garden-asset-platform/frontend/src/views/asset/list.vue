@@ -71,6 +71,16 @@
               @keyup.enter="handleSearch"
             />
           </div>
+          <el-button
+            class="filter-toggle"
+            plain
+            size="large"
+            :aria-expanded="filtersOpen"
+            @click="filtersOpen = !filtersOpen"
+          >
+            {{ filtersOpen ? '收起筛选' : activeAdvancedCount ? `筛选 · ${activeAdvancedCount}` : '筛选' }}
+          </el-button>
+          <div class="filter-advanced" :class="{ open: filtersOpen }">
           <div class="filter-item">
             <el-select v-model="search.asset_type" placeholder="资产类型" clearable size="large" style="width: 140px" @change="handleSearch">
               <el-option label="全部类型" value="" />
@@ -138,6 +148,7 @@
           <div v-if="gardensOffline" class="garden-offline">
             <el-tag type="warning" size="small" effect="plain">园林筛选暂不可用</el-tag>
             <el-button link type="primary" size="small" @click="loadGardens">重试</el-button>
+          </div>
           </div>
         </div>
       </div>
@@ -226,7 +237,7 @@
       </div>
 
       <!-- 列表视图 -->
-      <div v-else class="assets-list" v-loading="loading">
+      <div v-else-if="assets.length" class="assets-list" v-loading="loading">
         <el-table :data="assets" style="width: 100%" class="modern-table">
           <el-table-column label="资产信息" min-width="300">
             <template #default="{ row }">
@@ -282,7 +293,7 @@
       </div>
 
       <!-- 分页 -->
-      <div class="pagination-section" v-if="!loadError">
+      <div class="pagination-section" v-if="!loadError && assets.length > 0">
         <el-pagination
           v-model:current-page="pagination.page"
           v-model:page-size="pagination.perPage"
@@ -331,6 +342,7 @@ const gardens = ref([])
 const gardensOffline = ref(false)
 const tags = ref([])
 const viewMode = ref('grid')
+const filtersOpen = ref(false)
 
 const search = reactive({
   keyword: '',
@@ -338,7 +350,7 @@ const search = reactive({
   garden_id: '',
   tag: '',
   dateRange: [],
-  status: '',
+  status: 'published',
   sort: 'newest'
 })
 
@@ -348,6 +360,17 @@ const hasFilters = computed(() =>
     || search.tag || search.dateRange?.length || search.status
   )
 )
+
+const activeAdvancedCount = computed(() => {
+  let count = 0
+  if (search.asset_type) count += 1
+  if (search.garden_id) count += 1
+  if (search.tag) count += 1
+  if (search.dateRange?.length) count += 1
+  if (search.status && search.status !== 'published') count += 1
+  if (search.sort && search.sort !== 'newest') count += 1
+  return count
+})
 
 const pagination = reactive({
   page: 1,
@@ -443,6 +466,9 @@ async function loadGardens() {
 
 function handleSearch() {
   pagination.page = 1
+  if (window.matchMedia('(max-width: 768px)').matches) {
+    filtersOpen.value = false
+  }
   loadAssets()
 }
 
@@ -457,7 +483,7 @@ function clearFilters() {
   search.garden_id = ''
   search.tag = ''
   search.dateRange = []
-  search.status = ''
+  search.status = 'published'
   search.sort = 'newest'
   pagination.page = 1
   loadAssets()
@@ -748,6 +774,14 @@ watch(() => route.query.garden_id, (gardenId) => {
       }
     }
   }
+
+  .filter-advanced {
+    display: contents;
+  }
+
+  .filter-toggle {
+    display: none;
+  }
 }
 
 .garden-offline {
@@ -1037,17 +1071,36 @@ watch(() => route.query.garden_id, (gardenId) => {
 
   .filter-row {
     flex-wrap: wrap;
+    gap: 10px;
+  }
 
-    .filter-item {
+  .filter-section .filter-toggle {
+    display: inline-flex;
+    width: auto !important;
+    flex-shrink: 0;
+  }
+
+  .filter-section .filter-row .filter-item.search-input {
+    min-width: 0;
+    width: auto !important;
+    flex: 1;
+  }
+
+  .filter-row .filter-item {
+    width: 100% !important;
+
+    :deep(.el-select),
+    :deep(.el-date-editor) {
       width: 100% !important;
+    }
+  }
 
-      &.search-input {
-        min-width: 0;
-      }
+  .filter-section .filter-advanced {
+    display: none;
+    width: 100%;
 
-      :deep(.el-select) {
-        width: 100% !important;
-      }
+    &.open {
+      display: block;
     }
 
     > .el-button {
@@ -1076,28 +1129,48 @@ watch(() => route.query.garden_id, (gardenId) => {
 }
 
 @media (max-width: 480px) {
-  .assets-grid {
-    grid-template-columns: 1fr;
+  .page-header {
+    padding: 20px 16px 16px;
+
+    .page-title {
+      font-size: 28px;
+    }
   }
 
   .stats-section {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
 
     .stat-card {
-      padding: 14px;
-      gap: 10px;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 12px 10px;
 
       .stat-icon {
-        width: 36px;
-        height: 36px;
-        font-size: 17px;
+        width: 30px;
+        height: 30px;
+        font-size: 15px;
       }
 
-      .stat-value {
-        font-size: 22px;
+      .stat-info {
+        .stat-value {
+          font-size: 20px;
+        }
+
+        .stat-label {
+          font-size: 11px;
+        }
       }
     }
+  }
+
+  .filter-section .filter-card {
+    padding: 12px 14px;
+  }
+
+  .assets-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

@@ -471,6 +471,86 @@ class LicenseApproveResource(Resource):
             status='effective'
         ))
 
+        # 让资产权利人及时知道自己的资产已被授权
+        if license.licensor_id and license.licensor_id != application.applicant_id:
+            licensee = User.query.get(application.applicant_id)
+            licensee_name = (
+                (licensee.nickname or licensee.username) if licensee else '用户'
+            )
+            add_notification_event(
+                license.licensor_id,
+                'license_issued',
+                '资产已被授权',
+                f'《{asset.title}》已授权给 {licensee_name}',
+                f'/assets/{asset.id}'
+            )
+
+
+class AssetLicenseResource(Resource):
+    """资产所有者查看自己资产的授权与申请（只读）"""
+
+    @jwt_required()
+    def get(self, asset_id):
+        current_user_id = get_jwt_identity()
+        user = User.query.get(current_user_id)
+        asset = Asset.query.get(asset_id)
+        if not asset:
+            return {'code': 404, 'message': '资产不存在'}, 404
+
+        is_owner = current_user_id in (
+            asset.creator_id, asset.owner_id, asset.uploader_id
+        )
+        is_admin = bool(
+            user and user.role in ('admin', 'asset_admin', 'license_admin', 'adm1', 'adm2')
+        )
+        if not (is_owner or is_admin):
+            return {'code': 403, 'message': '仅资产所有者或管理员可查看'}, 403
+
+        licenses = License.query.filter_by(asset_id=asset_id).order_by(
+            License.created_at.desc()
+        ).all()
+        license_items = []
+        for lic in licenses:
+            item = lic.to_dict()
+            item['licensee_name'] = (
+                (lic.licensee.nickname or lic.licensee.username)
+                if lic.licensee else None
+            )
+            item['licensor_name'] = (
+                (lic.licensor.nickname or lic.licensor.username)
+                if lic.licensor else None
+            )
+            item['can_revoke'] = bool(
+                _can_manage_license(user, lic) and lic.status != 'revoked'
+            )
+            item['can_renew'] = bool(
+                _can_manage_license(user, lic) and lic.status in ('active', 'expired')
+            )
+            license_items.append(item)
+
+        applications = LicenseApplication.query.filter_by(
+            asset_id=asset_id
+        ).order_by(LicenseApplication.created_at.desc()).limit(50).all()
+        application_items = []
+        for application in applications:
+            item = application.to_dict()
+            item['applicant_name'] = (
+                (application.applicant.nickname or application.applicant.username)
+                if application.applicant else None
+            )
+            application_items.append(item)
+
+        return {
+            'code': 200,
+            'data': {
+                'asset_id': asset.id,
+                'asset_code': asset.asset_code,
+                'asset_title': asset.title,
+                'licenses': license_items,
+                'applications': application_items,
+            }
+        }, 200
+
 
 class LicenseApprovedResource(Resource):
     """已审批列表"""

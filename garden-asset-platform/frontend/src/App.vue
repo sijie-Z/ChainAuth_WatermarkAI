@@ -1,19 +1,22 @@
 <template>
-  <SiteHeader v-if="showSiteHeader" />
-  <ErrorBoundary>
-    <router-view v-slot="{ Component, route }">
-      <component
-        :is="Component"
-        :key="route.matched[0]?.path === '/admin' ? '/admin' : route.path"
-      />
-    </router-view>
-  </ErrorBoundary>
-  <CommandPalette />
+  <el-config-provider :locale="zhCn" size="default">
+    <SiteHeader v-if="showSiteHeader" />
+    <ErrorBoundary>
+      <router-view v-slot="{ Component, route }">
+        <component
+          :is="Component"
+          :key="route.matched[0]?.path === '/admin' ? '/admin' : route.path"
+        />
+      </router-view>
+    </ErrorBoundary>
+    <CommandPalette />
+  </el-config-provider>
 </template>
 
 <script setup>
 import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
 import { useUserStore } from '@/stores/user'
 import SiteHeader from '@/components/common/SiteHeader.vue'
 import CommandPalette from '@/components/common/CommandPalette.vue'
@@ -57,6 +60,12 @@ img {
 .gap-2 { gap: 8px; }
 .gap-3 { gap: 12px; }
 .gap-4 { gap: 16px; }
+
+@media print {
+  .site-header {
+    display: none !important;
+  }
+}
 
 .mt-1 { margin-top: 4px; }
 .mt-2 { margin-top: 8px; }

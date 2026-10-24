@@ -350,10 +350,12 @@ def register_api_resources(app):
         LicenseApproveResource, LicenseApprovedResource,
         MyLicenseResource, MyApplicationsResource,
         LicenseCancelResource, LicenseContractResource,
-        LicenseRevokeResource, LicenseRenewResource
+        LicenseRevokeResource, LicenseRenewResource,
+        AssetLicenseResource
     )
     api.add_resource(LicenseApplyResource, '/license/apply')
     api.add_resource(LicensePendingResource, '/license/pending')
+    api.add_resource(AssetLicenseResource, '/assets/<string:asset_id>/licenses')
     api.add_resource(LicenseCancelResource, '/license/applications/<int:application_id>/cancel')
     api.add_resource(LicenseContractResource, '/license/<int:license_id>/contract')
     api.add_resource(LicenseRevokeResource, '/license/<int:license_id>/revoke')

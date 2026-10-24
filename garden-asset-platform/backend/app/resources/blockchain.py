@@ -10,6 +10,19 @@ from app.models.blockchain import Certificate, BlockchainTransaction
 from app.services.blockchain_service import blockchain_service
 
 
+ADMIN_ROLES = ('admin', 'asset_admin', 'license_admin', 'adm1', 'adm2')
+
+
+def _can_view_asset_for_user(user, user_id, asset):
+    """公开证书允许匿名查看已发布资产；未发布/已删除沿用资产可见性。"""
+    if not asset:
+        return False
+    if asset.status == 'published':
+        return True
+    from app.resources.comments import can_view_asset
+    return can_view_asset(user, user_id, asset)
+
+
 def _current_version(asset):
     return AssetVersion.query.filter_by(asset_id=asset.id).order_by(
         AssetVersion.version_no.desc()
@@ -52,7 +65,11 @@ class BlockchainRegisterResource(Resource):
         if not is_owner and user.role not in ('admin', 'asset_admin'):
             return {'code': 403, 'message': '无权限操作'}, 403
 
-        if asset.watermark_status not in ('embedded', 'verified'):
+        # 影像/矢量需要水印；模型/文档/视频没有盲水印能力，直接按文件哈希与版本存证
+        if (
+            asset.asset_type in ('image', 'vector')
+            and asset.watermark_status not in ('embedded', 'verified')
+        ):
             return {'code': 400, 'message': '上链前需先完成水印嵌入'}, 400
 
         version = _current_version(asset)
@@ -158,14 +175,19 @@ class BlockchainVerifyResource(Resource):
 class BlockchainCertificateResource(Resource):
     """存证证书"""
 
+    @jwt_required(optional=True)
     def get(self, certificate_id):
-        """获取证书详情"""
+        """获取证书详情（公开证书仅限已发布资产）"""
+        identity = get_jwt_identity()
+        user = User.query.get(identity) if identity else None
         certificate = Certificate.query.filter_by(certificate_id=certificate_id).first()
 
         if not certificate:
             return {'code': 404, 'message': '证书不存在'}, 404
 
         asset = Asset.query.get(certificate.asset_id)
+        if not _can_view_asset_for_user(user, identity, asset):
+            return {'code': 404, 'message': '证书不存在'}, 404
         version = certificate.version
         current_version = _current_version(asset) if asset else None
         has_newer = bool(
@@ -225,9 +247,14 @@ class BlockchainHistoryResource(Resource):
     @jwt_required()
     def get(self, asset_id=None):
         """获取存证历史"""
+        identity = get_jwt_identity()
+        user = User.query.get(identity)
+
         if asset_id:
             asset = Asset.query.get(asset_id)
             if not asset:
+                return {'code': 404, 'message': '资产不存在'}, 404
+            if not _can_view_asset_for_user(user, identity, asset):
                 return {'code': 404, 'message': '资产不存在'}, 404
 
             history = blockchain_service.get_asset_history(asset)
@@ -241,7 +268,10 @@ class BlockchainHistoryResource(Resource):
                 }
             }, 200
         else:
-            # 获取所有存证记录
+            # 全平台证书列表只给管理员，避免普通用户枚举未发布资产
+            if not user or user.role not in ADMIN_ROLES:
+                return {'code': 403, 'message': '无权限查看全平台存证记录'}, 403
+
             from app.models.blockchain import Certificate
             certificates = Certificate.query.order_by(Certificate.created_at.desc()).limit(50).all()
 
@@ -267,8 +297,11 @@ class BlockchainHistoryResource(Resource):
 class BlockchainStatusResource(Resource):
     """区块链状态"""
 
+    @jwt_required(optional=True)
     def get(self):
-        """获取区块链连接状态"""
+        """获取区块链连接状态（RPC 地址只返回给管理员）"""
+        identity = get_jwt_identity()
+        user = User.query.get(identity) if identity else None
         connected = blockchain_service.is_connected()
 
         from app.models.blockchain import Certificate
@@ -284,14 +317,14 @@ class BlockchainStatusResource(Resource):
         else:
             node_status = 'simulated'
 
-        return {
-            'code': 200,
-            'data': {
-                'connected': connected,
-                'rpc_url': blockchain_service.rpc_url,
-                'simulated': not blockchain_service.enabled,
-                'total_certificates': total_certificates,
-                'pending_assets': pending_assets,
-                'node_status': node_status
-            }
-        }, 200
+        data = {
+            'connected': connected,
+            'simulated': not blockchain_service.enabled,
+            'rpc_configured': bool(blockchain_service.rpc_url),
+            'total_certificates': total_certificates,
+            'pending_assets': pending_assets,
+            'node_status': node_status,
+        }
+        if user and user.role in ADMIN_ROLES:
+            data['rpc_url'] = blockchain_service.rpc_url
+        return {'code': 200, 'data': data}, 200

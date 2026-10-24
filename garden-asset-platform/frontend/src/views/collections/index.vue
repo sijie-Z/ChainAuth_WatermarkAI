@@ -34,7 +34,12 @@
         v-for="collection in collections"
         :key="collection.id"
         class="collection-card"
+        role="button"
+        tabindex="0"
+        :aria-label="`打开合集 ${collection.name}`"
         @click="$router.push(`/collections/${collection.id}`)"
+        @keydown.enter.self.prevent="$router.push(`/collections/${collection.id}`)"
+        @keydown.space.self.prevent="$router.push(`/collections/${collection.id}`)"
       >
         <div class="collection-cover">
           <img

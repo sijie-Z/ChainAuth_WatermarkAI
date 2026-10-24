@@ -44,12 +44,27 @@
     <template v-else>
       <div class="assets-grid">
         <article v-for="item in assets" :key="item.id" class="my-card">
-          <div class="my-thumb" @click="openAsset(item.id)">
+          <div
+            class="my-thumb"
+            role="button"
+            tabindex="0"
+            :aria-label="`查看资产 ${item.title}`"
+            @click="openAsset(item.id)"
+            @keydown.enter.prevent="openAsset(item.id)"
+            @keydown.space.prevent="openAsset(item.id)"
+          >
             <img :src="getThumbnail(item)" :alt="item.title" loading="lazy" @error="onImageError" />
             <StatusTag :status="item.status" kind="asset" class="my-status" />
           </div>
           <div class="my-body">
-            <h2 class="my-title" @click="openAsset(item.id)">{{ item.title }}</h2>
+            <h2
+              class="my-title"
+              role="button"
+              tabindex="0"
+              @click="openAsset(item.id)"
+              @keydown.enter.prevent="openAsset(item.id)"
+              @keydown.space.prevent="openAsset(item.id)"
+            >{{ item.title }}</h2>
             <p class="my-code mono">{{ item.asset_code }}</p>
             <p v-if="item.status === 'rejected' && item.reject_reason" class="reject-reason">
               驳回原因：{{ item.reject_reason }}

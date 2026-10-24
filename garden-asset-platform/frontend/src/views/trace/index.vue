@@ -55,7 +55,7 @@
           <div>
             <h2 class="result-title">溯源结果</h2>
             <p v-if="traceResult.verified" class="result-caption">
-              {{ activeTab === 'upload'
+              {{ traceSourceTab === 'upload'
                 ? '已从图片中提取水印并匹配平台登记记录'
                 : '水印编号与平台登记记录一致，未校验图片内容' }}
             </p>
@@ -239,6 +239,7 @@ const router = useRouter()
 const userStore = useUserStore()
 
 const activeTab = ref('upload')
+const traceSourceTab = ref('upload')
 const loading = ref(false)
 const watermarkId = ref('')
 const uploadedFile = ref(null)
@@ -288,6 +289,7 @@ function handleExceed(files) {
 async function doTrace() {
   loading.value = true
   traceResult.value = null
+  traceSourceTab.value = activeTab.value
 
   try {
     let response

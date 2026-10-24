@@ -36,7 +36,8 @@ const statusConfig = {
   deleted: { text: '已删除', tone: 'error' },
   cancelled: { text: '已撤回', tone: 'neutral' },
   revoked: { text: '已撤销', tone: 'error' },
-  none: { text: '未处理', tone: 'neutral' }
+  none: { text: '未处理', tone: 'neutral' },
+  not_applicable: { text: '不适用', tone: 'info' }
 }
 
 const NONE_TEXT = {

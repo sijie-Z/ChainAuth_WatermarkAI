@@ -912,8 +912,13 @@ class AssetFavoriteResource(Resource):
         from app.models.extra import Favorite
 
         user_id = get_jwt_identity()
+        user = User.query.get(user_id)
         asset = Asset.query.get(asset_id)
-        if not asset or asset.status == 'deleted':
+        if not asset:
+            return {'code': 404, 'message': '资产不存在'}, 404
+
+        from app.resources.comments import can_view_asset
+        if not can_view_asset(user, user_id, asset):
             return {'code': 404, 'message': '资产不存在'}, 404
 
         favorited = Favorite.query.filter_by(user_id=user_id, asset_id=asset_id).first() is not None
@@ -924,9 +929,14 @@ class AssetFavoriteResource(Resource):
     def post(self, asset_id):
         """添加收藏"""
         user_id = get_jwt_identity()
+        user = User.query.get(user_id)
         asset = Asset.query.get(asset_id)
 
         if not asset:
+            return {'code': 404, 'message': '资产不存在'}, 404
+
+        from app.resources.comments import can_view_asset
+        if not can_view_asset(user, user_id, asset):
             return {'code': 404, 'message': '资产不存在'}, 404
 
         from app.models.extra import Favorite
@@ -1112,8 +1122,14 @@ class AssetTagsResource(Resource):
     @jwt_required()
     def get(self, asset_id):
         """获取资产标签"""
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
         asset = Asset.query.get(asset_id)
         if not asset:
+            return {'code': 404, 'message': '资产不存在'}, 404
+
+        from app.resources.comments import can_view_asset
+        if not can_view_asset(user, user_id, asset):
             return {'code': 404, 'message': '资产不存在'}, 404
 
         tags = AssetTag.query.filter_by(asset_id=asset_id).all()

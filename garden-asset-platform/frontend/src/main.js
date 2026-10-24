@@ -1,10 +1,12 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import ElementPlus from 'element-plus'
-import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
 
-// Element Plus样式
-import 'element-plus/dist/index.css'
+// 按需组件由 unplugin 自动导入；这里只保留基础变量与全局服务样式
+import 'element-plus/theme-chalk/base.css'
+import 'element-plus/theme-chalk/el-message.css'
+import 'element-plus/theme-chalk/el-message-box.css'
+import 'element-plus/theme-chalk/el-notification.css'
+import 'element-plus/theme-chalk/el-loading.css'
 
 // 顶部路由进度条样式（需先于自定义样式加载，便于主题覆盖）
 import 'nprogress/nprogress.css'
@@ -13,7 +15,7 @@ import 'nprogress/nprogress.css'
 import '@/assets/styles/main.scss'
 
 import App from './App.vue'
-import router, { prefetchRoutes } from './router'
+import router, { prefetchRoutes, prefetchRoute } from './router'
 import GlobalComponents from '@/components'
 
 const app = createApp(App)
@@ -23,12 +25,6 @@ app.use(createPinia())
 
 // 路由
 app.use(router)
-
-// Element Plus
-app.use(ElementPlus, {
-  locale: zhCn,
-  size: 'default'
-})
 
 // 全局组件
 app.use(GlobalComponents)
@@ -40,8 +36,7 @@ app.config.errorHandler = (err, vm, info) => {
 }
 
 // 全局属性
-app.config.globalProperties.$formatDate = (date) => {
-  if (!date) return ''
+app.config.globalProperties.$formatDate = (date) => {  if (!date) return ''
   return new Date(date).toLocaleDateString('zh-CN')
 }
 
@@ -55,7 +50,22 @@ app.config.globalProperties.$formatSize = (bytes) => {
 
 app.mount('#app')
 
-// 首屏完成后再预取其余页面，让后续跳转无需等待分包下载
+// 首屏完成后再预取核心页面；其余页面在用户悬停/聚焦链接时按需加载
 router.isReady().then(() => {
   prefetchRoutes()
 })
+
+function handleIntentPrefetch(event) {
+  const anchor = event.target?.closest?.('a[href]')
+  if (!anchor) return
+  try {
+    const url = new URL(anchor.getAttribute('href'), window.location.origin)
+    if (url.origin !== window.location.origin) return
+    prefetchRoute(url.pathname)
+  } catch {
+    // 忽略非法链接
+  }
+}
+
+document.addEventListener('mouseover', handleIntentPrefetch, { passive: true })
+document.addEventListener('focusin', handleIntentPrefetch, { passive: true })
