@@ -397,6 +397,39 @@ def storage_report(min_age_hours, limit):
         click.echo('\n注意：本命令只报告，不删除任何文件；请人工核对后再走部署清理流程。')
 
 
+@click.group('audit')
+def audit_group():
+    """审计日志完整性签名"""
+
+
+@audit_group.command('verify')
+def audit_verify():
+    """校验全部操作日志的 HMAC，签名不一致时退出码为 1"""
+    from app.services.audit_integrity_service import verify_audit_logs
+
+    result = verify_audit_logs()
+    click.echo(f"日志总数: {result['total']}")
+    click.echo(f"已签名: {result['signed']}  有效: {result['valid']}  异常: {result['invalid']}  未签名: {result['unsigned']}")
+    click.echo(f"状态: {result['label']}")
+    for sample in result['samples']:
+        click.echo(f"  异常日志 #{sample['id']} {sample['action']} ({sample['created_at']})")
+    if result['status'] in ('invalid', 'unavailable'):
+        raise SystemExit(1)
+
+
+@audit_group.command('rebuild')
+@click.option('--yes', is_flag=True, help='确认重算全部历史日志签名')
+def audit_rebuild(yes):
+    """为历史日志补签，或在密钥轮换后重建签名"""
+    from app.services.audit_integrity_service import rebuild_audit_signatures
+
+    if not yes:
+        click.echo('该命令会重算全部日志签名；确认后请加 --yes 重新执行。')
+        return
+    result = rebuild_audit_signatures()
+    click.echo(f"已重算 {result['updated']} / {result['total']} 条日志签名")
+
+
 def register_commands(app):
     """注册命令"""
     app.cli.add_command(create_admin)
@@ -406,3 +439,4 @@ def register_commands(app):
     app.cli.add_command(notifications_group)
     app.cli.add_command(backup_group)
     app.cli.add_command(storage_group)
+    app.cli.add_command(audit_group)

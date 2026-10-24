@@ -79,6 +79,7 @@
 - `/admin/infringements` 侵权线索：举报文件、水印匹配、受理/确认/驳回；支持一次最多 20 个文件批量巡检。
 - `/admin/notifications` 通知渠道：SSE 已启用、SMTP 未配置时明确提示；Webhook 可配置通用 JSON/企业微信群机器人并发送测试。
 - `/admin/assets` 资产管理：批量通过/驳回待审资产、当前页 CSV 导出。
+- `/admin/logs` 操作日志：展示“已签名”标记，点击“校验日志完整性”核对全部日志 HMAC，可演示字段篡改被标出。
 
 ### 2.9 命令行收尾（1 分钟）
 
@@ -86,12 +87,14 @@
 cd backend
 python -m flask tasks status
 python -m flask storage report --min-age-hours 24 --limit 10
+python -m flask audit verify
 python -m flask backup create
 python -m flask backup list
 ```
 
 - `tasks status`：在线 worker、积压与健康度；`--check` 可用于容器健康检查。
 - `storage report`：只读盘点，列出数据库未引用的文件，不会自动删除。
+- `audit verify`：逐条重算操作日志 HMAC，签名不一致时返回非零退出码。
 - `backup create/list`：SQLite 使用在线备份 API 并做完整性校验；恢复前自动保留回滚副本。
 
 ## 3. 必须如实说明的边界
@@ -129,6 +132,7 @@ python -m flask backup list
 - [x] 水印鲁棒性实验室（真实嵌入 + 8 项攻击 + PSNR/NC/ID 恢复）
 - [x] 证据包导出（当前文件、证据链、版本证书、SHA-256 清单与核验说明）
 - [x] 证据包公开核验（完整性、平台登记、篡改/路径穿越拦截）
+- [x] 操作日志 HMAC 完整性校验与历史补签
 - [x] 存证证书扫码核验二维码
 - [x] 备份恢复、存储巡检、生产密钥与初始化安全
-- [x] 后端 348 个用例、前端 49 个 Vitest、20 个 Playwright 点击流（数量以实际运行结果为准）
+- [x] 后端 353 个用例、前端 49 个 Vitest、21 个 Playwright 点击流（数量以实际运行结果为准）

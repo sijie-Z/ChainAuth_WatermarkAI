@@ -5,8 +5,40 @@
         <h1 class="page-title">操作日志</h1>
         <p class="page-subtitle">上传、水印、存证、授权与用户管理的审计记录</p>
       </div>
-      <el-button :loading="loading" @click="loadLogs">刷新</el-button>
+      <div class="page-actions">
+        <el-button :loading="integrityLoading" @click="checkIntegrity">校验日志完整性</el-button>
+        <el-button :loading="loading" @click="loadLogs">刷新</el-button>
+      </div>
     </header>
+
+    <section
+      v-if="integrity"
+      class="integrity-card"
+      :class="integrity.status"
+      aria-live="polite"
+    >
+      <el-icon class="integrity-icon">
+        <CircleCheck v-if="integrity.status === 'ok'" />
+        <WarningFilled v-else />
+      </el-icon>
+      <div class="integrity-copy">
+        <strong>{{ integrity.label }}</strong>
+        <p>
+          共 {{ integrity.total }} 条 · 已签名 {{ integrity.signed }} · 有效 {{ integrity.valid }} ·
+          异常 {{ integrity.invalid }} · 未签名 {{ integrity.unsigned }}
+        </p>
+        <p v-if="integrity.samples?.length" class="integrity-samples">
+          异常日志：
+          <span v-for="sample in integrity.samples" :key="sample.id">
+            #{{ sample.id }} {{ actionName(sample.action) }}
+          </span>
+        </p>
+        <p v-if="integrity.status === 'unsigned'" class="integrity-hint">
+          历史日志尚未签名，可由管理员运行 <code>flask audit rebuild --yes</code> 补签。
+        </p>
+      </div>
+      <span class="integrity-time">{{ formatTime(integrity.generated_at) }}</span>
+    </section>
 
     <section class="filter-card">
       <el-input
@@ -67,6 +99,13 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="签名" width="86">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.signed ? 'success' : 'info'" effect="plain">
+              {{ row.signed ? '已签名' : '未签名' }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="ip_address" label="IP" width="130" />
       </el-table>
 
@@ -94,6 +133,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { parseBackendDate } from '@/utils'
 import { ElMessage } from 'element-plus'
+import { CircleCheck, WarningFilled } from '@element-plus/icons-vue'
 import { logApi } from '@/api/modules'
 
 const logs = ref([])
@@ -102,6 +142,8 @@ const page = ref(1)
 const perPage = ref(20)
 const total = ref(0)
 const dateRange = ref([])
+const integrity = ref(null)
+const integrityLoading = ref(false)
 
 const filters = reactive({
   keyword: '',
@@ -138,7 +180,10 @@ const ACTION_NAMES = {
   infringement_report: '提交侵权线索',
   infringement_start: '受理侵权线索',
   infringement_confirm: '确认侵权',
-  infringement_reject: '驳回线索'
+  infringement_reject: '驳回线索',
+  export_evidence_package: '导出证据包',
+  upload_version: '上传新版本',
+  restore_version: '恢复历史版本'
 }
 
 const ROLE_NAMES = {
@@ -209,6 +254,31 @@ async function loadLogs() {
   }
 }
 
+async function checkIntegrity() {
+  if (integrityLoading.value) return
+  integrityLoading.value = true
+  try {
+    const response = await logApi.integrity()
+    if (response.data?.code === 200) {
+      integrity.value = response.data.data
+      const status = integrity.value.status
+      if (status === 'ok') {
+        ElMessage.success('全部日志签名有效')
+      } else if (status === 'invalid') {
+        ElMessage.error(integrity.value.label)
+      } else {
+        ElMessage.warning(integrity.value.label)
+      }
+    } else {
+      ElMessage.error(response.data?.message || '日志完整性校验失败')
+    }
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '日志完整性校验失败')
+  } finally {
+    integrityLoading.value = false
+  }
+}
+
 onMounted(loadLogs)
 </script>
 
@@ -239,6 +309,92 @@ onMounted(loadLogs)
     font-size: 13px;
     color: $text-secondary;
   }
+}
+
+.page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.integrity-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: $spacing-lg;
+  padding: 16px 18px;
+  background: $bg-card;
+  border: 1px solid $border-color;
+  border-radius: $radius-md;
+
+  &.ok {
+    border-color: $primary-color;
+
+    .integrity-icon { color: $primary-color; }
+  }
+
+  &.invalid {
+    border-color: $accent-color;
+
+    .integrity-icon { color: $accent-color; }
+  }
+
+  &.unsigned {
+    border-color: $border-dark;
+
+    .integrity-icon { color: $accent-color; }
+  }
+
+  &.unavailable {
+    .integrity-icon { color: $text-placeholder; }
+  }
+}
+
+.integrity-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  font-size: 24px;
+}
+
+.integrity-copy {
+  min-width: 0;
+  flex: 1;
+
+  strong {
+    display: block;
+    margin-bottom: 4px;
+    font-family: $font-display;
+    font-size: 15px;
+    color: $text-primary;
+  }
+
+  p {
+    margin: 2px 0;
+    font-size: 12px;
+    line-height: 1.6;
+    color: $text-secondary;
+  }
+
+  code {
+    padding: 1px 4px;
+    background: $bg-secondary;
+    border-radius: 2px;
+    font-family: $font-mono;
+    font-size: 11px;
+  }
+}
+
+.integrity-samples {
+  span + span {
+    margin-left: 10px;
+  }
+}
+
+.integrity-time {
+  flex-shrink: 0;
+  font-family: $font-mono;
+  font-size: 10px;
+  color: $text-placeholder;
 }
 
 .filter-card {

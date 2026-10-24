@@ -69,17 +69,17 @@ class LicenseApplyResource(Resource):
         db.session.add(application)
         db.session.commit()
 
-        # 记录操作日志
-        log = OperationLog(
-            user_id=current_user_id,
+        # 记录操作日志（统一走带 HMAC 签名的入口）
+        applicant = User.query.get(current_user_id)
+        OperationLog.log(
+            user=applicant,
             action='license_apply',
             module='license',
             target_type='license_application',
             target_id=str(application.id),
-            description=f'提交资产 {asset.title} 的授权申请'
+            description=f'提交资产 {asset.title} 的授权申请',
+            request=request,
         )
-        db.session.add(log)
-        db.session.commit()
 
         return {
             'code': 200,

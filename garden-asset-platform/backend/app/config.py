@@ -118,6 +118,9 @@ class Config:
         os.environ.get('EVIDENCE_VERIFY_MAX_BYTES', str(20 * 1024 * 1024))
     )
 
+    # 审计日志 HMAC 密钥；留空时回退到 SECRET_KEY
+    AUDIT_HMAC_KEY = os.environ.get('AUDIT_HMAC_KEY', '')
+
     # 文件上传大小限制 (500MB)
     MAX_CONTENT_LENGTH = int(os.environ.get('MAX_CONTENT_LENGTH', str(500 * 1024 * 1024)))
 

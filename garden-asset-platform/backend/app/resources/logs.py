@@ -6,6 +6,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restful import Resource
 
 from app.models import OperationLog, User
+from app.services.audit_integrity_service import verify_audit_logs
 
 ADMIN_ROLES = ('admin', 'asset_admin', 'license_admin', 'adm1', 'adm2')
 MODULES = ('asset', 'watermark', 'blockchain', 'license', 'auth', 'user', 'garden')
@@ -78,3 +79,15 @@ class LogListResource(Resource):
                 'pages': pagination.pages,
             }
         }, 200
+
+
+class LogIntegrityResource(Resource):
+    """校验操作日志 HMAC 完整性（管理员）"""
+
+    @jwt_required()
+    def get(self):
+        user = User.query.get(get_jwt_identity())
+        if not user or user.role not in ADMIN_ROLES:
+            return {'code': 403, 'message': '无权限校验操作日志'}, 403
+
+        return {'code': 200, 'data': verify_audit_logs()}, 200

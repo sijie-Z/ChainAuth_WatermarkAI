@@ -200,7 +200,8 @@ export const notificationApi = {
 
 // 操作日志
 export const logApi = {
-  getList: (params) => api.get('/logs', { params })
+  getList: (params) => api.get('/logs', { params }),
+  integrity: () => api.get('/logs/integrity')
 }
 
 // 疑似侵权线索

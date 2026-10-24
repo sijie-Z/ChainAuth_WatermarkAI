@@ -22,6 +22,7 @@
 | 下载指纹 | 授权用户下载影像时生成带资产编码、授权编号、账号与唯一指纹码的可见副本，原盲水印保留；台账可回溯 | Pillow + Flask |
 | 证据包导出 | 所有者/资产管理员一键打包当前版本原件与水印副本、证据链、版本证书、SHA-256 清单与核验说明；超出 200MB 时仅导出清单与证书 | Flask + ZIP |
 | 证据包核验 | 公开上传 ZIP，独立核对结构、SHA-256、资产编码、水印、证书与当前/历史版本哈希，区分“完整性失败”与“登记不一致” | Flask + ZIP |
+| 审计日志完整性 | 操作日志写入时计算服务端 HMAC-SHA256，后台可一键校验；字段被修改会标记异常，支持历史日志补签 | Flask + HMAC |
 | 多格式预览 | 图片/矢量缩略图、视频在线播放、PDF 内嵌预览、三维模型（GLB/GLTF/STL/OBJ）旋转缩放；预览按授权控制且不计下载量 | Vue3 + Flask + three.js |
 | 侵权线索 | 公开提交疑似盗用文件/链接，水印匹配资产后进入后台研判，确认或驳回时通知举报人与权利人 | Vue3 + Flask |
 | 通知渠道 | 站内 SSE 实时推送 + 可选 SMTP 邮件 + 系统 Webhook（兼容企业微信群机器人，支持签名与重试） | SSE + SMTP + Webhook |
@@ -125,7 +126,7 @@ FLASK_APP=run.py flask db upgrade
 ### 运行测试
 
 ```bash
-# 后端测试（348个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/侵权线索/批量巡检/备份恢复/存储巡检/水印鲁棒性实验/证据包导出与核验）
+# 后端测试（353个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/侵权线索/批量巡检/备份恢复/存储巡检/水印鲁棒性实验/证据包导出与核验/审计日志完整性）
 cd backend && python -m pytest tests/ -v
 
 # Windows 内存受限时：逐文件隔离子进程运行（推荐）
@@ -166,7 +167,7 @@ garden-asset-platform/
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
 │   ├── migrations/                # Alembic 迁移（baseline + versions）
-│   ├── tests/                     # pytest测试（348个用例）
+│   ├── tests/                     # pytest测试（353个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -307,6 +308,7 @@ garden-asset-platform/
 | POST | `/api/infringements/:id/review` | 受理/确认/驳回（确认与驳回通知举报人与权利人） |
 | GET | `/api/infringements/:id/file` | 下载举报文件（管理员） |
 | GET | `/api/logs` | 操作日志（管理员，支持模块/结果/日期/关键词筛选） |
+| GET | `/api/logs/integrity` | 校验操作日志 HMAC 完整性（管理员） |
 | GET | `/api/system/status` | 系统能力状态（管理员：AI/链/Redis/调度器/通知/存储真实启用情况） |
 | GET | `/api/system/storage` | 存储占用与孤儿文件报告（管理员，只读，不删除） |
 | GET/PUT | `/api/system/notification-webhook` | 系统 Webhook 配置（管理员） |
@@ -377,6 +379,7 @@ Docker 部署见 `garden-asset-platform/.env.example`；本地开发见 `backend
 | `BACKUP_DIR` | 数据库备份目录 | `./backups` |
 | `EVIDENCE_PACKAGE_MAX_BYTES` | 证据包允许打包的二进制总大小，超出时仅导出清单与证书 | `209715200`（200MB） |
 | `EVIDENCE_VERIFY_MAX_BYTES` | 证据包核验上传大小上限 | `20971520`（20MB） |
+| `AUDIT_HMAC_KEY` | 审计日志 HMAC 密钥；留空时回退到 `SECRET_KEY` | 空 |
 
 > 多 worker 部署（4 个 gunicorn worker）默认关闭任务调度器，避免备份/授权过期任务重复执行。如需启用，设置 `SCHEDULER_ENABLED=true`，并确保只运行一个调度进程（或改用外部 cron）。
 

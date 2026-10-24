@@ -69,6 +69,21 @@ test.describe('登录与业务流程', () => {
     await expect(page.getByText('队列健康度：异常')).toHaveCount(0)
   })
 
+  test('后台操作日志可以校验 HMAC 完整性', async ({ page }) => {
+    await page.goto('/login')
+    await page.getByPlaceholder('请输入用户名').fill('admin')
+    await page.getByPlaceholder('请输入密码').fill('admin123')
+    await page.locator('.login-btn').click()
+
+    await page.waitForURL('**/admin', { timeout: 15000 })
+    await page.goto('/admin/logs')
+    await expect(page.getByRole('heading', { name: '操作日志' })).toBeVisible()
+
+    await page.getByRole('button', { name: '校验日志完整性' }).click()
+    await expect(page.locator('.integrity-card')).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('.integrity-card')).toContainText('签名')
+  })
+
   test('普通用户登录后可以浏览已发布资产', async ({ page }) => {
     await page.goto('/login')
     await page.getByPlaceholder('请输入用户名').fill('user1')

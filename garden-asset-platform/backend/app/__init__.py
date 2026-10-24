@@ -399,8 +399,9 @@ def register_api_resources(app):
     )
 
     # 操作日志
-    from app.resources.logs import LogListResource
+    from app.resources.logs import LogListResource, LogIntegrityResource
     api.add_resource(LogListResource, '/logs')
+    api.add_resource(LogIntegrityResource, '/logs/integrity')
 
     # 系统能力状态（管理员）
     from app.resources.system import (
