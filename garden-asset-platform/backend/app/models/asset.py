@@ -65,6 +65,9 @@ class Asset(db.Model):
 
     # 状态
     status = db.Column(db.String(20), default='draft')  # draft/pending/published/rejected/archived/deleted
+    deleted_at = db.Column(db.DateTime, nullable=True)
+    deleted_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    previous_status = db.Column(db.String(20), nullable=True)
     publish_at = db.Column(db.DateTime, nullable=True)  # 发布时间
     approver_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # 审核人
     approve_time = db.Column(db.DateTime, nullable=True)  # 审核时间
@@ -125,6 +128,8 @@ class Asset(db.Model):
             'favorite_count': self.favorite_count,
             'license_count': self.license_count,
             'status': self.status,
+            'deleted_at': self.deleted_at.isoformat() if self.deleted_at else None,
+            'previous_status': self.previous_status,
             'publish_at': self.publish_at.isoformat() if self.publish_at else None,
             'reject_reason': self.reject_reason,
             'created_at': self.created_at.isoformat() if self.created_at else None

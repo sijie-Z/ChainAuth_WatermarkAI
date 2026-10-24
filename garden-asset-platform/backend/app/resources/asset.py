@@ -386,10 +386,43 @@ class AssetResource(Resource):
         if not is_owner and user.role not in ASSET_MANAGE_ROLES:
             return {'code': 403, 'message': '无权限删除'}, 403
 
+        if asset.status != 'deleted':
+            asset.previous_status = asset.status
+            asset.deleted_at = datetime.utcnow()
+        asset.deleted_by = user_id
         asset.status = 'deleted'
-        # 删除后撤销仍然有效的授权，避免继续下载
-        License.query.filter_by(asset_id=asset_id, status='active').update(
-            {'status': 'revoked'}, synchronize_session=False
+
+        # 删除后撤销仍然有效的授权，通知被授权方；同时取消待审申请
+        active_licenses = License.query.filter_by(
+            asset_id=asset_id, status='active'
+        ).all()
+        for license_row in active_licenses:
+            license_row.status = 'revoked'
+            add_notification_event(
+                license_row.licensee_id,
+                'license_revoked',
+                '资产已删除，授权已撤销',
+                f'《{asset.title}》已从平台删除，原授权停止使用',
+                '/license/my'
+            )
+        pending_apps = LicenseApplication.query.filter(
+            LicenseApplication.asset_id == asset_id,
+            LicenseApplication.status.in_(('pending', 'adm1_approved'))
+        ).all()
+        for application in pending_apps:
+            application.status = 'cancelled'
+            add_notification_event(
+                application.applicant_id,
+                'license_rejected',
+                '资产已删除，申请已取消',
+                f'《{asset.title}》已从平台删除',
+                '/license/my?tab=applications'
+            )
+
+        # 排队中的水印/存证任务不再有执行意义
+        from app.models.task import AsyncTask
+        AsyncTask.query.filter_by(asset_id=asset_id, status='queued').update(
+            {'status': 'cancelled'}, synchronize_session=False
         )
         db.session.commit()
 
@@ -403,7 +436,58 @@ class AssetResource(Resource):
             request=request
         )
 
-        return {'code': 200, 'message': '删除成功'}, 200
+        return {'code': 200, 'message': '资产已移入回收站，可联系管理员恢复'}, 200
+
+
+class AssetRestoreResource(Resource):
+    """恢复已删除资产（退回草稿，授权不自动恢复）"""
+
+    @jwt_required()
+    def post(self, asset_id):
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        asset = Asset.query.get(asset_id)
+        if not asset:
+            return {'code': 404, 'message': '资产不存在'}, 404
+        if asset.status != 'deleted':
+            return {'code': 400, 'message': '该资产不在回收站'}, 400
+
+        is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
+        if not is_owner and user.role not in ASSET_MANAGE_ROLES:
+            return {'code': 403, 'message': '无权限恢复'}, 403
+
+        asset.status = 'draft'
+        asset.deleted_at = None
+        asset.deleted_by = None
+        asset.previous_status = None
+        db.session.commit()
+
+        OperationLog.log(
+            user=user,
+            action='restore',
+            module='asset',
+            description=f'恢复资产: {asset.asset_code}',
+            target_type='asset',
+            target_id=asset_id,
+            request=request
+        )
+
+        owner_id = asset.owner_id or asset.creator_id or asset.uploader_id
+        if owner_id and owner_id != user_id:
+            add_notification_event(
+                owner_id,
+                'asset_restored',
+                '资产已恢复',
+                f'《{asset.title}》已由管理员恢复到草稿，请重新完成发布流程',
+                f'/assets/{asset.id}'
+            )
+            db.session.commit()
+
+        return {
+            'code': 200,
+            'message': '资产已恢复为草稿，请重新水印/存证并提交发布',
+            'data': asset.to_dict()
+        }, 200
 
 
 class AssetUploadResource(Resource):
@@ -457,7 +541,10 @@ class AssetUploadResource(Resource):
 
         # 检查是否已存在相同文件。只向有权限查看该资产的人返回 ID，
         # 避免通过哈希探测他人草稿/已删除资产。
-        existing = Asset.query.filter_by(file_hash=file_hash).first()
+        existing = Asset.query.filter(
+            Asset.file_hash == file_hash,
+            Asset.status != 'deleted',
+        ).first()
         if existing:
             visible = user and (
                 user.role in ADMIN_ROLES

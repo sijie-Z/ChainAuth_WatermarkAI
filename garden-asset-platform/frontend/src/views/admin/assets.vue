@@ -37,6 +37,7 @@
             <el-option label="待审核" value="pending" />
             <el-option label="已发布" value="published" />
             <el-option label="已驳回" value="rejected" />
+            <el-option label="已删除" value="deleted" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -134,7 +135,12 @@
             row-key="id"
             @selection-change="handleSelectionChange"
           >
-            <el-table-column v-if="canProcessAssets" type="selection" width="44" />
+            <el-table-column
+              v-if="canProcessAssets"
+              type="selection"
+              width="44"
+              :selectable="row => row.status !== 'deleted'"
+            />
             <el-table-column prop="asset_code" label="编码" width="220" class-name="cell-code" />
             <el-table-column label="标题" min-width="200">
               <template #default="{ row }">
@@ -177,7 +183,15 @@
                 <div class="row-actions">
                   <el-button size="small" link type="primary" @click="viewDetail(row.id)">查看</el-button>
                   <el-button
-                    v-if="['draft', 'rejected'].includes(row.status) && isOwner(row)"
+                    v-if="row.status === 'deleted' && canProcessAssets"
+                    size="small"
+                    type="warning"
+                    plain
+                    :loading="actionState[row.id] === 'restore'"
+                    @click="restoreAsset(row)"
+                  >恢复</el-button>
+                  <el-button
+                    v-if="row.status !== 'deleted' && ['draft', 'rejected'].includes(row.status) && isOwner(row)"
                     size="small"
                     type="primary"
                     @click="submitPublish(row)"
@@ -190,7 +204,7 @@
                   </template>
                   <span v-else-if="row.status === 'pending' && isOwner(row)" class="owner-hint">不能审核自己上传的资产</span>
                   <el-button
-                    v-if="canProcessAssets"
+                    v-if="canProcessAssets && row.status !== 'deleted'"
                     size="small"
                     type="primary"
                     plain
@@ -201,12 +215,12 @@
                     嵌水印
                   </el-button>
                   <el-button
-                    v-if="canProcessAssets"
+                    v-if="canProcessAssets && row.status !== 'deleted'"
                     size="small"
                     type="success"
                     plain
                     :loading="actionState[row.id] === 'chain'"
-                    :disabled="!!actionState[row.id] || row.chain_status === 'confirmed' || !['embedded', 'verified'].includes(row.watermark_status)"
+                    :disabled="!!actionState[row.id] || row.chain_status === 'confirmed' || (!['embedded', 'verified'].includes(row.watermark_status) && ['image', 'vector'].includes(row.asset_type))"
                     @click="batchChain(row)"
                   >
                     上链
@@ -509,6 +523,28 @@ function exportCurrentPage() {
   link.click()
   link.remove()
   URL.revokeObjectURL(url)
+}
+
+async function restoreAsset(row) {
+  try {
+    await ElMessageBox.confirm(
+      `恢复「${row.title}」后会回到草稿状态，原授权不会自动恢复，需要重新水印/存证并提交发布。`,
+      '恢复资产',
+      { type: 'warning', confirmButtonText: '恢复', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  actionState[row.id] = 'restore'
+  try {
+    const response = await assetApi.restore(row.id)
+    ElMessage.success(response.data?.message || '资产已恢复')
+    await loadAssets()
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '恢复失败')
+  } finally {
+    delete actionState[row.id]
+  }
 }
 
 async function batchWatermark(row) {
