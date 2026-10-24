@@ -210,6 +210,8 @@ garden-asset-platform/
 │   │   └── assets/                # 样式变量 + 全局样式
 │   ├── Dockerfile
 │   └── nginx.conf
+├── docs/                           # 使用指南、演示脚本、能力审计与验收素材
+│   └── assets/                     # 14 张界面截图 + 演示视频/GIF/封面
 ├── docker-compose.yml              # 多服务编排
 ├── Dockerfile                      # 一体化构建
 └── .gitignore
