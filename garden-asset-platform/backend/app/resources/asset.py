@@ -855,6 +855,11 @@ def _record_denied_download(asset, user, user_id, purpose, territory,
     )
 
 
+def _asset_file_path(asset):
+    raw_path = asset.watermarked_path or asset.storage_path
+    return os.path.abspath(raw_path) if raw_path else ''
+
+
 def _download_file_path(asset, license_row, user):
     """生成（或复用）指纹副本并返回实际文件路径与指纹。"""
     fingerprint = None
@@ -868,8 +873,7 @@ def _download_file_path(asset, license_row, user):
             )
 
     file_path = (
-        fingerprint.file_path if fingerprint else
-        os.path.abspath(asset.watermarked_path or asset.storage_path or '')
+        fingerprint.file_path if fingerprint else _asset_file_path(asset)
     )
     return file_path, fingerprint
 
@@ -939,7 +943,7 @@ class AssetDownloadResource(Resource):
         file_path, fingerprint = _download_file_path(
             asset, selected_license, user
         )
-        if not file_path or not os.path.exists(file_path):
+        if not file_path or not os.path.isfile(file_path):
             return {'code': 404, 'message': '文件不存在'}, 404
 
         # 记录下载（关联本次使用的授权与指纹副本，便于后续审计）
@@ -1020,10 +1024,8 @@ class AssetDownloadTicketResource(Resource):
             )
             return {'code': 403, 'message': denial_reason}, 403
 
-        file_path = os.path.abspath(
-            asset.watermarked_path or asset.storage_path or ''
-        )
-        if not file_path or not os.path.exists(file_path):
+        file_path = _asset_file_path(asset)
+        if not file_path or not os.path.isfile(file_path):
             return {'code': 404, 'message': '文件不存在'}, 404
 
         fingerprint_code = None
@@ -1173,10 +1175,8 @@ class AssetPreviewResource(Resource):
         if error:
             return error
 
-        file_path = os.path.abspath(
-            asset.watermarked_path or asset.storage_path or ''
-        )
-        if not file_path or not os.path.exists(file_path):
+        file_path = _asset_file_path(asset)
+        if not file_path or not os.path.isfile(file_path):
             return {'code': 404, 'message': '文件不存在'}, 404
 
         return _send_preview_file(asset, file_path)
@@ -1198,10 +1198,8 @@ class AssetPreviewTicketResource(Resource):
         if error:
             return error
 
-        file_path = os.path.abspath(
-            asset.watermarked_path or asset.storage_path or ''
-        )
-        if not file_path or not os.path.exists(file_path):
+        file_path = _asset_file_path(asset)
+        if not file_path or not os.path.isfile(file_path):
             return {'code': 404, 'message': '文件不存在'}, 404
 
         ticket = _preview_ticket_serializer().dumps({

@@ -355,3 +355,30 @@ def test_share_download_ticket_checks_code_and_limit(
     # 票据不能绕过下载次数上限：实际取件时重新检查
     exhausted = client.get(f'/api/shares/{token}/download?ticket={ticket}')
     assert exhausted.status_code == 410
+
+
+def test_share_download_missing_file_returns_404(
+    client, app, auth_header, asset_fixture
+):
+    with app.app_context():
+        asset = db.session.get(Asset, asset_fixture['asset_id'])
+        asset.storage_path = None
+        asset.watermarked_path = None
+        db.session.commit()
+
+    created = client.post(
+        f"/api/assets/{asset_fixture['asset_id']}/shares",
+        headers=auth_header,
+        json={'expires_in_days': 1, 'allow_download': True}
+    )
+    token = created.get_json()['data']['token']
+
+    ticket = client.post(f'/api/shares/{token}/download-ticket', json={})
+    assert ticket.status_code == 404
+    download = client.get(f'/api/shares/{token}/download')
+    assert download.status_code == 404
+
+    with app.app_context():
+        assert ShareDownload.query.filter_by(
+            asset_id=asset_fixture['asset_id']
+        ).count() == 0

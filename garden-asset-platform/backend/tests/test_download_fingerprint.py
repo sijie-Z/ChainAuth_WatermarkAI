@@ -227,3 +227,29 @@ def test_download_ticket_denies_user_without_license(
         headers=outsider_header,
     )
     assert invalid.status_code == 400
+
+
+def test_download_and_preview_missing_file_return_404(
+    client, app, tmp_path, auth_header
+):
+    asset_id, _license_id, _licensee_id, _licensee_header = setup_licensed_asset(
+        client, app, tmp_path, auth_header
+    )
+    with app.app_context():
+        asset = db.session.get(Asset, asset_id)
+        asset.storage_path = None
+        asset.watermarked_path = None
+        db.session.commit()
+
+    download = client.get(
+        f'/api/assets/{asset_id}/download', headers=auth_header
+    )
+    assert download.status_code == 404
+    ticket = client.post(
+        f'/api/assets/{asset_id}/download-ticket', headers=auth_header
+    )
+    assert ticket.status_code == 404
+    preview = client.get(
+        f'/api/assets/{asset_id}/preview', headers=auth_header
+    )
+    assert preview.status_code == 404

@@ -50,6 +50,11 @@ def _verify_share_ticket(ticket):
         return None
 
 
+def _share_file_path(asset):
+    raw_path = asset.watermarked_path or asset.storage_path
+    return os.path.abspath(raw_path) if raw_path else ''
+
+
 def _share_download_error(share):
     if not share.allow_download:
         return {'code': 403, 'message': '该分享未开放下载'}, 403
@@ -338,8 +343,8 @@ class PublicShareDownloadResource(Resource):
         if download_error:
             return download_error
 
-        file_path = os.path.abspath(asset.watermarked_path or asset.storage_path or '')
-        if not file_path or not os.path.exists(file_path):
+        file_path = _share_file_path(asset)
+        if not file_path or not os.path.isfile(file_path):
             return {'code': 404, 'message': '文件不存在'}, 404
 
         share.download_count = (share.download_count or 0) + 1
@@ -394,8 +399,8 @@ class PublicShareDownloadTicketResource(Resource):
         if download_error:
             return download_error
 
-        file_path = os.path.abspath(asset.watermarked_path or asset.storage_path or '')
-        if not file_path or not os.path.exists(file_path):
+        file_path = _share_file_path(asset)
+        if not file_path or not os.path.isfile(file_path):
             return {'code': 404, 'message': '文件不存在'}, 404
 
         ticket = _share_ticket_serializer().dumps({

@@ -148,7 +148,7 @@ FLASK_APP=run.py flask db upgrade
 ### 运行测试
 
 ```bash
-# 后端测试（372个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/授权视图/资产回收站/侵权线索/批量巡检/备份恢复/存储巡检/水印鲁棒性实验/证据包导出与核验/审计日志完整性/HTTP错误处理/对象级可见性）
+# 后端测试（374个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/授权视图/资产回收站/侵权线索/批量巡检/备份恢复/存储巡检/水印鲁棒性实验/证据包导出与核验/审计日志完整性/HTTP错误处理/对象级可见性）
 cd backend && python -m pytest tests/ -v
 
 # Windows 内存受限时：逐文件隔离子进程运行（推荐）
@@ -189,7 +189,7 @@ garden-asset-platform/
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
 │   ├── migrations/                # Alembic 迁移（baseline + versions）
-│   ├── tests/                     # pytest测试（372个用例）
+│   ├── tests/                     # pytest测试（374个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
