@@ -149,6 +149,14 @@ test.describe('登录与业务流程', () => {
 
     await page.keyboard.press('Control+k')
     await expect(page.locator('.palette')).toBeVisible()
+    await expect(page.locator('.palette-input')).toBeFocused()
+
+    // 焦点在对话框内循环，不能 Tab 到背景页面
+    await page.keyboard.press('Shift+Tab')
+    await expect(page.locator('.palette-item').last()).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(page.locator('.palette-input')).toBeFocused()
+
     await page.locator('.palette-input').fill('拙政')
 
     // 等资产接口返回（园林是本地的，会先出现），再点击第一个资产结果。

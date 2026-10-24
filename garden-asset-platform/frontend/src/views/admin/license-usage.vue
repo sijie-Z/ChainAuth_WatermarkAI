@@ -212,7 +212,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import * as echarts from 'echarts'
+import echarts from '@/utils/echarts'
 import { parseBackendDate } from '@/utils'
 import { licenseApi } from '@/api/modules'
 

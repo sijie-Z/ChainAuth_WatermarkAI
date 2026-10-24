@@ -180,6 +180,30 @@ def register_api_resources(app):
         }
         for cls in jwt_error_classes
     }
+    # Flask-RESTful 会接管资源内的 HTTP 异常，默认把 Werkzeug 英文描述
+    # 直接返回给前端；这里统一成中文提示。
+    rest_errors.update({
+        'MethodNotAllowed': {
+            'status': 405,
+            'code': 405,
+            'message': '该接口不支持当前请求方法',
+        },
+        'RequestEntityTooLarge': {
+            'status': 413,
+            'code': 413,
+            'message': '上传文件过大，请压缩或拆分后重试',
+        },
+        'UnsupportedMediaType': {
+            'status': 415,
+            'code': 415,
+            'message': '不支持的文件类型或请求格式',
+        },
+        'TooManyRequests': {
+            'status': 429,
+            'code': 429,
+            'message': '请求过于频繁，请稍后再试',
+        },
+    })
 
     api = Api(app, prefix='/api', errors=rest_errors)
 

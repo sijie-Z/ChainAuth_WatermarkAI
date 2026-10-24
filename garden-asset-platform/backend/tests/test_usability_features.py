@@ -249,3 +249,37 @@ def test_upload_persists_tags(client, auth_header):
     assert tags.status_code == 200
     names = {item['name'] for item in tags.get_json()['data']}
     assert names == {'古典建筑', '山水景观'}
+
+
+def test_asset_edit_replaces_tags(client, auth_header):
+    response = client.post(
+        '/api/assets/upload',
+        data={
+            'file': (_jpeg_bytes(), '标签编辑.jpg'),
+            'title': '待编辑标签',
+            'asset_type': 'image',
+            'tags': '["旧标签"]',
+        },
+        headers=auth_header,
+        content_type='multipart/form-data',
+    )
+    asset_id = response.get_json()['data']['asset_id']
+
+    updated = client.put(
+        f'/api/assets/{asset_id}',
+        headers=auth_header,
+        json={'title': '已编辑标题', 'tags': ['新标签', '新标签', ' 第二个 ']},
+    )
+    assert updated.status_code == 200, updated.get_json()
+    assert updated.get_json()['data']['title'] == '已编辑标题'
+
+    tags = client.get(f'/api/assets/{asset_id}/tags', headers=auth_header)
+    names = [item['name'] for item in tags.get_json()['data']]
+    assert set(names) == {'第二个', '新标签'}
+
+    invalid = client.put(
+        f'/api/assets/{asset_id}',
+        headers=auth_header,
+        json={'tags': 'not-a-list'},
+    )
+    assert invalid.status_code == 400

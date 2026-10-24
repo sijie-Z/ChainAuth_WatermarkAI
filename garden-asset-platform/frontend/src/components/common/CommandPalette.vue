@@ -2,7 +2,7 @@
   <Teleport to="body">
     <transition name="palette-fade">
       <div v-if="visible" class="palette-backdrop" role="presentation" @mousedown.self="close">
-        <section class="palette" role="dialog" aria-modal="true" aria-label="全局搜索与快捷导航">
+        <section class="palette" role="dialog" aria-modal="true" aria-label="全局搜索与快捷导航" @keydown.tab="handleTab">
           <header class="palette-search">
             <el-icon class="search-icon"><Search /></el-icon>
             <input
@@ -99,6 +99,7 @@ const loading = ref(false)
 const assetResults = ref([])
 const gardens = ref([])
 const gardensLoaded = ref(false)
+const previousFocus = ref(null)
 
 const ADMIN_ROLES = ['admin', 'asset_admin', 'license_admin', 'adm1', 'adm2']
 const isLoggedIn = computed(() => userStore.isLoggedIn)
@@ -405,6 +406,7 @@ async function loadGardens() {
 
 function open() {
   visible.value = true
+  previousFocus.value = document.activeElement
   document.body.style.overflow = 'hidden'
   loadGardens()
   nextTick(() => inputRef.value?.focus())
@@ -416,6 +418,22 @@ function close() {
   query.value = ''
   assetResults.value = []
   activeIndex.value = 0
+  nextTick(() => previousFocus.value?.focus?.())
+}
+
+function handleTab(event) {
+  const focusables = [...event.currentTarget.querySelectorAll('input, button:not([disabled])')]
+    .filter(element => element.offsetParent !== null)
+  if (!focusables.length) return
+  const first = focusables[0]
+  const last = focusables[focusables.length - 1]
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first.focus()
+  }
 }
 
 function move(step) {

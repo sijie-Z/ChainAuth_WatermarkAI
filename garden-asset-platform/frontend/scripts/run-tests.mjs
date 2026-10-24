@@ -43,7 +43,7 @@ for (const [index, file] of files.entries()) {
   console.log(`[${index + 1}/${files.length}] ${name}`)
   const result = spawnSync(
     process.execPath,
-    [vitestEntry, 'run', name, '--passWithNoTests', '--maxWorkers=1'],
+    [vitestEntry, 'run', name, '--passWithNoTests', '--maxWorkers=1', '--pool=vmThreads'],
     { cwd: root, stdio: 'inherit', env: { ...process.env, CI: 'true' } }
   )
   if (result.status !== 0) {

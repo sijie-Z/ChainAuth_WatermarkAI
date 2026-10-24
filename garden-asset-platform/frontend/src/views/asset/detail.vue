@@ -100,6 +100,11 @@
                 <el-icon class="is-loading" :size="40"><Loading /></el-icon>
                 <span>正在加载预览…</span>
               </div>
+              <div v-else-if="previewDeferred && !previewError" class="preview-placeholder preview-deferred">
+                <el-icon :size="44"><Document /></el-icon>
+                <span>文件约 {{ formatSize(asset.file_size) }}，加载预览会消耗相应流量</span>
+                <el-button size="small" type="primary" plain @click="loadPreviewFile">加载预览</el-button>
+              </div>
               <video
                 v-else-if="asset.asset_type === 'video' && previewUrl"
                 class="asset-video"
@@ -359,6 +364,19 @@
             </el-form-item>
             <el-form-item label="著录说明">
               <el-input v-model="editForm.description" type="textarea" :rows="5" maxlength="1000" show-word-limit />
+            </el-form-item>
+            <el-form-item label="标签">
+              <el-select
+                v-model="editForm.tags"
+                multiple
+                filterable
+                allow-create
+                default-first-option
+                placeholder="输入标签后回车添加，最多 20 个"
+                style="width: 100%"
+              >
+                <el-option v-for="tag in tags" :key="tag" :label="tag" :value="tag" />
+              </el-select>
             </el-form-item>
           </el-form>
           <template #footer>
@@ -930,7 +948,7 @@ const downloading = ref(false)
 const publishing = ref(false)
 const editVisible = ref(false)
 const editSaving = ref(false)
-const editForm = ref({ title: '', description: '' })
+const editForm = ref({ title: '', description: '', tags: [] })
 const favorited = ref(false)
 const favoriteLoading = ref(false)
 const tags = ref([])
@@ -1054,6 +1072,15 @@ const isModelAsset = computed(() =>
 )
 const previewSupported = computed(() =>
   asset.value.asset_type === 'video' || isPdfAsset.value || isModelAsset.value
+)
+// 大文件不自动拉取预览，避免打开详情页就开始消耗大量流量
+const PREVIEW_AUTO_LOAD_LIMIT = 25 * 1024 * 1024
+const previewDeferred = computed(() =>
+  previewSupported.value
+  && canDownload.value
+  && !previewUrl.value
+  && !previewLoading.value
+  && Number(asset.value.file_size || 0) > PREVIEW_AUTO_LOAD_LIMIT
 )
 const previewPlaceholderText = computed(() => {
   if (previewSupported.value) {
@@ -1724,7 +1751,8 @@ async function publishAsset() {
 function openEditDialog() {
   editForm.value = {
     title: asset.value.title || '',
-    description: asset.value.description || ''
+    description: asset.value.description || '',
+    tags: [...tags.value]
   }
   editVisible.value = true
 }
@@ -1734,14 +1762,19 @@ async function saveEdit() {
     ElMessage.warning('标题不能为空')
     return
   }
+  const normalizedTags = [...new Set(
+    editForm.value.tags.map(tag => String(tag).trim()).filter(Boolean)
+  )].slice(0, 20)
   editSaving.value = true
   try {
     const response = await assetApi.update(asset.value.id, {
       title: editForm.value.title.trim(),
-      description: editForm.value.description
+      description: editForm.value.description,
+      tags: normalizedTags
     })
     if (response.data?.code === 200) {
       asset.value = { ...asset.value, ...response.data.data }
+      tags.value = normalizedTags
       editVisible.value = false
       ElMessage.success('著录信息已更新')
     } else {
@@ -1917,7 +1950,8 @@ watch(
   [canDownload, () => asset.value.id, previewSupported],
   () => {
     revokePreview()
-    if (previewSupported.value && canDownload.value) loadPreviewFile()
+    const isLargeFile = Number(asset.value.file_size || 0) > PREVIEW_AUTO_LOAD_LIMIT
+    if (previewSupported.value && canDownload.value && !isLargeFile) loadPreviewFile()
   }
 )
 

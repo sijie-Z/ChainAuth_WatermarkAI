@@ -13,7 +13,7 @@
     "lint:check": "eslint src --ext .vue,.js,.jsx,.cjs,.mjs",
     "format": "prettier --write src/",
     "test": "vitest",
-    "test:ci": "vitest run --passWithNoTests --maxWorkers=1",
+    "test:ci": "vitest run --passWithNoTests --maxWorkers=1 --pool=vmThreads",
     "test:e2e": "playwright test",
     "coverage": "vitest run --coverage",
     "test:ci:safe": "node scripts/run-tests.mjs"

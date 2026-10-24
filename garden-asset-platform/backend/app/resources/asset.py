@@ -347,11 +347,29 @@ class AssetResource(Resource):
 
         data = request.get_json()
 
+        # 标签为整体替换：先校验，避免部分字段已修改后才报错
+        normalized_tags = None
+        if 'tags' in data:
+            raw_tags = data.get('tags')
+            if not isinstance(raw_tags, list) or len(raw_tags) > 20:
+                return {'code': 400, 'message': '标签格式错误'}, 400
+            normalized_tags = []
+            for raw_tag in raw_tags:
+                name = str(raw_tag).strip()[:50]
+                if name and name not in normalized_tags:
+                    normalized_tags.append(name)
+
         # 更新字段
         if 'title' in data:
             asset.title = data['title']
         if 'description' in data:
             asset.description = data['description']
+        if normalized_tags is not None:
+            AssetTag.query.filter_by(asset_id=asset_id).delete(
+                synchronize_session=False
+            )
+            for name in normalized_tags:
+                db.session.add(AssetTag(asset_id=asset_id, name=name))
 
         db.session.commit()
 

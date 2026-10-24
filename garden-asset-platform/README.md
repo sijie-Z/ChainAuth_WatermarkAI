@@ -126,7 +126,7 @@ FLASK_APP=run.py flask db upgrade
 ### 运行测试
 
 ```bash
-# 后端测试（363个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/授权视图/资产回收站/侵权线索/批量巡检/备份恢复/存储巡检/水印鲁棒性实验/证据包导出与核验/审计日志完整性/对象级可见性）
+# 后端测试（366个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/授权视图/资产回收站/侵权线索/批量巡检/备份恢复/存储巡检/水印鲁棒性实验/证据包导出与核验/审计日志完整性/HTTP错误处理/对象级可见性）
 cd backend && python -m pytest tests/ -v
 
 # Windows 内存受限时：逐文件隔离子进程运行（推荐）
@@ -167,7 +167,7 @@ garden-asset-platform/
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
 │   ├── migrations/                # Alembic 迁移（baseline + versions）
-│   ├── tests/                     # pytest测试（363个用例）
+│   ├── tests/                     # pytest测试（366个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -211,6 +211,7 @@ garden-asset-platform/
 | GET | `/api/assets` | 资产列表（分页、筛选、搜索） |
 | POST | `/api/assets/upload` | 上传资产（含魔数校验） |
 | GET | `/api/assets/:id` | 资产详情 |
+| PUT | `/api/assets/:id` | 编辑标题、著录说明与标签（所有者/资产管理员，标签整体替换） |
 | POST | `/api/assets/:id/restore` | 恢复已删除资产为草稿（所有者/资产管理员） |
 | GET | `/api/assets/:id/download` | 下载资产（授权用户需传 `purpose`/`territory` 申报范围；影像会生成可见指纹副本，响应头 `X-Download-Fingerprint`） |
 | GET | `/api/assets/stats` | 资产统计（含水印趋势） |

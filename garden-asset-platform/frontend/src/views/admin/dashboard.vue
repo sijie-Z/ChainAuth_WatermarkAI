@@ -258,7 +258,7 @@ import {
   ArrowUp, ArrowDown, User, Reading,
   CircleCheck, Timer, Download, Place, Warning, Bell
 } from '@element-plus/icons-vue'
-import * as echarts from 'echarts'
+import echarts from '@/utils/echarts'
 
 const userStore = useUserStore()
 const router = useRouter()
