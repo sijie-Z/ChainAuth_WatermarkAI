@@ -104,7 +104,7 @@
 “我的授权 → 审批中”查看申请；二级通过后“全部/已生效”会出现授权记录。
 
 **如何把资产发给外部人员核验？**  
-资产所有者或管理员在资产详情点击“分享核验”，设置有效期、访问码与下载权限后生成链接。外部人员免登录即可查看资产与证据链；不需要时可在同一弹窗撤销。分享页只展示聚合下载次数，不暴露用户身份、IP 或内部台账明细。
+资产所有者或管理员在资产详情点击“分享核验”，设置有效期、访问码与下载权限后生成链接。外部人员免登录即可查看资产与证据链；不需要时可在同一弹窗撤销。分享页只展示聚合下载次数，不暴露用户身份、IP 或内部台账明细。开放下载时，访问码校验通过后会签发 120 秒票据，浏览器直接流式下载，票据不能绕过下载次数上限。
 
 **顶栏铃铛里的待办点过之后还会亮吗？**  
 不会。点击待办或“全部已读”后，已读状态按账号保存；业务状态再次变化时会重新变为未读。
@@ -209,7 +209,7 @@ python scripts/seed_demo_assets.py --reset
 ## 7. 测试
 
 ```bash
-# 后端 370 个用例
+# 后端 371 个用例
 cd backend && python -m pytest tests/ -q
 
 # Windows 内存不足时：每个测试文件独立进程运行
@@ -222,13 +222,13 @@ cd backend && python -m flask backup list
 # 存储巡检（只读，不删除文件）
 cd backend && python -m flask storage report
 
-# 前端 51 个单元测试（单 worker，降低内存占用）
+# 前端 52 个单元测试（单 worker，降低内存占用）
 cd frontend && npm run test:ci
 
 # Windows 内存不足时：逐文件运行前端测试
 cd frontend && npm run test:ci:safe
 
-# 23 个 Playwright 点击流
+# 24 个 Playwright 点击流
 cd frontend && npx playwright test
 ```
 

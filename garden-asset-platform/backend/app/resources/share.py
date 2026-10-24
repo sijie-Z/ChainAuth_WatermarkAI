@@ -5,9 +5,10 @@
 """
 import os
 import secrets
+import uuid
 from datetime import datetime, timedelta
 
-from flask import request, send_file
+from flask import request, send_file, current_app
 from flask_restful import Resource
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from werkzeug.security import generate_password_hash
@@ -23,6 +24,38 @@ ADMIN_ROLES = ('admin', 'asset_admin')
 MAX_EXPIRES_DAYS = 90
 MIN_ACCESS_CODE_LENGTH = 4
 MAX_ACCESS_CODE_LENGTH = 32
+SHARE_TICKET_MAX_AGE = 120
+
+
+def _share_ticket_serializer():
+    from itsdangerous import URLSafeTimedSerializer
+    return URLSafeTimedSerializer(
+        current_app.config['SECRET_KEY'],
+        salt='share-download-ticket'
+    )
+
+
+def _share_ticket_max_age():
+    return int(current_app.config.get(
+        'SHARE_TICKET_MAX_AGE', SHARE_TICKET_MAX_AGE
+    ))
+
+
+def _verify_share_ticket(ticket):
+    try:
+        return _share_ticket_serializer().loads(
+            ticket, max_age=_share_ticket_max_age()
+        )
+    except Exception:
+        return None
+
+
+def _share_download_error(share):
+    if not share.allow_download:
+        return {'code': 403, 'message': '该分享未开放下载'}, 403
+    if share.is_download_limited:
+        return {'code': 410, 'message': '该分享的下载次数已用完'}, 410
+    return None
 
 
 def _can_manage(user_id, user, asset):
@@ -230,10 +263,11 @@ def _resolve_share(token):
     return share, None
 
 
-def _check_code(share):
+def _check_code(share, code=None):
     if not share.access_code_hash:
         return None
-    code = request.args.get('code') or request.headers.get('X-Share-Code') or ''
+    if code is None:
+        code = request.args.get('code') or request.headers.get('X-Share-Code') or ''
     if not share.check_access_code(code):
         return {
             'code': 401,
@@ -275,7 +309,7 @@ class PublicShareResource(Resource):
 
 
 class PublicShareDownloadResource(Resource):
-    """公开分享下载（受分享设置限制）"""
+    """公开分享下载（受分享设置限制，支持短时票据流式取件）"""
 
     @rate_limit(limit=20, window=60)
     def get(self, token):
@@ -287,14 +321,22 @@ class PublicShareDownloadResource(Resource):
         if not asset or asset.status != 'published':
             return {'code': 410, 'message': '分享的资产已不可访问'}, 410
 
-        code_error = _check_code(share)
-        if code_error:
-            return code_error
+        ticket = (request.args.get('ticket') or '').strip()
+        if ticket:
+            payload = _verify_share_ticket(ticket)
+            if not payload or payload.get('share_id') != share.id:
+                return {
+                    'code': 401,
+                    'message': '下载凭证无效或已过期，请重新发起下载'
+                }, 401
+        else:
+            code_error = _check_code(share)
+            if code_error:
+                return code_error
 
-        if not share.allow_download:
-            return {'code': 403, 'message': '该分享未开放下载'}, 403
-        if share.is_download_limited:
-            return {'code': 410, 'message': '该分享的下载次数已用完'}, 410
+        download_error = _share_download_error(share)
+        if download_error:
+            return download_error
 
         file_path = os.path.abspath(asset.watermarked_path or asset.storage_path or '')
         if not file_path or not os.path.exists(file_path):
@@ -328,3 +370,42 @@ class PublicShareDownloadResource(Resource):
             if download_ext else asset.asset_code
         )
         return send_file(file_path, as_attachment=True, download_name=download_name)
+
+
+class PublicShareDownloadTicketResource(Resource):
+    """为公开分享签发短时下载票据，供浏览器直接流式下载"""
+
+    @rate_limit(limit=20, window=60)
+    def post(self, token):
+        share, error = _resolve_share(token)
+        if error:
+            return error
+
+        asset = Asset.query.get(share.asset_id)
+        if not asset or asset.status != 'published':
+            return {'code': 410, 'message': '分享的资产已不可访问'}, 410
+
+        data = request.get_json(silent=True) or {}
+        code_error = _check_code(share, data.get('code') or '')
+        if code_error:
+            return code_error
+
+        download_error = _share_download_error(share)
+        if download_error:
+            return download_error
+
+        file_path = os.path.abspath(asset.watermarked_path or asset.storage_path or '')
+        if not file_path or not os.path.exists(file_path):
+            return {'code': 404, 'message': '文件不存在'}, 404
+
+        ticket = _share_ticket_serializer().dumps({
+            'share_id': share.id,
+            'nonce': uuid.uuid4().hex,
+        })
+        return {
+            'code': 200,
+            'data': {
+                'ticket': ticket,
+                'expires_in': _share_ticket_max_age(),
+            }
+        }, 200

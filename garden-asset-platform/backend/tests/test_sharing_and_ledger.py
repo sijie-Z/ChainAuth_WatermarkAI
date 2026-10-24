@@ -306,3 +306,52 @@ def test_share_download_writes_ledger(client, app, auth_header, admin_header,
     assert share_items
     assert share_items[0]['user'] is None
     assert data['summary']['share_total'] >= 1
+
+
+def test_share_download_ticket_checks_code_and_limit(
+    client, app, auth_header, asset_fixture, tmp_path
+):
+    file_path = tmp_path / 'share-ticket.jpg'
+    file_path.write_bytes(b'share-ticket-content')
+    with app.app_context():
+        asset = db.session.get(Asset, asset_fixture['asset_id'])
+        asset.storage_path = str(file_path)
+        db.session.commit()
+
+    created = client.post(
+        f"/api/assets/{asset_fixture['asset_id']}/shares",
+        headers=auth_header,
+        json={
+            'expires_in_days': 1,
+            'access_code': 'TICKET2026',
+            'allow_download': True,
+            'max_downloads': 1,
+        }
+    )
+    token = created.get_json()['data']['token']
+
+    missing_code = client.post(f'/api/shares/{token}/download-ticket', json={})
+    assert missing_code.status_code == 401
+
+    issued = client.post(
+        f'/api/shares/{token}/download-ticket',
+        json={'code': 'TICKET2026'}
+    )
+    assert issued.status_code == 200, issued.get_json()
+    ticket = issued.get_json()['data']['ticket']
+
+    tampered = client.get(f'/api/shares/{token}/download?ticket={ticket}x')
+    assert tampered.status_code == 401
+
+    downloaded = client.get(f'/api/shares/{token}/download?ticket={ticket}')
+    assert downloaded.status_code == 200
+    assert downloaded.data == b'share-ticket-content'
+
+    with app.app_context():
+        assert ShareDownload.query.filter_by(
+            asset_id=asset_fixture['asset_id']
+        ).count() == 1
+
+    # 票据不能绕过下载次数上限：实际取件时重新检查
+    exhausted = client.get(f'/api/shares/{token}/download?ticket={ticket}')
+    assert exhausted.status_code == 410

@@ -94,7 +94,12 @@ export const shareApi = {
     timeout: 0,
     silent: true,
     skipAuth: true
-  })
+  }),
+  createDownloadTicket: (token, data) => api.post(
+    `/shares/${token}/download-ticket`,
+    data,
+    { silent: true, skipAuth: true }
+  )
 }
 
 // 下载记录

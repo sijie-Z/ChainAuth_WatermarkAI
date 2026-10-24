@@ -123,6 +123,9 @@ class Config:
     PREVIEW_TICKET_MAX_AGE = int(
         os.environ.get('PREVIEW_TICKET_MAX_AGE', '3600')
     )
+    SHARE_TICKET_MAX_AGE = int(
+        os.environ.get('SHARE_TICKET_MAX_AGE', '120')
+    )
 
     # 审计日志 HMAC 密钥；留空时回退到 SECRET_KEY
     AUDIT_HMAC_KEY = os.environ.get('AUDIT_HMAC_KEY', '')

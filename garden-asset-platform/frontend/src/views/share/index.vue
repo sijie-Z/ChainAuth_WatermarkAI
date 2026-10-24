@@ -156,6 +156,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowRight, CopyDocument, Download, Link, Lock, Picture } from '@element-plus/icons-vue'
 import { shareApi } from '@/api/modules'
+import { startShareDownload } from '@/utils/download'
 import { copyToClipboard, formatDate, formatFileSize } from '@/utils'
 import EvidenceChain from '@/components/common/EvidenceChain.vue'
 
@@ -232,18 +233,7 @@ async function downloadAsset() {
   if (downloading.value) return
   downloading.value = true
   try {
-    const params = accessCode.value.trim() ? { code: accessCode.value.trim() } : {}
-    const response = await shareApi.download(token.value, params)
-    const blob = new Blob([response.data])
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    const ext = asset.value?.file_format ? `.${asset.value.file_format.toLowerCase()}` : ''
-    link.href = url
-    link.download = `${asset.value?.asset_code || 'asset'}${ext}`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+    await startShareDownload(token.value, accessCode.value.trim())
     if (asset.value?.share) {
       asset.value.share.download_count += 1
       if (asset.value.share.download_remaining !== null) {
@@ -253,16 +243,7 @@ async function downloadAsset() {
     ElMessage.success('下载已开始')
   } catch (error) {
     const parsed = parseError(error)
-    let message = parsed.message
-    if (error.response?.data instanceof Blob) {
-      try {
-        const payload = JSON.parse(await error.response.data.text())
-        message = payload.message || message
-      } catch {
-        // 保留默认提示
-      }
-    }
-    ElMessage.error(message)
+    ElMessage.error(parsed.message)
   } finally {
     downloading.value = false
   }

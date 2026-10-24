@@ -304,7 +304,8 @@ def register_api_resources(app):
     )
     from app.resources.share import (
         AssetShareListResource, ShareResource,
-        PublicShareResource, PublicShareDownloadResource
+        PublicShareResource, PublicShareDownloadResource,
+        PublicShareDownloadTicketResource
     )
     api.add_resource(AssetEvidenceResource, '/assets/<string:asset_id>/evidence')
     api.add_resource(
@@ -315,6 +316,10 @@ def register_api_resources(app):
     api.add_resource(AssetShareListResource, '/assets/<string:asset_id>/shares')
     api.add_resource(PublicShareResource, '/shares/<string:token>')
     api.add_resource(PublicShareDownloadResource, '/shares/<string:token>/download')
+    api.add_resource(
+        PublicShareDownloadTicketResource,
+        '/shares/<string:token>/download-ticket'
+    )
     api.add_resource(ShareResource, '/shares/<int:share_id>')
 
     # 下载台账

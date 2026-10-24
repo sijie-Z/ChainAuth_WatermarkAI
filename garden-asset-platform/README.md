@@ -126,13 +126,13 @@ FLASK_APP=run.py flask db upgrade
 ### 运行测试
 
 ```bash
-# 后端测试（370个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/授权视图/资产回收站/侵权线索/批量巡检/备份恢复/存储巡检/水印鲁棒性实验/证据包导出与核验/审计日志完整性/HTTP错误处理/对象级可见性）
+# 后端测试（371个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/授权视图/资产回收站/侵权线索/批量巡检/备份恢复/存储巡检/水印鲁棒性实验/证据包导出与核验/审计日志完整性/HTTP错误处理/对象级可见性）
 cd backend && python -m pytest tests/ -v
 
 # Windows 内存受限时：逐文件隔离子进程运行（推荐）
 cd backend && python scripts/run_tests.py
 
-# 前端单元测试（51 个用例）
+# 前端单元测试（52 个用例）
 cd frontend && npm run test:ci
 
 # Windows 内存受限时：逐文件运行前端测试
@@ -167,7 +167,7 @@ garden-asset-platform/
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
 │   ├── migrations/                # Alembic 迁移（baseline + versions）
-│   ├── tests/                     # pytest测试（370个用例）
+│   ├── tests/                     # pytest测试（371个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -234,7 +234,8 @@ garden-asset-platform/
 | PUT/DELETE | `/api/assets/:id/annotations/:annotation_id` | 更新状态或内容 / 删除标注 |
 | GET/POST | `/api/assets/:id/shares` | 查询/创建公开分享链接（有效期、访问码、下载权限） |
 | GET | `/api/shares/:token` | 公开分享页数据（免登录，返回资产与证据链） |
-| GET | `/api/shares/:token/download` | 通过分享链接下载（受分享设置限制） |
+| GET | `/api/shares/:token/download` | 通过分享链接下载（受访问码、下载开关与次数限制；也接受短时 `ticket`） |
+| POST | `/api/shares/:token/download-ticket` | 校验访问码后签发 120 秒分享下载票据，浏览器直接流式取件 |
 | DELETE | `/api/shares/:id` | 撤销分享链接 |
 | GET/POST/DELETE | `/api/assets/:id/favorite` | 查询/添加/取消收藏 |
 | GET | `/api/favorites` | 我的收藏列表 |
@@ -387,6 +388,7 @@ Docker 部署见 `garden-asset-platform/.env.example`；本地开发见 `backend
 | `EVIDENCE_VERIFY_MAX_BYTES` | 证据包核验上传大小上限 | `20971520`（20MB） |
 | `DOWNLOAD_TICKET_MAX_AGE` | 下载票据有效期（秒），过期需重新申请 | `120` |
 | `PREVIEW_TICKET_MAX_AGE` | 预览票据有效期（秒），需覆盖一次播放/阅读会话 | `3600` |
+| `SHARE_TICKET_MAX_AGE` | 公开分享下载票据有效期（秒） | `120` |
 | `AUDIT_HMAC_KEY` | 审计日志 HMAC 密钥；留空时回退到 `SECRET_KEY` | 空 |
 
 > 多 worker 部署（4 个 gunicorn worker）默认关闭任务调度器，避免备份/授权过期任务重复执行。如需启用，设置 `SCHEDULER_ENABLED=true`，并确保只运行一个调度进程（或改用外部 cron）。

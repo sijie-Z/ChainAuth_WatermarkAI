@@ -12,7 +12,7 @@ vi.mock('@/api/index', () => ({
 import api from '@/api/index'
 import {
   assetApi, blockchainApi, infringementApi, licenseApi, notificationApi,
-  systemApi, taskApi, userApi
+  shareApi, systemApi, taskApi, userApi
 } from '@/api/modules'
 
 describe('api modules', () => {
@@ -109,6 +109,16 @@ describe('api modules', () => {
     assetApi.createPreviewTicket('asset-1')
 
     expect(api.post).toHaveBeenCalledWith('/assets/asset-1/preview-ticket')
+  })
+
+  it('shareApi.createDownloadTicket forwards the access code', () => {
+    shareApi.createDownloadTicket('share-token', { code: 'GY2026' })
+
+    expect(api.post).toHaveBeenCalledWith(
+      '/shares/share-token/download-ticket',
+      { code: 'GY2026' },
+      { silent: true, skipAuth: true }
+    )
   })
 
   it('notificationApi exposes server preferences and SSE URL', () => {
