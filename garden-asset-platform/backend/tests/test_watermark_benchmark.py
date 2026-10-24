@@ -86,7 +86,7 @@ def test_benchmark_runs_real_attacks(client, auth_header, app):
     assert payload['summary']['recovered'] >= 1
     assert payload['watermark_preview'].startswith('data:image/png;base64,')
 
-    origin = next(item for item in payload['attacks'] if item['key'] == 'origin')
+    origin = next(item for item in payload['attacks'] if item['id'] == 'origin')
     assert origin['id_recovered'] is True
     assert origin['recovered_id'] == payload['watermark_id']
     assert 0.9 <= origin['nc'] <= 1.0

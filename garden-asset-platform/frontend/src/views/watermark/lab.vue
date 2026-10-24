@@ -133,7 +133,7 @@
             <ul class="attack-list">
               <li
                 v-for="attack in result.attacks"
-                :key="attack.key"
+                :key="attack.id"
                 class="attack-row"
                 :class="{ recovered: attack.id_recovered, failed: !attack.id_recovered }"
               >
@@ -185,7 +185,7 @@
             </figure>
 
             <div class="wm-grid">
-              <figure v-for="attack in recoveredPreviews" :key="attack.key">
+              <figure v-for="attack in recoveredPreviews" :key="attack.id">
                 <img :src="attack.watermark_preview" :alt="`${attack.label} 后提取的水印`" />
                 <figcaption>{{ attack.label }}</figcaption>
               </figure>

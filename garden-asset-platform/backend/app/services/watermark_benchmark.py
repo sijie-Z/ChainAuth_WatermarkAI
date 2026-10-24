@@ -21,55 +21,55 @@ logger = logging.getLogger(__name__)
 # 顺序固定，前端据此展示；每项都在独立临时文件中执行。
 ATTACK_SPECS = (
     {
-        'key': 'origin',
+        'id': 'origin',
         'label': '无攻击',
         'description': '直接提取嵌入后的原图，作为基准',
         'kind': 'copy',
     },
     {
-        'key': 'jpeg90',
+        'id': 'jpeg90',
         'label': 'JPEG 质量 90',
         'description': '轻微有损压缩，模拟常见二次保存',
         'kind': 'jpeg',
         'quality': 90,
     },
     {
-        'key': 'jpeg70',
+        'id': 'jpeg70',
         'label': 'JPEG 质量 70',
         'description': '中等压缩，模拟社交平台转发',
         'kind': 'jpeg',
         'quality': 70,
     },
     {
-        'key': 'jpeg50',
+        'id': 'jpeg50',
         'label': 'JPEG 质量 50',
         'description': '较强压缩，检验频域嵌入的生存能力',
         'kind': 'jpeg',
         'quality': 50,
     },
     {
-        'key': 'noise',
+        'id': 'noise',
         'label': '高斯噪声',
         'description': 'σ = 3.0 的像素噪声',
         'kind': 'noise',
         'sigma': 3.0,
     },
     {
-        'key': 'scale50',
+        'id': 'scale50',
         'label': '缩小到 50%',
         'description': '常见缩略图尺寸，提取端尝试自动恢复缩放',
         'kind': 'resize',
         'factor': 0.5,
     },
     {
-        'key': 'scale150',
+        'id': 'scale150',
         'label': '放大到 150%',
         'description': '常见展示放大，检验缩放恢复',
         'kind': 'resize',
         'factor': 1.5,
     },
     {
-        'key': 'jpeg50_scale75',
+        'id': 'jpeg50_scale75',
         'label': '缩放 75% + JPEG 50',
         'description': '组合攻击，模拟压缩后再缩放分发',
         'kind': 'resize_jpeg',
@@ -271,11 +271,11 @@ def run_benchmark(image_path, watermark_path=None, max_side=640):
         attacks = []
         for spec in ATTACK_SPECS:
             attack_path = os.path.join(
-                workdir, f"attack_{spec['key']}{_attack_suffix(spec)}"
+                workdir, f"attack_{spec['id']}{_attack_suffix(spec)}"
             )
             attack_started = time.perf_counter()
             entry = {
-                'key': spec['key'],
+                'id': spec['id'],
                 'label': spec['label'],
                 'description': spec['description'],
                 'id_recovered': False,
@@ -306,7 +306,7 @@ def run_benchmark(image_path, watermark_path=None, max_side=640):
                     entry['watermark_preview'] = _preview_data_uri(extracted_path)
             except Exception:
                 logger.exception(
-                    '鲁棒性实验攻击失败: %s (%s)', spec['key'], watermark_id
+                    '鲁棒性实验攻击失败: %s (%s)', spec['id'], watermark_id
                 )
                 entry['error'] = '该攻击下提取失败'
             entry['total_ms'] = int(round((time.perf_counter() - attack_started) * 1000))
