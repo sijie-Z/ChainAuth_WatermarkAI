@@ -95,7 +95,7 @@
           </el-descriptions>
 
           <!-- 区块链存证 -->
-          <el-descriptions title="区块链存证" :column="2" border class="result-block">
+          <el-descriptions title="区块链存证" :column="1" border class="result-block">
             <el-descriptions-item label="存证状态">
               <el-tag :type="traceResult.certificate_id ? 'success' : 'info'">
                 {{ traceResult.certificate_id ? '已存证' : '未存证' }}

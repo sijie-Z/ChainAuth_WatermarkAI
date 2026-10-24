@@ -1,13 +1,15 @@
 """
 区块链模块测试
 """
+import hashlib
 import uuid
+from datetime import datetime
 
 import pytest
 
 from app.extensions import db
 from app.models.asset import Asset, AssetVersion
-from app.models.blockchain import Certificate
+from app.models.blockchain import BlockchainTransaction, Certificate
 from app.models.user import User
 
 
@@ -103,6 +105,85 @@ class TestBlockchain:
         response = client.get('/api/blockchain/verify/nonexistent-id')
 
         assert response.status_code == 404
+
+    def test_verify_by_watermark_returns_trace_fields(
+        self, client, app, tmp_path, auth_header
+    ):
+        content = b'trace-asset-content'
+        file_path = tmp_path / 'trace.jpg'
+        file_path.write_bytes(content)
+        digest = hashlib.sha256(content).hexdigest()
+        tx_hash = '0x' + 'ef' * 32
+
+        with app.app_context():
+            user = User.query.filter_by(username='testuser').first()
+            asset = Asset(
+                asset_code='TRACE-IMG-001',
+                title='溯源字段测试影像',
+                asset_type='image',
+                file_format='JPG',
+                file_size=len(content),
+                file_hash=digest,
+                storage_path=str(file_path),
+                watermark_id='WM-TRACE-001',
+                watermark_status='verified',
+                status='published',
+                creator_id=user.id,
+                owner_id=user.id,
+                uploader_id=user.id,
+            )
+            db.session.add(asset)
+            db.session.flush()
+            version = AssetVersion(
+                asset_id=asset.id,
+                version_no=1,
+                file_path=str(file_path),
+                file_name='trace.jpg',
+                file_format='JPG',
+                file_size=len(content),
+                file_hash=digest,
+            )
+            db.session.add(version)
+            db.session.flush()
+            db.session.add(Certificate(
+                certificate_id='CERT-TRACE-001',
+                asset_id=asset.id,
+                version_id=version.id,
+                version_no=1,
+                tx_hash=tx_hash,
+                block_number=42,
+                watermark_id='WM-TRACE-001',
+                file_hash=digest,
+                creator_name=user.username,
+                status='valid',
+            ))
+            db.session.add(BlockchainTransaction(
+                tx_hash=tx_hash,
+                tx_type='asset_register',
+                asset_id=asset.id,
+                block_number=42,
+                status='confirmed',
+                confirmations=1,
+                confirmed_at=datetime.utcnow(),
+            ))
+            asset.chain_status = 'confirmed'
+            asset.chain_tx_hash = tx_hash
+            asset.certificate_id = 'CERT-TRACE-001'
+            db.session.commit()
+
+        response = client.post(
+            '/api/blockchain/verify',
+            json={'watermark_id': 'WM-TRACE-001'},
+        )
+        assert response.status_code == 200, response.get_json()
+        payload = response.get_json()
+        assert payload['verified'] is True
+        data = payload['data']
+        assert data['watermark_id'] == 'WM-TRACE-001'
+        assert data['asset_type'] == 'image'
+        assert data['title'] == '溯源字段测试影像'
+        assert data['created_at']
+        assert data['certificate_id'] == 'CERT-TRACE-001'
 
     def test_verify_by_watermark_missing_id(self, client):
         """测试通过水印ID验证缺少ID"""

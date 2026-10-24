@@ -167,6 +167,12 @@ class BlockchainVerifyResource(Resource):
                 'asset_id': asset.id,
                 'asset_code': asset.asset_code,
                 'title': asset.title,
+                'asset_type': asset.asset_type,
+                'watermark_id': asset.watermark_id,
+                'garden_name': asset.garden.name if asset.garden else None,
+                'created_at': (
+                    asset.created_at.isoformat() if asset.created_at else None
+                ),
                 **result
             }
         }, 200

@@ -2,6 +2,8 @@
 
 > 面向现场演示与评审走查。默认演示库使用 `.scratch/demo/ui.db`，前端 `http://localhost:5173`，后端 `http://localhost:5000`。
 > 演示数据为 16 张 Wikimedia Commons 苏州园林实景照片，授权信息见 `.scratch/demo/photos/ATTRIBUTION.md`；照片不进入仓库。
+>
+> 演示视频、GIF 预览与全部界面截图见 [演示素材](assets/README.md)。
 
 ## 1. 演示前检查
 
@@ -137,4 +139,4 @@ python -m flask backup list
 - [x] 操作日志 HMAC 完整性校验与历史补签
 - [x] 存证证书扫码核验二维码
 - [x] 备份恢复、存储巡检、生产密钥与初始化安全
-- [x] 后端 371 个用例、前端 52 个 Vitest、24 个 Playwright 点击流（数量以实际运行结果为准）
+- [x] 后端 372 个用例、前端 52 个 Vitest、24 个 Playwright 点击流（数量以实际运行结果为准）

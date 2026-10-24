@@ -8,6 +8,27 @@
 
 > 哪些能力已真实可用、哪些仍是演示，以及下一阶段的重构计划，见 [能力完整性审计](docs/COMPLETENESS-AUDIT.md)。现场演示与验收流程见 [演示脚本](docs/DEMO-SCRIPT.md)。
 
+## 演示
+
+[![演示视频封面](docs/assets/video/demo-poster.jpg)](docs/assets/video/suzhou-garden-demo.mp4)
+
+[观看完整演示视频（约 1 分钟）](docs/assets/video/suzhou-garden-demo.mp4) · [查看全部界面截图](docs/assets/screenshots/) · [素材说明与复现方式](docs/assets/README.md)
+
+<details>
+<summary>动态预览（GIF，约 2.8MB）</summary>
+
+![演示动图](docs/assets/video/demo-preview.gif)
+
+</details>
+
+| 资产档案 | 资产详情 |
+|----------|----------|
+| ![资产档案](docs/assets/screenshots/02-asset-archive.png) | ![资产详情](docs/assets/screenshots/03-asset-detail.png) |
+| **证据链** | **水印鲁棒性实验室** |
+| ![证据链](docs/assets/screenshots/04-evidence-chain.png) | ![水印实验室](docs/assets/screenshots/06-watermark-lab.png) |
+| **管理仪表盘** | **证据包公开核验** |
+| ![管理仪表盘](docs/assets/screenshots/08-admin-dashboard.png) | ![证据包核验](docs/assets/screenshots/13-evidence-verify.png) |
+
 ### 核心功能
 
 | 模块 | 功能 | 技术实现 |
@@ -20,6 +41,7 @@
 | AI 辅助（可选） | 以图搜图、侵权辅助检测、智能问答；默认关闭，需安装模型与 API Key | CLIP + Milvus + 智谱 GLM（可选） |
 | 授权分发 | 在线申请→双重审批→合同管理→下载控制；用途/渠道/格式/地域/下载次数作为可执行范围，授权绑定签发时的文件版本 | Vue3 + Flask |
 | 下载指纹 | 授权用户下载影像时生成带资产编码、授权编号、账号与唯一指纹码的可见副本，原盲水印保留；台账可回溯 | Pillow + Flask |
+| 大文件体验 | 下载、预览与分享下载均使用短时票据，浏览器直接流式读取或落盘，不再整包进入 JS 内存；超过 25MB 的预览需手动加载 | Flask + itsdangerous + send_file |
 | 证据包导出 | 所有者/资产管理员一键打包当前版本原件与水印副本、证据链、版本证书、SHA-256 清单与核验说明；超出 200MB 时仅导出清单与证书 | Flask + ZIP |
 | 证据包核验 | 公开上传 ZIP，独立核对结构、SHA-256、资产编码、水印、证书与当前/历史版本哈希，区分“完整性失败”与“登记不一致” | Flask + ZIP |
 | 审计日志完整性 | 操作日志写入时计算服务端 HMAC-SHA256，后台可一键校验；字段被修改会标记异常，支持历史日志补签 | Flask + HMAC |
@@ -126,7 +148,7 @@ FLASK_APP=run.py flask db upgrade
 ### 运行测试
 
 ```bash
-# 后端测试（371个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/授权视图/资产回收站/侵权线索/批量巡检/备份恢复/存储巡检/水印鲁棒性实验/证据包导出与核验/审计日志完整性/HTTP错误处理/对象级可见性）
+# 后端测试（372个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/授权视图/资产回收站/侵权线索/批量巡检/备份恢复/存储巡检/水印鲁棒性实验/证据包导出与核验/审计日志完整性/HTTP错误处理/对象级可见性）
 cd backend && python -m pytest tests/ -v
 
 # Windows 内存受限时：逐文件隔离子进程运行（推荐）
@@ -167,7 +189,7 @@ garden-asset-platform/
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
 │   ├── migrations/                # Alembic 迁移（baseline + versions）
-│   ├── tests/                     # pytest测试（371个用例）
+│   ├── tests/                     # pytest测试（372个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端

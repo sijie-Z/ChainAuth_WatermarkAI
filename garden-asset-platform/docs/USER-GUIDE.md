@@ -2,7 +2,7 @@
 
 > 苏州园林数字资产安全分发与溯源系统 · 3 分钟上手
 
-这份文档对应站内 [`/guide`](http://localhost:5173/guide) 页面，按真实业务流程组织。第一次使用建议先读“快速走一遍”，再按角色查看对应章节。
+这份文档对应站内 [`/guide`](http://localhost:5173/guide) 页面，按真实业务流程组织。第一次使用建议先读“快速走一遍”，再按角色查看对应章节。配套演示视频与全部界面截图见 [演示素材](assets/README.md)。
 
 ## 1. 平台解决什么问题
 
@@ -209,7 +209,7 @@ python scripts/seed_demo_assets.py --reset
 ## 7. 测试
 
 ```bash
-# 后端 371 个用例
+# 后端 372 个用例
 cd backend && python -m pytest tests/ -q
 
 # Windows 内存不足时：每个测试文件独立进程运行
