@@ -469,11 +469,11 @@ async function captureVideo() {
   ], { stdio: 'inherit' })
   console.log('生成封面与 GIF 预览…')
   execFileSync(ffmpeg, [
-    '-y', '-ss', '00:00:04', '-i', mp4,
+    '-y', '-ss', '00:00:01.5', '-i', mp4,
     '-frames:v', '1', '-q:v', '2', poster
   ], { stdio: 'inherit' })
   execFileSync(ffmpeg, [
-    '-y', '-ss', '00:00:30', '-t', '12', '-i', mp4,
+    '-y', '-ss', '00:00:00', '-t', '12', '-i', mp4,
     '-vf', 'fps=8,scale=960:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=160[p];[s1][p]paletteuse=dither=bayer',
     '-loop', '0', gif
   ], { stdio: 'inherit' })
