@@ -43,6 +43,7 @@ export const assetApi = {
     responseType: 'blob',
     timeout: 0
   }),
+  createPreviewTicket: (id) => api.post(`/assets/${id}/preview-ticket`),
   my: (params) => api.get('/assets/my', { params }),
   publish: (id) => api.post(`/assets/${id}/publish`),
   approve: (id, data) => api.post(`/assets/${id}/approve`, data),

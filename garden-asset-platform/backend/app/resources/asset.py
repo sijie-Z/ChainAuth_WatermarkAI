@@ -1060,67 +1060,162 @@ class AssetDownloadTicketResource(Resource):
         }, 200
 
 
+PREVIEW_TICKET_MAX_AGE = 3600
+
+
+def _preview_ticket_serializer():
+    from itsdangerous import URLSafeTimedSerializer
+    return URLSafeTimedSerializer(
+        current_app.config['SECRET_KEY'],
+        salt='asset-preview-ticket'
+    )
+
+
+def _preview_ticket_max_age():
+    return int(current_app.config.get(
+        'PREVIEW_TICKET_MAX_AGE', PREVIEW_TICKET_MAX_AGE
+    ))
+
+
+def _verify_preview_ticket(ticket):
+    try:
+        return _preview_ticket_serializer().loads(
+            ticket, max_age=_preview_ticket_max_age()
+        )
+    except Exception:
+        return None
+
+
+def _preview_asset_error(asset, user, user_id):
+    """预览权限：草稿仅所有者/管理员；已发布需有效授权且版本匹配。"""
+    if not asset:
+        return {'code': 404, 'message': '资产不存在'}, 404
+
+    is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
+    is_admin = user.role in ADMIN_ROLES
+    if asset.status == 'deleted' and not is_admin:
+        return {'code': 404, 'message': '资产不存在'}, 404
+    if asset.status != 'published' and not (is_owner or is_admin):
+        return {'code': 403, 'message': '资产未发布'}, 403
+
+    if asset.status == 'published' and not (is_owner or is_admin):
+        now = datetime.utcnow()
+        license_row = License.query.filter(
+            License.asset_id == asset.id,
+            License.licensee_id == user_id,
+            License.status == 'active',
+            License.start_time <= now,
+            or_(License.end_time.is_(None), License.end_time > now),
+        ).first()
+        if not license_row:
+            return {'code': 403, 'message': '获得授权后可在线预览'}, 403
+        current_version = AssetVersion.query.filter_by(
+            asset_id=asset.id
+        ).order_by(AssetVersion.version_no.desc()).first()
+        if (
+            license_row.version_id
+            and (
+                not current_version
+                or current_version.id != license_row.version_id
+            )
+        ):
+            return {
+                'code': 403,
+                'message': '授权对应历史版本，请重新申请后再预览'
+            }, 403
+
+    return None
+
+
+def _send_preview_file(asset, file_path):
+    ext = os.path.splitext(file_path)[1].lstrip('.').lower()
+    download_name = f'{asset.asset_code}.{ext}' if ext else asset.asset_code
+    from flask import send_file as flask_send_file
+    return flask_send_file(
+        file_path,
+        as_attachment=False,
+        download_name=download_name,
+        conditional=True,
+    )
+
+
 class AssetPreviewResource(Resource):
-    """在线预览（视频/PDF/文档）
+    """在线预览（支持 JWT 或预览票据，视频/PDF 可直接 Range 流式加载）
 
     预览不写入下载台账、不增加下载量；已发布资产需要有效授权才能预览，
     草稿仅所有者与管理员可用。
     """
 
-    @jwt_required()
+    @jwt_required(optional=True)
     def get(self, asset_id):
-        user_id = get_jwt_identity()
-        user = User.query.get(user_id)
-        asset = Asset.query.get(asset_id)
-        if not asset:
-            return {'code': 404, 'message': '资产不存在'}, 404
-
-        is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
-        is_admin = user.role in ADMIN_ROLES
-        if asset.status == 'deleted' and not is_admin:
-            return {'code': 404, 'message': '资产不存在'}, 404
-        if asset.status != 'published' and not (is_owner or is_admin):
-            return {'code': 403, 'message': '资产未发布'}, 403
-
-        if asset.status == 'published' and not (is_owner or is_admin):
-            now = datetime.utcnow()
-            license_row = License.query.filter(
-                License.asset_id == asset_id,
-                License.licensee_id == user_id,
-                License.status == 'active',
-                License.start_time <= now,
-                or_(License.end_time.is_(None), License.end_time > now),
-            ).first()
-            if not license_row:
-                return {'code': 403, 'message': '获得授权后可在线预览'}, 403
-            current_version = AssetVersion.query.filter_by(
-                asset_id=asset_id
-            ).order_by(AssetVersion.version_no.desc()).first()
-            if (
-                license_row.version_id
-                and (
-                    not current_version
-                    or current_version.id != license_row.version_id
-                )
-            ):
+        ticket = (request.args.get('ticket') or '').strip()
+        if ticket:
+            payload = _verify_preview_ticket(ticket)
+            if not payload or payload.get('asset_id') != asset_id:
                 return {
-                    'code': 403,
-                    'message': '授权对应历史版本，请重新申请后再预览'
-                }, 403
+                    'code': 401,
+                    'message': '预览凭证无效或已过期，请刷新页面重试'
+                }, 401
+            user_id = payload.get('user_id')
+            user = User.query.get(user_id)
+            if not user or user.status != 'active':
+                return {'code': 401, 'message': '账号不可用，请重新登录'}, 401
+        else:
+            user_id = get_jwt_identity()
+            if not user_id:
+                return {'code': 401, 'message': '未授权访问'}, 401
+            user = User.query.get(user_id)
+            if not user:
+                return {'code': 401, 'message': '账号不存在或已被禁用'}, 401
 
-        file_path = os.path.abspath(asset.watermarked_path or asset.storage_path or '')
+        asset = Asset.query.get(asset_id)
+        error = _preview_asset_error(asset, user, user_id)
+        if error:
+            return error
+
+        file_path = os.path.abspath(
+            asset.watermarked_path or asset.storage_path or ''
+        )
         if not file_path or not os.path.exists(file_path):
             return {'code': 404, 'message': '文件不存在'}, 404
 
-        ext = os.path.splitext(file_path)[1].lstrip('.').lower()
-        download_name = f"{asset.asset_code}.{ext}" if ext else asset.asset_code
-        from flask import send_file as flask_send_file
-        return flask_send_file(
-            file_path,
-            as_attachment=False,
-            download_name=download_name,
-            conditional=True,
+        return _send_preview_file(asset, file_path)
+
+
+class AssetPreviewTicketResource(Resource):
+    """签发预览票据，供 video/iframe/三维加载器直接按 Range 读取"""
+
+    @rate_limit(limit=60, window=60)
+    @jwt_required()
+    def post(self, asset_id):
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        if not user:
+            return {'code': 401, 'message': '账号不存在或已被禁用'}, 401
+
+        asset = Asset.query.get(asset_id)
+        error = _preview_asset_error(asset, user, user_id)
+        if error:
+            return error
+
+        file_path = os.path.abspath(
+            asset.watermarked_path or asset.storage_path or ''
         )
+        if not file_path or not os.path.exists(file_path):
+            return {'code': 404, 'message': '文件不存在'}, 404
+
+        ticket = _preview_ticket_serializer().dumps({
+            'asset_id': asset_id,
+            'user_id': user_id,
+            'nonce': uuid.uuid4().hex,
+        })
+        return {
+            'code': 200,
+            'data': {
+                'ticket': ticket,
+                'expires_in': _preview_ticket_max_age(),
+            }
+        }, 200
 
 
 class FavoriteListResource(Resource):

@@ -1,4 +1,5 @@
 """资产在线预览权限测试"""
+import uuid
 from datetime import datetime, timedelta
 from io import BytesIO
 
@@ -105,3 +106,57 @@ def test_preview_draft_limited_to_owner_and_admin(
     assert client.get(
         f'/api/assets/{asset_id}/preview', headers=admin_header
     ).status_code == 200
+
+
+def test_preview_ticket_allows_direct_reads_and_rejects_tampering(
+    client, app, tmp_path, auth_header
+):
+    asset_id = upload(client, app, tmp_path, auth_header)
+    licensed = register_and_login(client, 'preview_ticket_user')
+    with app.app_context():
+        asset = db.session.get(Asset, asset_id)
+        user = User.query.filter_by(username='preview_ticket_user').one()
+        db.session.add(License(
+            license_code='LIC-PREVIEW-TICKET-001',
+            asset_id=asset_id,
+            licensor_id=asset.uploader_id,
+            licensee_id=user.id,
+            license_type='academic',
+            usage_scope='预览',
+            start_time=datetime.utcnow() - timedelta(days=1),
+            end_time=datetime.utcnow() + timedelta(days=30),
+            status='active',
+        ))
+        db.session.commit()
+
+    issued = client.post(
+        f'/api/assets/{asset_id}/preview-ticket', headers=licensed
+    )
+    assert issued.status_code == 200, issued.get_json()
+    ticket = issued.get_json()['data']['ticket']
+
+    direct = client.get(
+        f'/api/assets/{asset_id}/preview?ticket={ticket}'
+    )
+    assert direct.status_code == 200
+    assert direct.mimetype == 'image/jpeg'
+    assert direct.data
+    assert 'bytes' in direct.headers.get('Accept-Ranges', '')
+
+    with app.app_context():
+        assert db.session.get(Asset, asset_id).download_count == 0
+
+    tampered = client.get(
+        f'/api/assets/{asset_id}/preview?ticket={ticket}x'
+    )
+    assert tampered.status_code == 401
+    wrong_asset = client.get(
+        f'/api/assets/{uuid.uuid4()}/preview?ticket={ticket}'
+    )
+    assert wrong_asset.status_code == 401
+
+    outsider = register_and_login(client, 'preview_ticket_outsider')
+    denied = client.post(
+        f'/api/assets/{asset_id}/preview-ticket', headers=outsider
+    )
+    assert denied.status_code == 403

@@ -105,6 +105,12 @@ describe('api modules', () => {
     })
   })
 
+  it('assetApi.createPreviewTicket requests a direct preview URL', () => {
+    assetApi.createPreviewTicket('asset-1')
+
+    expect(api.post).toHaveBeenCalledWith('/assets/asset-1/preview-ticket')
+  })
+
   it('notificationApi exposes server preferences and SSE URL', () => {
     notificationApi.updatePreferences({ email_enabled: true, email_groups: ['license'] })
     expect(api.put).toHaveBeenCalledWith('/notifications/preferences', {

@@ -230,7 +230,7 @@ def register_api_resources(app):
         MyAssetsResource, AssetTagsResource, AssetPublishResource, AssetApproveResource,
         AssetThumbnailResource, AssetRelatedResource, FavoriteListResource,
         PublicStatsResource, TagListResource, AssetPreviewResource,
-        AssetRestoreResource
+        AssetPreviewTicketResource, AssetRestoreResource
     )
     api.add_resource(PublicStatsResource, '/stats')
     api.add_resource(TagListResource, '/tags')
@@ -239,6 +239,10 @@ def register_api_resources(app):
     api.add_resource(AssetRestoreResource, '/assets/<string:asset_id>/restore')
     api.add_resource(AssetThumbnailResource, '/assets/<string:asset_id>/thumbnail')
     api.add_resource(AssetPreviewResource, '/assets/<string:asset_id>/preview')
+    api.add_resource(
+        AssetPreviewTicketResource,
+        '/assets/<string:asset_id>/preview-ticket'
+    )
     api.add_resource(AssetRelatedResource, '/assets/<string:asset_id>/related')
     api.add_resource(FavoriteListResource, '/favorites')
     api.add_resource(AssetUploadResource, '/assets/upload')

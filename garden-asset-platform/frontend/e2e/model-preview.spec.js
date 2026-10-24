@@ -62,7 +62,11 @@ test.describe('三维模型预览', () => {
     }, triangleGltf())
     expect(payload.id, payload.message).toBeTruthy()
 
+    const previewTicketRequest = page.waitForRequest(
+      request => request.url().includes('/preview-ticket') && request.method() === 'POST'
+    )
     await page.goto(`/assets/${payload.id}`)
+    await previewTicketRequest
     await expect(page.getByText('拖拽旋转 · 滚轮缩放')).toBeVisible({ timeout: 20000 })
     await expect(page.getByText('模型解析失败，可下载后查看')).toHaveCount(0)
     await expect(page.locator('.model-viewer canvas')).toBeVisible()

@@ -929,7 +929,7 @@ import {
 import { assetApi, collectionApi, licenseApi, watermarkApi, blockchainApi, taskApi } from '@/api/modules'
 import { useUserStore } from '@/stores/user'
 import { copyToClipboard, parseBackendDate } from '@/utils'
-import { startAssetDownload } from '@/utils/download'
+import { startAssetDownload, getAssetPreviewUrl } from '@/utils/download'
 import EvidenceChain from '@/components/common/EvidenceChain.vue'
 import AnnotationBoard from '@/components/asset/AnnotationBoard.vue'
 import CommentSection from '@/components/asset/CommentSection.vue'
@@ -1904,10 +1904,10 @@ async function registerChain() {
 }
 
 function revokePreview() {
-  if (previewUrl.value) {
+  if (previewUrl.value?.startsWith('blob:')) {
     URL.revokeObjectURL(previewUrl.value)
-    previewUrl.value = ''
   }
+  previewUrl.value = ''
 }
 
 async function loadPreviewFile() {
@@ -1918,9 +1918,9 @@ async function loadPreviewFile() {
   previewLoading.value = true
   previewError.value = false
   try {
-    const response = await assetApi.preview(asset.value.id)
+    const url = await getAssetPreviewUrl(asset.value.id)
     revokePreview()
-    previewUrl.value = URL.createObjectURL(response.data)
+    previewUrl.value = url
   } catch {
     previewError.value = true
   } finally {
