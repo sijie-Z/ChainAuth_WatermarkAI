@@ -15,9 +15,17 @@
             <el-icon><Upload /></el-icon>
             管理资产
           </el-button>
-          <el-button class="btn-action-secondary" @click="$router.push('/admin/watermark')">
+          <el-button
+            v-if="canProcessAssets"
+            class="btn-action-secondary"
+            @click="$router.push('/admin/watermark')"
+          >
             <el-icon><Stamp /></el-icon>
             水印处理
+          </el-button>
+          <el-button class="btn-action-secondary" @click="$router.push('/guide')">
+            <el-icon><Reading /></el-icon>
+            使用指南
           </el-button>
         </div>
       </div>
@@ -34,9 +42,8 @@
     <div v-else class="stats-grid">
       <div
         class="stat-card"
-        v-for="(stat, index) in statCards"
+        v-for="stat in statCards"
         :key="stat.key"
-        :style="{ animationDelay: index * 0.1 + 's' }"
       >
         <div class="stat-card-header">
           <div class="stat-icon-wrapper" :style="{ background: stat.gradient }">
@@ -54,11 +61,11 @@
           </div>
           <div class="stat-label">{{ stat.label }}</div>
         </div>
-        <div class="stat-card-footer">
+        <div class="stat-card-footer" v-if="stat.showProgress">
           <div class="progress-bar">
             <div class="progress-fill" :style="{ width: stat.progress + '%', background: stat.gradient }"></div>
           </div>
-          <span class="progress-text">{{ stat.progress }}% 完成率</span>
+          <span class="progress-text">{{ stat.progress }}% {{ stat.progressLabel }}</span>
         </div>
       </div>
     </div>
@@ -72,8 +79,8 @@
           <div class="card-header">
             <h3 class="card-title">资产类型分布</h3>
             <el-radio-group v-model="chartType" size="small">
-              <el-radio-button label="week">本周</el-radio-button>
-              <el-radio-button label="month">本月</el-radio-button>
+              <el-radio-button value="week">本周</el-radio-button>
+              <el-radio-button value="month">本月</el-radio-button>
             </el-radio-group>
           </div>
           <el-skeleton v-if="loading" animated :rows="1" style="padding: 20px">
@@ -88,7 +95,7 @@
         <div class="chart-card">
           <div class="card-header">
             <h3 class="card-title">水印处理趋势</h3>
-            <el-tag size="small" type="success">实时更新</el-tag>
+            <el-tag size="small" type="success">最近 7 天</el-tag>
           </div>
           <el-skeleton v-if="loading" animated :rows="1" style="padding: 20px">
             <template #template>
@@ -96,6 +103,57 @@
             </template>
           </el-skeleton>
           <div v-else class="chart-container" ref="watermarkChartRef"></div>
+        </div>
+
+        <!-- 最近上传资产 -->
+        <div class="table-card">
+          <div class="card-header">
+            <h3 class="card-title">最近上传资产</h3>
+            <el-button type="primary" link @click="$router.push('/admin/assets')">查看全部 →</el-button>
+          </div>
+          <el-skeleton v-if="loading" animated :rows="4" style="padding: 16px" />
+          <el-table v-else :data="recentAssets" style="width: 100%" class="modern-table">
+            <el-table-column label="资产信息" min-width="220">
+              <template #default="{ row }">
+                <div class="asset-info">
+                  <div class="asset-thumb">
+                    <img :src="getThumbnail(row)" alt="" loading="lazy" @error="onThumbnailError($event, row)" />
+                  </div>
+                  <div class="asset-meta">
+                    <div class="asset-code">{{ row.asset_code }}</div>
+                    <div class="asset-title">{{ row.title }}</div>
+                  </div>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="type" label="类型" width="76">
+              <template #default="{ row }">
+                <el-tag :type="getTypeTag(row.type)" size="small" effect="light">
+                  {{ getTypeName(row.type) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="保护状态" width="132">
+              <template #default="{ row }">
+                <div class="protection-cell">
+                  <span class="protection-item" :title="`水印：${getWatermarkStatus(row.watermark_status)}`">
+                    <span class="status-dot" :class="row.watermark_status"></span>水印
+                  </span>
+                  <span class="protection-item" :title="`存证：${getChainStatus(row.chain_status)}`">
+                    <span class="status-dot" :class="row.chain_status"></span>存证
+                  </span>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="上传时间" width="112">
+              <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="72">
+              <template #default="{ row }">
+                <el-button type="primary" link size="small" @click="viewAsset(row)">查看</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
         </div>
       </div>
 
@@ -111,6 +169,25 @@
               </div>
               <span class="action-label">{{ action.label }}</span>
             </div>
+          </div>
+        </div>
+
+        <!-- 系统能力状态 -->
+        <div class="system-card">
+          <div class="card-header">
+            <h3 class="card-title">系统能力</h3>
+            <el-button link type="primary" size="small" @click="loadSystemStatus">刷新</el-button>
+          </div>
+          <el-skeleton v-if="systemLoading" animated :rows="3" style="padding: 12px 16px" />
+          <div v-else class="system-list">
+            <div v-for="item in systemItems" :key="item.key" class="system-row">
+              <div class="system-text">
+                <strong>{{ item.name }}</strong>
+                <span>{{ item.description }}</span>
+              </div>
+              <el-tag size="small" :type="item.type" effect="plain">{{ item.label }}</el-tag>
+            </div>
+            <p class="system-note">演示环境不会把未启用能力伪装成可用状态。</p>
           </div>
         </div>
 
@@ -167,75 +244,21 @@
         </div>
       </div>
     </div>
-
-    <!-- 底部表格 -->
-    <div class="bottom-section">
-      <div class="table-card">
-        <div class="card-header">
-          <h3 class="card-title">最近上传资产</h3>
-          <el-button type="primary" link @click="$router.push('/admin/assets')">查看全部 →</el-button>
-        </div>
-        <el-skeleton v-if="loading" animated :rows="4" style="padding: 16px" />
-        <el-table v-else :data="recentAssets" style="width: 100%" class="modern-table">
-          <el-table-column label="资产信息" min-width="280">
-            <template #default="{ row }">
-              <div class="asset-info">
-                <div class="asset-thumb">
-                  <img :src="row.thumbnail || getDefaultThumb(row.type)" alt="" />
-                </div>
-                <div class="asset-meta">
-                  <div class="asset-code">{{ row.asset_code }}</div>
-                  <div class="asset-title">{{ row.title }}</div>
-                </div>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column prop="type" label="类型" width="100">
-            <template #default="{ row }">
-              <el-tag :type="getTypeTag(row.type)" size="small" effect="light">
-                {{ getTypeName(row.type) }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="水印状态" width="120">
-            <template #default="{ row }">
-              <div class="status-cell">
-                <span class="status-dot" :class="row.watermark_status"></span>
-                <span>{{ getWatermarkStatus(row.watermark_status) }}</span>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column label="存证状态" width="120">
-            <template #default="{ row }">
-              <div class="status-cell">
-                <span class="status-dot" :class="row.chain_status"></span>
-                <span>{{ getChainStatus(row.chain_status) }}</span>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column prop="created_at" label="上传时间" width="160" />
-          <el-table-column label="操作" width="100" fixed="right">
-            <template #default="{ row }">
-              <el-button type="primary" link size="small" @click="viewAsset(row)">查看</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick, shallowRef } from 'vue'
+import { parseBackendDate } from '@/utils'
 import { useUserStore } from '@/stores/user'
 import { useRouter } from 'vue-router'
-import { assetApi, licenseApi } from '@/api/modules'
+import { assetApi, licenseApi, systemApi } from '@/api/modules'
 import {
-  Picture, Stamp, Link, Document, Upload, Clock,
-  ArrowUp, ArrowDown, User,
-  CircleCheck, Timer
+  Picture, Stamp, Link, Document, Upload, Clock, DataLine,
+  ArrowUp, ArrowDown, User, Reading,
+  CircleCheck, Timer, Download, Place, Warning, Bell
 } from '@element-plus/icons-vue'
-import * as echarts from 'echarts'
+import echarts from '@/utils/echarts'
 
 const userStore = useUserStore()
 const router = useRouter()
@@ -282,14 +305,20 @@ const LICENSE_ROLES = ['admin', 'asset_admin', 'license_admin', 'adm1', 'adm2']
 
 const currentRole = computed(() => userStore.userRole)
 const canManageAssets = computed(() => ASSET_ROLES.includes(currentRole.value))
+const canProcessAssets = computed(() => ['admin', 'asset_admin'].includes(currentRole.value))
 
 // 快捷操作（按角色过滤）
 const quickActionDefs = [
   { label: '资产管理', icon: Picture, path: '/admin/assets', gradient: 'linear-gradient(135deg, #2f6b5a, #1c5145)', roles: ASSET_ROLES },
-  { label: '水印处理', icon: Stamp, path: '/admin/watermark', gradient: 'linear-gradient(135deg, #4c6e8a, #34506a)', roles: ASSET_ROLES },
-  { label: '存证管理', icon: Link, path: '/admin/blockchain', gradient: 'linear-gradient(135deg, #6d5b7a, #584765)', roles: ASSET_ROLES },
+  { label: '水印处理', icon: Stamp, path: '/admin/watermark', gradient: 'linear-gradient(135deg, #4c6e8a, #34506a)', roles: ['admin', 'asset_admin'] },
+  { label: '存证管理', icon: Link, path: '/admin/blockchain', gradient: 'linear-gradient(135deg, #6d5b7a, #584765)', roles: ['admin', 'asset_admin'] },
   { label: '授权审批', icon: Document, path: '/admin/license/pending', gradient: 'linear-gradient(135deg, #b07a2a, #8f6322)', roles: LICENSE_ROLES },
-  { label: '用户管理', icon: User, path: '/admin/users', gradient: 'linear-gradient(135deg, #5b675f, #414b43)', roles: ['admin'] }
+  { label: '使用报表', icon: DataLine, path: '/admin/license/usage', gradient: 'linear-gradient(135deg, #2f6b5a, #1c5145)', roles: LICENSE_ROLES },
+  { label: '侵权线索', icon: Warning, path: '/admin/infringements', gradient: 'linear-gradient(135deg, #a6402f, #7c2d21)', roles: LICENSE_ROLES },
+  { label: '园林档案', icon: Place, path: '/admin/gardens', gradient: 'linear-gradient(135deg, #4a7c59, #365c42)', roles: ['admin', 'asset_admin'] },
+  { label: '下载台账', icon: Download, path: '/admin/downloads', gradient: 'linear-gradient(135deg, #5b7f8a, #45616a)', roles: LICENSE_ROLES },
+  { label: '用户管理', icon: User, path: '/admin/users', gradient: 'linear-gradient(135deg, #5b675f, #414b43)', roles: ['admin'] },
+  { label: '通知渠道', icon: Bell, path: '/admin/notifications', gradient: 'linear-gradient(135deg, #4c6e8a, #34506a)', roles: ['admin'] }
 ]
 
 const quickActions = computed(() => {
@@ -303,6 +332,88 @@ const recentActivities = shallowRef([])
 const todoList = ref([])
 
 const pendingCount = computed(() => todoList.value.length)
+
+const systemStatus = ref(null)
+const systemLoading = ref(false)
+const systemItems = computed(() => {
+  const data = systemStatus.value
+  if (!data) return []
+  return [
+    {
+      key: 'blockchain',
+      name: '区块链存证',
+      label: data.blockchain?.label || '未知',
+      description: data.blockchain?.description || '',
+      type: data.blockchain?.enabled ? 'success' : 'warning'
+    },
+    {
+      key: 'ai',
+      name: 'AI 辅助',
+      label: data.ai?.label || '未知',
+      description: data.ai?.description || '',
+      type: data.ai?.enabled ? 'success' : 'info'
+    },
+    {
+      key: 'redis',
+      name: '缓存与限流',
+      label: data.redis?.label || '未知',
+      description: data.redis?.description || '',
+      type: data.redis?.enabled ? 'success' : 'warning'
+    },
+    {
+      key: 'scheduler',
+      name: '定时任务',
+      label: data.scheduler?.label || '未知',
+      description: data.scheduler?.description || '',
+      type: data.scheduler?.enabled ? 'success' : 'info'
+    },
+    {
+      key: 'tasks',
+      name: '异步任务',
+      label: data.tasks?.label || '未知',
+      description: data.tasks
+        ? `排队 ${data.tasks.counts?.queued || 0} · 处理中 ${data.tasks.counts?.running || 0} · 失败 ${data.tasks.counts?.failed || 0}`
+        : '',
+      type: data.tasks?.healthy === 'critical'
+        ? 'danger'
+        : (data.tasks?.healthy === 'warning' ? 'warning' : 'success')
+    },
+    {
+      key: 'storage',
+      name: '文件存储',
+      label: data.storage?.label || '未统计',
+      description: data.storage?.description || '',
+      type: 'info'
+    },
+    {
+      key: 'notifications',
+      name: '通知渠道',
+      label: data.notifications?.mail_configured
+        ? '邮件 + 站内实时'
+        : (data.notifications?.sse_enabled ? '仅站内实时' : '通知未启用'),
+      description: data.notifications
+        ? `邮件待发 ${data.notifications.deliveries?.pending || 0} · 已发 ${data.notifications.deliveries?.sent || 0} · 失败 ${data.notifications.deliveries?.failed || 0}`
+        : '',
+      type: (data.notifications?.deliveries?.failed || 0) > 0
+        ? 'danger'
+        : (data.notifications?.mail_configured ? 'success' : 'info')
+    }
+  ]
+})
+
+async function loadSystemStatus() {
+  systemLoading.value = true
+  try {
+    const response = await systemApi.getStatus()
+    if (response.data?.code === 200) {
+      systemStatus.value = response.data.data
+    }
+  } catch {
+    // 状态读取失败不影响仪表盘其他区块
+  } finally {
+    systemLoading.value = false
+  }
+}
 
 // 最近资产
 const recentAssets = ref([])
@@ -335,22 +446,79 @@ async function loadDashboardData() {
       statCards.value = statCardDefs.map(def => {
         let value = 0
         let progress = 0
-        if (def.key === 'totalAssets') { value = total; progress = total > 0 ? Math.round((watermarked / total) * 100) : 0 }
-        if (def.key === 'watermarkedAssets') { value = watermarked; progress = total > 0 ? Math.round((watermarked / total) * 100) : 0 }
-        if (def.key === 'chainedAssets') { value = chained; progress = total > 0 ? Math.round((chained / total) * 100) : 0 }
-        if (def.key === 'pendingLicenses') { value = pendingLicenses; progress = pendingLicenses > 0 ? Math.min(pendingLicenses * 20, 100) : 0 }
-        return { ...def, value, trend: null, progress }
+        let showProgress = true
+        let progressLabel = '水印覆盖率'
+        if (def.key === 'totalAssets') {
+          value = total
+          progress = total > 0 ? Math.round((watermarked / total) * 100) : 0
+        }
+        if (def.key === 'watermarkedAssets') {
+          value = watermarked
+          progress = total > 0 ? Math.round((watermarked / total) * 100) : 0
+        }
+        if (def.key === 'chainedAssets') {
+          value = chained
+          progress = total > 0 ? Math.round((chained / total) * 100) : 0
+          progressLabel = '上链覆盖率'
+        }
+        if (def.key === 'pendingLicenses') {
+          value = pendingLicenses
+          showProgress = false
+        }
+        return { ...def, value, trend: null, progress, showProgress, progressLabel }
       })
     }
 
     // 最近活动
     if (stats?.recent_activities?.length) {
-      const actionIcons = { upload: Picture, embed: Stamp, extract: Stamp, register: Link, approve: Document, login: User }
-      const actionColors = { upload: '#2f6b5a', embed: '#4c6e8a', extract: '#4c6e8a', register: '#6d5b7a', approve: '#b07a2a', login: '#5b675f' }
+      const actionIcons = {
+        upload: Picture, embed: Stamp, extract: Stamp, register: Link,
+        approve: Document, login: User, share_create: Link,
+        share_revoke: Link, share_download: Download, download: Download,
+        upload_version: Upload, restore_version: Timer,
+        collection_create: Reading, collection_delete: Reading,
+        infringement_report: Warning, infringement_start: Warning,
+        infringement_confirm: Warning
+      }
+      const actionColors = {
+        upload: '#2f6b5a', embed: '#4c6e8a', extract: '#4c6e8a',
+        register: '#6d5b7a', approve: '#b07a2a', login: '#5b675f',
+        share_create: '#2f6b5a', share_revoke: '#8a6b3f',
+        share_download: '#4c6e8a', download: '#4c6e8a',
+        upload_version: '#2f6b5a', restore_version: '#8a6b3f',
+        collection_create: '#6d5b7a', collection_delete: '#8a6b3f',
+        infringement_report: '#a6402f', infringement_start: '#b07a2a',
+        infringement_confirm: '#a6402f'
+      }
+      const actionNames = {
+        upload: '上传资产',
+        embed: '嵌入水印',
+        watermark_embed: '嵌入水印',
+        watermark_extract: '提取水印',
+        extract: '提取水印',
+        register: '上链存证',
+        approve: '审批授权',
+        reject: '驳回申请',
+        license_apply: '提交授权申请',
+        update: '更新资产',
+        delete: '删除资产',
+        login: '登录',
+        share_create: '创建分享链接',
+        share_revoke: '撤销分享链接',
+        share_download: '分享下载',
+        download: '下载资产',
+        upload_version: '上传新版本',
+        restore_version: '恢复历史版本',
+        collection_create: '新建合集',
+        collection_delete: '删除合集',
+        infringement_report: '提交侵权线索',
+        infringement_start: '受理侵权线索',
+        infringement_confirm: '确认侵权线索'
+      }
       recentActivities.value = stats.recent_activities.slice(0, 8).map((a, i) => ({
         id: a.id || i,
         icon: actionIcons[a.action] || CircleCheck,
-        title: a.action || a.module || '操作',
+        title: actionNames[a.action] || a.module || '操作',
         description: a.description || '',
         time: formatTimeAgo(a.created_at),
         color: actionColors[a.action] || '#5b675f'
@@ -407,6 +575,17 @@ function getGreeting() {
   return '晚上好'
 }
 
+function getThumbnail(row) {
+  return row.id ? `/api/assets/${row.id}/thumbnail?size=card&v=2` : getDefaultThumb(row.type)
+}
+
+function onThumbnailError(event, row) {
+  const img = event?.target
+  if (!img || img.dataset.fallbackApplied) return
+  img.dataset.fallbackApplied = '1'
+  img.src = getDefaultThumb(row.type)
+}
+
 function getDefaultThumb(type) {
   const colors = { image: '#2f6b5a', vector: '#4c6e8a', model: '#6d5b7a', document: '#b07a2a', video: '#a6402f' }
   const color = colors[type] || '#5b675f'
@@ -434,8 +613,8 @@ function getChainStatus(status) {
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString('zh-CN')
+  const date = parseBackendDate(dateStr)
+  return date ? date.toLocaleDateString('zh-CN') : ''
 }
 
 function formatTimeAgo(dateStr) {
@@ -453,24 +632,10 @@ function formatTimeAgo(dateStr) {
   return formatDate(dateStr)
 }
 
-// 数字动画
+// 数字直接呈现，避免动画期间显示与实际不一致的中间值
 function animateNumbers() {
   statCards.value.forEach(stat => {
-    const target = stat.value
-    const duration = 1500
-    const steps = 40
-    const increment = target / steps
-    let current = 0
-
-    const timer = setInterval(() => {
-      current += increment
-      if (current >= target) {
-        animatedValues[stat.key] = target
-        clearInterval(timer)
-      } else {
-        animatedValues[stat.key] = Math.floor(current)
-      }
-    }, duration / steps)
+    animatedValues[stat.key] = stat.value
   })
 }
 
@@ -502,10 +667,40 @@ function initCharts() {
     if (assetChart) assetChart.dispose()
     assetChart = echarts.init(assetChartRef.value)
     const pieData = buildPieData()
+    const pieTotal = pieData.reduce((sum, item) => sum + (item.value || 0), 0)
     const defaultPieData = [
       { value: 0, name: '暂无数据', itemStyle: { color: '#d8e1da' } }
     ]
     const option = {
+      graphic: pieTotal > 0
+        ? [
+            {
+              type: 'text',
+              left: 'center',
+              top: '39%',
+              silent: true,
+              style: {
+                text: String(pieTotal),
+                fill: '#17201c',
+                fontSize: 26,
+                fontWeight: 600,
+                textAlign: 'center'
+              }
+            },
+            {
+              type: 'text',
+              left: 'center',
+              top: '49%',
+              silent: true,
+              style: {
+                text: '件资产',
+                fill: '#5b675f',
+                fontSize: 12,
+                textAlign: 'center'
+              }
+            }
+          ]
+        : [],
       tooltip: {
         trigger: 'item',
         backgroundColor: '#fcfdfb',
@@ -549,11 +744,10 @@ function initCharts() {
       dates = trendData.map(d => d.date?.substring(5) || d.date) // MM-DD
       counts = trendData.map(d => d.count)
     }
-    // 如果没有趋势数据，显示空图
+    // 没有趋势数据时明确显示空态，不伪造一周的 0 值
     if (dates.length === 0) {
-      const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-      dates = weekdays
-      counts = [0, 0, 0, 0, 0, 0, 0]
+      dates = ['暂无趋势数据']
+      counts = [0]
     }
 
     const option = {
@@ -626,6 +820,7 @@ function goToPendingLicenses() {
 
 onMounted(() => {
   loadDashboardData()
+  loadSystemStatus()
   window.addEventListener('resize', handleResize)
 })
 
@@ -865,7 +1060,7 @@ onUnmounted(() => {
 }
 
 // 卡片通用样式
-.chart-card, .quick-actions-card, .activity-card, .todo-card, .table-card {
+.chart-card, .quick-actions-card, .activity-card, .todo-card, .table-card, .system-card {
   background: $bg-card;
   border-radius: $radius-lg;
   padding: 20px;
@@ -885,6 +1080,50 @@ onUnmounted(() => {
   font-size: 17px;
   font-weight: 600;
   color: $text-primary;
+}
+
+.system-card {
+  .card-header {
+    margin-bottom: 12px;
+  }
+}
+
+.system-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.system-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.system-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+
+  strong {
+    font-size: 12px;
+    color: $text-primary;
+  }
+
+  span {
+    margin-top: 2px;
+    font-size: 11px;
+    line-height: 1.5;
+    color: $text-placeholder;
+  }
+}
+
+.system-note {
+  margin: 12px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: $text-placeholder;
 }
 
 .chart-container {
@@ -1060,68 +1299,80 @@ onUnmounted(() => {
   }
 }
 
-// 底部表格
-.bottom-section {
-  .table-card {
+// 最近上传表格
+.table-card {
+  overflow: hidden;
+}
+
+.asset-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  .asset-thumb {
+    width: 48px;
+    height: 48px;
+    border-radius: $radius-md;
     overflow: hidden;
+    flex-shrink: 0;
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
   }
 
-  .asset-info {
-    display: flex;
+  .asset-meta {
+    min-width: 0;
+  }
+
+  .asset-code {
+    font-size: 12px;
+    color: $text-secondary;
+    font-family: $font-mono;
+  }
+
+  .asset-title {
+    font-size: 14px;
+    font-weight: $font-weight-medium;
+    color: $text-primary;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+.status-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.protection-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: $text-secondary;
+
+  .protection-item {
+    display: inline-flex;
     align-items: center;
-    gap: 12px;
-
-    .asset-thumb {
-      width: 48px;
-      height: 48px;
-      border-radius: $radius-md;
-      overflow: hidden;
-      flex-shrink: 0;
-
-      img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-      }
-    }
-
-    .asset-meta {
-      min-width: 0;
-    }
-
-    .asset-code {
-      font-size: 12px;
-      color: $text-secondary;
-      font-family: $font-mono;
-    }
-
-    .asset-title {
-      font-size: 14px;
-      font-weight: $font-weight-medium;
-      color: $text-primary;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
+    gap: 4px;
   }
+}
 
-  .status-cell {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 13px;
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
 
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-
-      &.none { background: $text-placeholder; }
-      &.pending { background: $warning-color; }
-      &.embedded, &.confirmed, &.verified { background: $success-color; }
-      &.failed { background: $error-color; }
-    }
-  }
+  &.none { background: $text-placeholder; }
+  &.pending { background: $warning-color; }
+  &.embedded, &.confirmed, &.verified { background: $success-color; }
+  &.failed { background: $error-color; }
 }
 
 // 响应式

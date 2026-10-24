@@ -98,12 +98,12 @@ $spacing-3xl: 32px;
 $spacing-4xl: 48px;
 
 // === 字体系统 Typography ===
-// 标题：宋体，用于页面标题、数字、牌匾式文案
-$font-display: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'STSong', 'SimSun', serif;
+// 标题：宋体，用于页面标题、数字、牌匾式文案（优先系统字体，避免外链字体阻塞首屏）
+$font-display: 'Songti SC', 'STSong', 'SimSun', 'Noto Serif SC', 'Source Han Serif SC', serif;
 // 正文：无衬线，保证后台与表格可读性
-$font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
+$font-family: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Segoe UI', system-ui, sans-serif;
 // 数据：等宽，用于资产编号、哈希、台账数字
-$font-mono: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+$font-mono: 'JetBrains Mono', 'Cascadia Code', 'SF Mono', Consolas, 'Roboto Mono', monospace;
 
 $font-size-xs: 12px;
 $font-size-sm: 13px;

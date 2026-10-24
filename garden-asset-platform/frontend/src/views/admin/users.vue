@@ -37,7 +37,7 @@
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="180">
           <template #default="{ row }">
             <el-button size="small" @click="openEditDialog(row)">编辑</el-button>
             <el-button size="small" type="danger" @click="toggleStatus(row)">
@@ -49,13 +49,21 @@
     </div>
 
     <!-- 创建/编辑对话框 -->
-    <el-dialog v-model="dialog.visible" :title="dialog.title" width="400px">
+    <el-dialog v-model="dialog.visible" :title="dialog.title" width="min(420px, 92vw)">
       <el-form ref="formRef" :model="dialog.form" :rules="dialog.rules" label-width="80px">
         <el-form-item label="用户名" prop="username">
           <el-input v-model="dialog.form.username" :disabled="dialog.isEdit" />
         </el-form-item>
         <el-form-item v-if="!dialog.isEdit" label="密码" prop="password">
           <el-input v-model="dialog.form.password" type="password" show-password />
+        </el-form-item>
+        <el-form-item v-else label="重置密码">
+          <el-input
+            v-model="dialog.form.password"
+            type="password"
+            show-password
+            placeholder="留空则不修改，至少 6 位"
+          />
         </el-form-item>
         <el-form-item label="邮箱" prop="email">
           <el-input v-model="dialog.form.email" />
@@ -90,6 +98,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { parseBackendDate } from '@/utils'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { userApi } from '@/api/modules'
@@ -187,6 +196,10 @@ async function doSubmit() {
         status: form.status
       }
       if (form.password) {
+        if (form.password.length < 6) {
+          ElMessage.warning('重置密码至少 6 位')
+          return
+        }
         payload.password = form.password
       }
       const response = await userApi.updateUser(dialog.value.userId, payload)
@@ -228,9 +241,13 @@ async function toggleStatus(row) {
     if (response.data.code === 200) {
       ElMessage.success(`${action}成功`)
       loadUsers()
+    } else {
+      ElMessage.error(response.data.message || `${action}失败`)
     }
-  } catch {
-    // cancelled
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(error.response?.data?.message || `${action}失败`)
+    }
   }
 }
 
@@ -259,8 +276,8 @@ function getRoleType(role) {
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString('zh-CN')
+  const date = parseBackendDate(dateStr)
+  return date ? date.toLocaleDateString('zh-CN') : ''
 }
 
 onMounted(() => {

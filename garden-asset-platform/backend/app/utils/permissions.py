@@ -15,6 +15,7 @@ API_PERMISSIONS = {
         '/api/blockchain/verify',
         '/api/blockchain/certificate/<id>',
         '/api/blockchain/status',
+        '/api/infringements/report',
     ],
 
     # 用户接口 (需要登录)
@@ -23,11 +24,13 @@ API_PERMISSIONS = {
         '/api/user/current',
         '/api/assets',
         '/api/assets/<id>',
+        '/api/assets/<id>/preview',
         '/api/assets/upload',
         '/api/watermark/embed',
         '/api/watermark/extract',
         '/api/license/apply',
         '/api/license/my',
+        '/api/infringements/mine',
     ],
 
     # 审批员接口
@@ -42,6 +45,12 @@ API_PERMISSIONS = {
         '/api/users/<id>',
         '/api/watermark/logs',
         '/api/blockchain/history',
+        '/api/license/usage-report',
+        '/api/infringements',
+        '/api/infringements/<id>',
+        '/api/infringements/<id>/review',
+        '/api/infringements/<id>/file',
+        '/api/infringements/patrol',
     ],
 }
 

@@ -19,17 +19,25 @@ const props = defineProps({
 const statusConfig = {
   pending: { text: '待处理', tone: 'warning' },
   processing: { text: '处理中', tone: 'info' },
+  in_progress: { text: '审批中', tone: 'warning' },
   embedded: { text: '已嵌入', tone: 'success' },
+  verified: { text: '已校验', tone: 'success' },
   confirmed: { text: '已确认', tone: 'success' },
   active: { text: '生效中', tone: 'success' },
   approved: { text: '已通过', tone: 'success' },
+  adm1_approved: { text: '待二级审批', tone: 'info' },
+  adm2_approved: { text: '待复核', tone: 'info' },
   rejected: { text: '已拒绝', tone: 'error' },
   expired: { text: '已过期', tone: 'neutral' },
   failed: { text: '失败', tone: 'error' },
   published: { text: '已发布', tone: 'success' },
   draft: { text: '草稿', tone: 'neutral' },
+  archived: { text: '已归档', tone: 'neutral' },
+  deleted: { text: '已删除', tone: 'error' },
+  cancelled: { text: '已撤回', tone: 'neutral' },
   revoked: { text: '已撤销', tone: 'error' },
-  none: { text: '未处理', tone: 'neutral' }
+  none: { text: '未处理', tone: 'neutral' },
+  not_applicable: { text: '不适用', tone: 'info' }
 }
 
 const NONE_TEXT = {
@@ -39,12 +47,22 @@ const NONE_TEXT = {
   default: '未处理'
 }
 
+// 同一个状态在不同业务域下含义不同，避免“待处理”一把梭
+const KIND_STATUS_TEXT = {
+  asset: { pending: '待审核', rejected: '已驳回' },
+  watermark: { pending: '处理中', verified: '已校验' },
+  chain: { pending: '存证中' },
+  license: { pending: '审批中', approved: '已通过', active: '已生效' }
+}
+
 const tone = computed(() => statusConfig[props.status]?.tone || 'neutral')
 const statusText = computed(() => {
   if (props.status === 'none') {
     return NONE_TEXT[props.kind] || NONE_TEXT.default
   }
-  return statusConfig[props.status]?.text || props.status
+  return KIND_STATUS_TEXT[props.kind]?.[props.status]
+    || statusConfig[props.status]?.text
+    || props.status
 })
 </script>
 

@@ -15,6 +15,8 @@
           <router-link to="/home" class="nav-link">首页</router-link>
           <router-link to="/assets" class="nav-link">资产档案</router-link>
           <router-link to="/trace" class="nav-link">溯源查询</router-link>
+          <router-link to="/watermark-lab" class="nav-link">水印实验室</router-link>
+          <router-link to="/guide" class="nav-link">使用指南</router-link>
           <template v-if="isLoggedIn">
             <router-link to="/license/my" class="nav-link">我的授权</router-link>
             <router-link v-if="isAdmin" to="/admin" class="nav-link">管理后台</router-link>
@@ -40,6 +42,14 @@
               </button>
               <template #dropdown>
                 <el-dropdown-menu>
+                  <el-dropdown-item command="my-assets">
+                    <el-icon><Picture /></el-icon>
+                    我的资产
+                  </el-dropdown-item>
+                  <el-dropdown-item command="favorites">
+                    <el-icon><Star /></el-icon>
+                    我的收藏
+                  </el-dropdown-item>
                   <el-dropdown-item command="profile">
                     <el-icon><User /></el-icon>
                     个人中心
@@ -68,6 +78,8 @@
       <router-link to="/home" @click="mobileNavOpen = false">首页</router-link>
       <router-link to="/assets" @click="mobileNavOpen = false">资产档案</router-link>
       <router-link to="/trace" @click="mobileNavOpen = false">溯源查询</router-link>
+      <router-link to="/watermark-lab" @click="mobileNavOpen = false">水印实验室</router-link>
+      <router-link to="/guide" @click="mobileNavOpen = false">使用指南</router-link>
       <router-link v-if="isLoggedIn" to="/license/my" @click="mobileNavOpen = false">我的授权</router-link>
       <router-link v-if="isAdmin" to="/admin" @click="mobileNavOpen = false">管理后台</router-link>
     </nav>
@@ -86,7 +98,7 @@
           </h1>
 
           <p class="hero-subtitle">
-            数字水印嵌入，区块链存证，AI 侵权检测与全链路溯源——
+            数字水印嵌入、存证证书与全链路溯源，可选接入联盟链与 AI 辅助检测——
             为苏州园林的影像、图纸与三维资产建立可验证的权属档案。
           </p>
 
@@ -99,11 +111,24 @@
               <el-icon><Search /></el-icon>
               溯源查询
             </button>
+            <router-link to="/guide" class="btn-secondary guide-entry">
+              3 分钟上手
+              <el-icon><ArrowRight /></el-icon>
+            </router-link>
           </div>
         </div>
 
-        <div class="hero-visual" aria-hidden="true">
-          <svg class="moon-gate" viewBox="0 0 560 560" fill="none">
+        <div class="hero-visual">
+          <div v-if="heroCover" class="moon-photo">
+            <img
+              :src="heroCover"
+              :alt="`${heroGarden}园林实景`"
+              fetchpriority="high"
+              decoding="async"
+              @error="heroCover = ''"
+            />
+          </div>
+          <svg v-else class="moon-gate" viewBox="0 0 560 560" fill="none" aria-hidden="true">
             <defs>
               <clipPath id="gateClip">
                 <circle cx="280" cy="280" r="196" />
@@ -148,12 +173,12 @@
                 y="141"
                 text-anchor="middle"
                 fill="#fcfdfb"
-                font-family="'Noto Serif SC','Songti SC','STSong','SimSun',serif"
+                font-family="'Songti SC','STSong','SimSun','Noto Serif SC',serif"
                 font-size="24"
               >园</text>
             </g>
           </svg>
-          <p class="gate-caption">拙政园 · 见山楼 · 数字档案</p>
+          <p class="gate-caption">{{ heroCaption }}</p>
         </div>
       </div>
 
@@ -208,7 +233,7 @@
         <div class="features-grid">
           <article class="feature-item" v-for="feature in features" :key="feature.title">
             <div class="feature-head">
-              <el-icon class="feature-icon"><component :is="feature.icon" /></el-icon>
+              <span class="feature-mark" aria-hidden="true">{{ feature.mark }}</span>
               <h3 class="feature-title">{{ feature.title }}</h3>
             </div>
             <p class="feature-desc">{{ feature.description }}</p>
@@ -240,7 +265,12 @@
             v-for="(garden, index) in gardens"
             :key="garden.id"
             :class="{ featured: index === 0 }"
+            role="button"
+            tabindex="0"
+            :aria-label="`查看园林 ${garden.name}`"
             @click="goToGarden(garden.id)"
+            @keydown.enter.self.prevent="goToGarden(garden.id)"
+            @keydown.space.self.prevent="goToGarden(garden.id)"
           >
             <div class="garden-visual">
               <img
@@ -248,6 +278,8 @@
                 :src="garden.cover_image"
                 :alt="garden.name"
                 class="garden-image"
+                loading="lazy"
+                decoding="async"
               />
               <div v-else class="garden-placeholder lattice">
                 <span class="garden-glyph">{{ garden.name?.charAt(0) }}</span>
@@ -267,7 +299,8 @@
         </div>
 
         <div v-else class="garden-empty">
-          <p>暂无园林数据。启动后端并执行 <code>python scripts/create_test_data.py</code> 后即可看到档案。</p>
+          <p>园林档案暂未加载</p>
+          <el-button text type="primary" @click="reloadGardens">重新加载</el-button>
         </div>
       </div>
     </section>
@@ -303,6 +336,8 @@
           <router-link to="/home">首页</router-link>
           <router-link to="/assets">资产档案</router-link>
           <router-link to="/trace">溯源查询</router-link>
+          <router-link to="/watermark-lab">水印实验室</router-link>
+          <router-link to="/guide">使用指南</router-link>
           <router-link to="/login">登录</router-link>
         </nav>
         <p class="footer-copyright">
@@ -320,7 +355,7 @@ import { useUserStore } from '@/stores/user'
 import { gardenApi, publicApi } from '@/api/modules'
 import {
   ArrowDown, ArrowRight, Search, User, Setting, SwitchButton,
-  Location, Stamp, Link, Aim, Guide, Menu
+  Location, Menu, Star, Picture
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -330,6 +365,11 @@ const gardens = ref([])
 const isScrolled = ref(false)
 const mobileNavOpen = ref(false)
 const statsLoaded = ref(false)
+const heroCover = ref('')
+const heroGarden = ref('拙政园')
+const heroCaption = computed(() =>
+  heroCover.value ? `${heroGarden.value} · 园林实景 · 数字档案` : '拙政园 · 见山楼 · 数字档案'
+)
 const animatedStats = ref({
   assets: 0,
   watermarked: 0,
@@ -339,25 +379,25 @@ const animatedStats = ref({
 
 const features = [
   {
-    icon: Stamp,
+    mark: '水',
     title: '水印确权',
     description: '自研鲁棒水印算法，将资产唯一标识隐式嵌入影像与矢量数据，抗 JPEG 压缩、缩放与噪声；裁剪场景可结合链上存证核验。',
     tags: ['DCT 频域', '矢量坐标扰动', 'NC 完整性校验']
   },
   {
-    icon: Link,
+    mark: '链',
     title: '区块链存证',
-    description: '资产与授权信息写入 FISCO BCOS 联盟链，形成不可篡改的存证记录与电子证书。',
-    tags: ['联盟链', '存证证书', '哈希校验']
+    description: '文件指纹、水印编号与权利人写入存证记录并签发证书；默认使用本地模拟链，配置节点后可接入 FISCO BCOS。',
+    tags: ['存证证书', '哈希校验', '可接联盟链']
   },
   {
-    icon: Aim,
-    title: 'AI 侵权检测',
-    description: '基于 CLIP 特征与向量检索，在海量图像中定位相似资产，辅助人工判定侵权。',
-    tags: ['CLIP 特征', 'Milvus 检索', '相似度评分']
+    mark: '检',
+    title: 'AI 辅助检测（可选）',
+    description: '配置模型与 API Key 后可启用 CLIP 相似检索与问答；默认关闭，接口不会伪造“无侵权”结论。',
+    tags: ['可选部署', 'CLIP 特征', '人工复核']
   },
   {
-    icon: Guide,
+    mark: '溯',
     title: '全链路溯源',
     description: '从上传、嵌入、存证到授权分发，每一次流转都记录在案，可回溯完整证据链。',
     tags: ['流转记录', '授权合同', '溯源报告']
@@ -367,7 +407,7 @@ const features = [
 const workflowSteps = [
   { title: '上传资产', description: '影像、三维模型或矢量图纸进入档案库，生成唯一资产编码。' },
   { title: '嵌入水印', description: '按资产类型选择 DCT 或坐标扰动算法，写入可提取的水印标识。' },
-  { title: '链上存证', description: '文件哈希与水印信息写入联盟链，签发可验证的存证证书。' },
+  { title: '存证记录', description: '文件哈希与水印信息生成存证记录与证书；接入 FISCO BCOS 后同步写入联盟链。' },
   { title: '授权分发', description: '双重审批通过后发放授权，下载与使用记录持续回流台账。' }
 ]
 
@@ -375,8 +415,8 @@ const techStack = [
   { name: 'Vue 3 + Vite', description: '响应式前端与按需构建', role: '展示层' },
   { name: 'Flask + SQLAlchemy', description: 'REST API 与业务服务', role: '服务层' },
   { name: 'PostgreSQL / Redis', description: '主数据与缓存限流', role: '数据层' },
-  { name: 'FISCO BCOS', description: '国产联盟链存证与合约', role: '信任层' },
-  { name: 'GLM-4V / CLIP / Milvus', description: '视觉理解与向量检索', role: '智能层' },
+  { name: 'FISCO BCOS', description: '可接入的联盟链存证（默认本地模拟）', role: '信任层' },
+  { name: 'CLIP / 智谱 GLM', description: '可选 AI 能力，需安装模型并配置 Key', role: '智能层' },
   { name: 'Docker Compose', description: '一键部署与健康检查', role: '运行层' }
 ]
 
@@ -402,6 +442,12 @@ async function loadStats() {
       }
       if (d.gardens?.length) {
         gardens.value = d.gardens.slice(0, 4)
+        const preferred = d.gardens.find(g => g.code === 'ZZY' && g.cover_image)
+          || d.gardens.find(g => g.cover_image)
+        if (preferred) {
+          heroCover.value = preferred.cover_image
+          heroGarden.value = preferred.name
+        }
       }
       statsLoaded.value = true
     }
@@ -418,15 +464,16 @@ async function loadGardens() {
       gardens.value = response.data.data.slice(0, 4)
     }
   } catch {
+    // 接口失败时保持空态并提供重试，不伪造园林数据
     if (gardens.value.length === 0) {
-      gardens.value = [
-        { id: 1, name: '拙政园', code: 'ZZY', description: '中国四大名园之首，以水景与远借塔影著称。', asset_count: 0, location: '姑苏区' },
-        { id: 2, name: '留园', code: 'LY', description: '以建筑空间与太湖石闻名，廊院层次丰富。', asset_count: 0, location: '姑苏区' },
-        { id: 3, name: '狮子林', code: 'SZL', description: '假山迷宫与湖石景观的代表。', asset_count: 0, location: '姑苏区' },
-        { id: 4, name: '沧浪亭', code: 'CLT', description: '苏州现存最古老的园林，以复廊借景见长。', asset_count: 0, location: '姑苏区' }
-      ]
+      gardens.value = []
     }
   }
+}
+
+function reloadGardens() {
+  loadStats()
+  loadGardens()
 }
 
 function animateNumbers() {
@@ -463,6 +510,10 @@ function handleCommand(command) {
   if (command === 'logout') {
     userStore.logout()
     router.push('/home')
+  } else if (command === 'my-assets') {
+    router.push('/my-assets')
+  } else if (command === 'favorites') {
+    router.push('/favorites')
   } else if (command === 'profile') {
     router.push('/profile')
   } else if (command === 'settings') {
@@ -527,8 +578,7 @@ onUnmounted(() => {
   }
 
   &.navbar-scrolled {
-    background: rgba(252, 253, 251, 0.94);
-    backdrop-filter: $glass-blur;
+    background: rgba(252, 253, 251, 0.98);
     border-bottom-color: $border-light;
 
     .brand-mark {
@@ -667,16 +717,20 @@ onUnmounted(() => {
 }
 
 .btn-login {
+  flex-shrink: 0;
   padding: 8px 14px;
   font-size: 14px;
+  white-space: nowrap;
   color: rgba(252, 253, 251, 0.9);
 
   &:hover { color: #fcfdfb; }
 }
 
 .btn-register {
+  flex-shrink: 0;
   padding: 8px 18px;
   font-size: 14px;
+  white-space: nowrap;
   color: $primary-dark;
   background: #fcfdfb;
   border: 1px solid #fcfdfb;
@@ -836,6 +890,25 @@ onUnmounted(() => {
     width: min(100%, 520px);
     height: auto;
     animation: fadeIn 1.4s ease both;
+  }
+
+  .moon-photo {
+    width: min(100%, 500px);
+    aspect-ratio: 1;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 2px solid rgba(252, 253, 251, 0.36);
+    box-shadow:
+      0 0 0 14px rgba(252, 253, 251, 0.06),
+      0 0 0 15px rgba(252, 253, 251, 0.16),
+      0 30px 80px rgba(0, 0, 0, 0.28);
+    background: rgba(252, 253, 251, 0.06);
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
   }
 
   .gate-caption {
@@ -1000,17 +1073,18 @@ onUnmounted(() => {
     margin-bottom: 14px;
   }
 
-  .feature-icon {
+  .feature-mark {
     width: 36px;
     height: 36px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid $border-color;
+    border: 1px solid rgba(166, 64, 47, 0.45);
     border-radius: $radius-xs;
-    color: $primary-color;
-    font-size: 18px;
-    background: $bg-secondary;
+    color: $accent-color;
+    font-family: $font-display;
+    font-size: 17px;
+    background: transparent;
   }
 
   .feature-title {
@@ -1131,10 +1205,9 @@ onUnmounted(() => {
       padding: 3px 8px;
       font-size: 11px;
       color: #fcfdfb;
-      background: rgba(14, 59, 51, 0.72);
+      background: rgba(14, 59, 51, 0.78);
       border: 1px solid rgba(252, 253, 251, 0.2);
       border-radius: $radius-xs;
-      backdrop-filter: blur(6px);
     }
   }
 
@@ -1325,6 +1398,7 @@ onUnmounted(() => {
   .hero-visual {
     order: -1;
     .moon-gate { width: min(70vw, 380px); }
+    .moon-photo { width: min(70vw, 380px); }
   }
 
   .workflow-list {
@@ -1350,8 +1424,31 @@ onUnmounted(() => {
   }
 }
 
+@media (max-width: 1180px) {
+  .navbar { padding: 0 24px; }
+  .navbar-menu { display: none; }
+  .mobile-nav-toggle { display: inline-flex; }
+  .navbar-actions { gap: 10px; }
+}
+
 @media (max-width: 768px) {
   .navbar { padding: 0 20px; }
+  .navbar-container { gap: 10px; }
+  .navbar-brand {
+    gap: 8px;
+
+    .brand-mark {
+      width: 32px;
+      height: 32px;
+      font-size: 16px;
+    }
+
+    .brand-name {
+      font-size: 15px;
+      letter-spacing: 0;
+    }
+  }
+  .navbar-actions { gap: 6px; }
   .navbar-menu { display: none; }
   .brand-sub { display: none; }
   .mobile-nav-toggle { display: inline-flex; }

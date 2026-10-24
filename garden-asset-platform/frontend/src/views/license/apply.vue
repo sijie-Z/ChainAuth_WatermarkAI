@@ -8,6 +8,19 @@
       <h1 class="page-title">申请授权</h1>
     </header>
 
+    <!-- 资产加载中 -->
+    <el-card v-if="assetLoading" class="asset-info-card">
+      <el-skeleton :rows="3" animated />
+    </el-card>
+
+    <!-- 资产缺失或加载失败：阻止继续填写 -->
+    <el-card v-else-if="assetError" class="asset-info-card">
+      <el-empty :description="assetError">
+        <el-button type="primary" @click="goBack">返回资产档案</el-button>
+      </el-empty>
+    </el-card>
+
+    <template v-else>
     <!-- 资产信息 -->
     <el-card class="asset-info-card">
       <template #header>
@@ -16,7 +29,7 @@
           <span v-if="asset.asset_code" class="asset-code">{{ asset.asset_code }}</span>
         </div>
       </template>
-      <el-descriptions :column="3" border>
+      <el-descriptions :column="isMobile ? 1 : 3" border>
         <el-descriptions-item label="资产编码">{{ asset.asset_code }}</el-descriptions-item>
         <el-descriptions-item label="标题">{{ asset.title }}</el-descriptions-item>
         <el-descriptions-item label="类型">{{ getTypeName(asset.asset_type) }}</el-descriptions-item>
@@ -40,25 +53,69 @@
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px" class="apply-form">
         <el-form-item label="授权类型" prop="license_type">
           <el-radio-group v-model="form.license_type">
-            <el-radio-button label="personal">个人使用</el-radio-button>
-            <el-radio-button label="academic">学术研究</el-radio-button>
-            <el-radio-button label="commercial">商业使用</el-radio-button>
-            <el-radio-button label="display">展览展示</el-radio-button>
-            <el-radio-button label="derivative">衍生创作</el-radio-button>
+            <el-radio-button value="personal">个人使用</el-radio-button>
+            <el-radio-button value="academic">学术研究</el-radio-button>
+            <el-radio-button value="commercial">商业使用</el-radio-button>
+            <el-radio-button value="display">展览展示</el-radio-button>
+            <el-radio-button value="derivative">衍生创作</el-radio-button>
           </el-radio-group>
         </el-form-item>
 
-        <el-form-item label="使用目的" prop="purpose">
+        <el-form-item label="使用目的" prop="usage_purpose_code">
+          <el-select v-model="form.usage_purpose_code" placeholder="选择使用目的" style="width: 100%">
+            <el-option label="个人学习" value="personal_learning" />
+            <el-option label="教学科研" value="teaching_research" />
+            <el-option label="商业宣传" value="commercial_marketing" />
+            <el-option label="出版发行" value="publication" />
+            <el-option label="公开展览" value="exhibition" />
+            <el-option label="衍生创作" value="derivative" />
+            <el-option label="其他" value="other" />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="用途说明" prop="purpose">
           <el-input v-model="form.purpose" type="textarea" :rows="3" placeholder="请详细描述使用目的" />
         </el-form-item>
 
-        <el-form-item label="使用范围">
+        <el-form-item label="使用渠道">
           <el-checkbox-group v-model="form.scope">
             <el-checkbox label="online">网络发布</el-checkbox>
             <el-checkbox label="print">印刷出版</el-checkbox>
             <el-checkbox label="exhibition">公开展览</el-checkbox>
             <el-checkbox label="broadcast">广播传播</el-checkbox>
           </el-checkbox-group>
+        </el-form-item>
+
+        <el-form-item label="授权地域">
+          <el-select v-model="form.territory" style="width: 180px">
+            <el-option label="中国大陆" value="中国大陆" />
+            <el-option label="中国港澳台" value="中国港澳台" />
+            <el-option label="全球" value="全球" />
+            <el-option label="海外" value="海外" />
+          </el-select>
+          <span class="form-hint">下载时需申报使用地域，与授权地域一致</span>
+        </el-form-item>
+
+        <el-form-item label="可下载格式">
+          <el-checkbox-group v-model="form.allowed_formats">
+            <el-checkbox
+              v-for="format in formatOptions"
+              :key="format"
+              :label="format"
+            >
+              {{ format }}
+            </el-checkbox>
+          </el-checkbox-group>
+          <span class="form-hint">不勾选表示不限制；限制后仅允许下载这些源格式</span>
+        </el-form-item>
+
+        <el-form-item label="下载次数">
+          <el-input
+            v-model="form.max_downloads"
+            placeholder="留空表示不限制"
+            style="width: 180px"
+          />
+          <span class="form-hint">单次授权最多可下载的次数（1-10000）</span>
         </el-form-item>
 
         <el-form-item label="使用期限" prop="valid_period">
@@ -95,6 +152,7 @@
         </el-form-item>
       </el-form>
     </el-card>
+    </template>
 
     <!-- 授权协议对话框 -->
     <el-dialog v-model="agreementVisible" title="数字资产使用授权协议" width="min(600px, 92vw)">
@@ -123,52 +181,92 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { assetApi, licenseApi } from '@/api/modules'
+import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 
 const formRef = ref()
 const submitting = ref(false)
 const agreementVisible = ref(false)
+const assetLoading = ref(true)
+const assetError = ref('')
+const isMobile = ref(window.innerWidth <= 768)
 
 const asset = ref({})
 const form = ref({
   license_type: 'personal',
+  usage_purpose_code: 'personal_learning',
   purpose: '',
-  scope: [],
+  scope: ['online'],
+  territory: '中国大陆',
+  allowed_formats: [],
+  max_downloads: '',
   valid_period: '3m',
   contact: '',
   remarks: '',
   agree: false
 })
 
+const FORMAT_LIMITS = {
+  image: ['JPG', 'PNG', 'TIFF', 'WEBP'],
+  vector: ['ZIP', 'SHP', 'GEOJSON', 'KML'],
+  document: ['PDF', 'DOC', 'DOCX', 'DWG', 'DXF'],
+  video: ['MP4', 'MOV', 'AVI', 'MKV'],
+  model: ['OBJ', 'FBX', 'GLTF', 'GLB', 'STL', 'ZIP']
+}
+
+const formatOptions = computed(() => {
+  const list = [...(FORMAT_LIMITS[asset.value.asset_type] || [])]
+  const current = (asset.value.file_format || '').toUpperCase()
+  if (current && !list.includes(current)) list.unshift(current)
+  return list
+})
+
 const rules = {
   license_type: [{ required: true, message: '请选择授权类型', trigger: 'change' }],
-  purpose: [{ required: true, message: '请填写使用目的', trigger: 'blur' }],
+  usage_purpose_code: [{ required: true, message: '请选择使用目的', trigger: 'change' }],
+  purpose: [{ required: true, message: '请填写用途说明', trigger: 'blur' }],
   valid_period: [{ required: true, message: '请选择使用期限', trigger: 'change' }],
   contact: [{ required: true, message: '请填写联系方式', trigger: 'blur' }]
 }
 
 async function loadAsset() {
   const assetId = route.query.asset_id
-  if (!assetId) return
+  if (!assetId) {
+    assetError.value = '未指定要申请授权的资产'
+    assetLoading.value = false
+    return
+  }
 
   try {
     const response = await assetApi.getDetail(assetId)
     if (response.data.code === 200) {
       asset.value = response.data.data
+      const current = (asset.value.file_format || '').toUpperCase()
+      form.value.allowed_formats = current ? [current] : []
+    } else {
+      assetError.value = response.data.message || '资产不存在或不可申请授权'
     }
-  } catch (error) {
-    ElMessage.error('加载资产失败')
+  } catch {
+    assetError.value = '资产加载失败，请返回资产档案后重试'
+  } finally {
+    assetLoading.value = false
   }
 }
 
 async function doSubmit() {
+  if (!asset.value.id) {
+    ElMessage.error('资产信息尚未加载，无法提交申请')
+    return
+  }
+
   try {
     await formRef.value.validate()
   } catch {
@@ -177,15 +275,34 @@ async function doSubmit() {
 
   submitting.value = true
   try {
-    const data = {
-      asset_id: asset.value.id || route.query.asset_id,
-      ...form.value
+    const scopeLabels = {
+      online: '网络发布',
+      print: '印刷出版',
+      exhibition: '公开展览',
+      broadcast: '广播传播'
     }
+    const scopeText = form.value.scope.map(item => scopeLabels[item] || item).join('、')
+    const purpose = [
+      form.value.purpose,
+      scopeText ? `使用范围：${scopeText}` : '',
+      form.value.remarks ? `附加说明：${form.value.remarks}` : ''
+    ].filter(Boolean).join('\n')
+
+    const data = {
+      asset_id: asset.value.id,
+      ...form.value,
+      allowed_channels: form.value.scope,
+      max_downloads: form.value.max_downloads === '' ? null : form.value.max_downloads,
+      purpose
+    }
+    delete data.scope
+    delete data.agree
+    delete data.remarks
     const response = await licenseApi.apply(data)
     if (response.data?.code === 200) {
       ElMessage.success('申请提交成功，请等待审批')
-      // 跳转到“我的授权”，审批中的申请会出现在对应页签
-      await router.push('/license/my')
+      // 直接落到“申请记录”，用户能立刻看到刚提交的申请
+      await router.push('/license/my?tab=pending')
     } else {
       ElMessage.error(response.data?.message || '申请提交失败')
     }
@@ -211,7 +328,20 @@ function getTypeName(type) {
 
 onMounted(() => {
   loadAsset()
+  window.addEventListener('resize', handleResize)
+  const currentUser = userStore.user
+  if (currentUser) {
+    form.value.contact = currentUser.phone || currentUser.email || ''
+  }
 })
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+})
+
+function handleResize() {
+  isMobile.value = window.innerWidth <= 768
+}
 </script>
 
 <style lang="scss" scoped>
@@ -322,13 +452,16 @@ onMounted(() => {
   }
 }
 
+.form-hint {
+  margin-left: 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: $text-placeholder;
+}
+
 @media (max-width: $breakpoint-md) {
   .license-apply {
     padding: $spacing-lg;
-
-    :deep(.el-descriptions) {
-      overflow-x: auto;
-    }
   }
 
   .asset-info-card {

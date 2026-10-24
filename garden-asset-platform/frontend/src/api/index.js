@@ -34,7 +34,7 @@ api.interceptors.request.use(
     }
 
     const token = localStorage.getItem('token')
-    if (token) {
+    if (token && !config.skipAuth) {
       config.headers.Authorization = `Bearer ${token}`
     }
     return config
@@ -90,8 +90,14 @@ api.interceptors.response.use(
   async error => {
     const originalRequest = error.config || {}
 
-    // Token过期，尝试刷新（带队列防止并发刷新）
-    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint(originalRequest)) {
+    // Token过期，尝试刷新（带队列防止并发刷新）。
+    // 公开分享接口的 401 表示“需要/错误访问码”，不能触发登录刷新。
+    if (
+      error.response?.status === 401
+      && !originalRequest._retry
+      && !originalRequest.skipAuth
+      && !isAuthEndpoint(originalRequest)
+    ) {
       if (isRefreshing) {
         // 排队请求同样标记为已重试，避免重试再次 401 时无限刷新
         originalRequest._retry = true

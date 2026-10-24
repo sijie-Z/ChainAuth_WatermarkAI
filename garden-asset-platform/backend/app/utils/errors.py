@@ -37,6 +37,34 @@ def register_error_handlers(app):
             'message': '资源不存在'
         }), 404
 
+    @app.errorhandler(405)
+    def method_not_allowed(error):
+        return jsonify({
+            'code': 405,
+            'message': '该接口不支持当前请求方法'
+        }), 405
+
+    @app.errorhandler(413)
+    def request_too_large(error):
+        return jsonify({
+            'code': 413,
+            'message': '上传文件过大，请压缩或拆分后重试'
+        }), 413
+
+    @app.errorhandler(415)
+    def unsupported_media_type(error):
+        return jsonify({
+            'code': 415,
+            'message': '不支持的文件类型或请求格式'
+        }), 415
+
+    @app.errorhandler(429)
+    def too_many_requests(error):
+        return jsonify({
+            'code': 429,
+            'message': '请求过于频繁，请稍后再试'
+        }), 429
+
     @app.errorhandler(500)
     def internal_error(error):
         return jsonify({

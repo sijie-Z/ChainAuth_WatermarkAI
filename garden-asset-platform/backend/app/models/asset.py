@@ -2,6 +2,7 @@
 资产数据模型
 """
 from datetime import datetime
+import json
 import uuid
 from app.extensions import db
 
@@ -64,6 +65,9 @@ class Asset(db.Model):
 
     # 状态
     status = db.Column(db.String(20), default='draft')  # draft/pending/published/rejected/archived/deleted
+    deleted_at = db.Column(db.DateTime, nullable=True)
+    deleted_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    previous_status = db.Column(db.String(20), nullable=True)
     publish_at = db.Column(db.DateTime, nullable=True)  # 发布时间
     approver_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # 审核人
     approve_time = db.Column(db.DateTime, nullable=True)  # 审核时间
@@ -79,8 +83,23 @@ class Asset(db.Model):
     tags = db.relationship('AssetTag', backref='asset', lazy='dynamic', cascade='all, delete-orphan')
     features = db.relationship('AssetFeature', backref='asset', lazy='dynamic', cascade='all, delete-orphan')
     licenses = db.relationship('License', backref='asset', lazy='dynamic')
+    versions = db.relationship(
+        'AssetVersion',
+        backref='asset',
+        lazy='dynamic',
+        cascade='all, delete-orphan'
+    )
 
     def to_dict(self):
+        vr_value = None
+        if self.vr_value:
+            try:
+                parsed = json.loads(self.vr_value)
+                if isinstance(parsed, (int, float)):
+                    vr_value = parsed
+            except (TypeError, ValueError):
+                pass
+
         return {
             'id': self.id,
             'asset_code': self.asset_code,
@@ -92,16 +111,27 @@ class Asset(db.Model):
             'thumbnail_path': self.thumbnail_path,
             'watermark_status': self.watermark_status,
             'watermark_id': self.watermark_id,
+            'watermark_embedded_at': self.watermark_embedded_at.isoformat() if self.watermark_embedded_at else None,
+            'vr_value': vr_value,
             'chain_status': self.chain_status,
+            'chain_tx_hash': self.chain_tx_hash,
+            'chain_timestamp': self.chain_timestamp.isoformat() if self.chain_timestamp else None,
             'certificate_id': self.certificate_id,
             'garden_id': self.garden_id,
             'garden_name': self.garden.name if self.garden else None,
             'creator_id': self.creator_id,
+            'owner_id': self.owner_id,
             'uploader_name': (self.uploader.nickname or self.uploader.username) if self.uploader else None,
             'creator_name': (self.creator.nickname or self.creator.username) if self.creator else None,
             'view_count': self.view_count,
             'download_count': self.download_count,
+            'favorite_count': self.favorite_count,
+            'license_count': self.license_count,
             'status': self.status,
+            'deleted_at': self.deleted_at.isoformat() if self.deleted_at else None,
+            'previous_status': self.previous_status,
+            'publish_at': self.publish_at.isoformat() if self.publish_at else None,
+            'reject_reason': self.reject_reason,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
@@ -147,3 +177,55 @@ class AssetFeature(db.Model):
             'feature_value': self.feature_value,
             'confidence': float(self.confidence) if self.confidence else None
         }
+
+
+class AssetVersion(db.Model):
+    """资产版本历史表
+
+    每次上传新文件或恢复旧版本都会新增一条记录，历史文件保持原位不删除。
+    资产主表始终指向当前版本；链上存证等历史信息保留在资产上，由证据链标记
+    “当前文件已变更”。
+    """
+    __tablename__ = 'asset_versions'
+    __table_args__ = (
+        db.UniqueConstraint('asset_id', 'version_no', name='uk_asset_version'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    asset_id = db.Column(
+        db.String(36), db.ForeignKey('assets.id'), nullable=False, index=True
+    )
+    version_no = db.Column(db.Integer, nullable=False)
+
+    # 文件信息（file_path 为服务器上的绝对路径）
+    file_path = db.Column(db.String(500), nullable=False)
+    file_name = db.Column(db.String(255), nullable=True)
+    file_format = db.Column(db.String(20), nullable=True)
+    file_size = db.Column(db.BigInteger, nullable=True)
+    file_hash = db.Column(db.String(64), nullable=True)
+    thumbnail_path = db.Column(db.String(500), nullable=True)
+
+    change_note = db.Column(db.String(500), nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    creator = db.relationship('User', foreign_keys=[created_by], backref='asset_versions')
+
+    def to_dict(self, is_current=False):
+        return {
+            'id': self.id,
+            'asset_id': self.asset_id,
+            'version_no': self.version_no,
+            'file_name': self.file_name,
+            'file_format': self.file_format,
+            'file_size': self.file_size,
+            'file_hash': self.file_hash,
+            'change_note': self.change_note,
+            'created_by': self.created_by,
+            'creator_name': (self.creator.nickname or self.creator.username) if self.creator else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'is_current': bool(is_current)
+        }
+
+    def __repr__(self):
+        return f'<AssetVersion {self.asset_id} v{self.version_no}>'

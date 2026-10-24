@@ -14,13 +14,14 @@ from app.utils.middleware import rate_limit
 class WatermarkEmbedResource(Resource):
     """水印嵌入"""
 
+    @rate_limit(limit=10, window=60)
     @jwt_required()
     def post(self):
         """嵌入水印"""
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
 
-        data = request.get_json()
+        data = request.get_json() or {}
         asset_id = data.get('asset_id')
 
         if not asset_id:
@@ -34,6 +35,28 @@ class WatermarkEmbedResource(Resource):
         is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
         if not is_owner and user.role not in ('admin', 'asset_admin'):
             return {'code': 403, 'message': '无权限操作'}, 403
+
+        if asset.watermark_status in ('embedded', 'verified'):
+            return {'code': 400, 'message': '资产已嵌入水印'}, 400
+        if asset.asset_type not in ('image', 'vector'):
+            return {'code': 400, 'message': f'不支持的资产类型: {asset.asset_type}'}, 400
+
+        # 异步模式：任务落库后立即返回，由 worker 执行
+        if data.get('async') or request.args.get('async') in ('1', 'true', 'yes'):
+            from app.services import task_service
+            task, created = task_service.enqueue_task('watermark_embed', asset, user)
+            return {
+                'code': 202,
+                'message': '水印任务已提交' if created else '已有相同水印任务在处理',
+                'data': {
+                    'task_id': task.id,
+                    'created': created,
+                    'worker_enabled': bool(
+                        current_app.config.get('TASK_WORKER_ENABLED', False)
+                    ),
+                    'task': task.to_dict()
+                }
+            }, 202
 
         # 调用服务嵌入水印
         result = WatermarkService.embed_watermark(asset, user)
@@ -56,6 +79,7 @@ class WatermarkEmbedResource(Resource):
 class WatermarkExtractResource(Resource):
     """水印提取"""
 
+    @rate_limit(limit=20, window=60)
     @jwt_required()
     def post(self):
         """提取水印"""
@@ -97,6 +121,7 @@ class WatermarkExtractResource(Resource):
 class WatermarkVerifyResource(Resource):
     """水印验证"""
 
+    @rate_limit(limit=60, window=60)
     def post(self):
         """验证水印ID"""
         data = request.get_json()
@@ -108,7 +133,8 @@ class WatermarkVerifyResource(Resource):
         # 查找资产
         asset = Asset.query.filter_by(watermark_id=watermark_id).first()
 
-        if not asset:
+        # 公开核验只针对已发布资产，避免通过水印编号探测草稿
+        if not asset or asset.status != 'published':
             return {
                 'code': 404,
                 'message': '未找到对应资产',
@@ -121,13 +147,15 @@ class WatermarkVerifyResource(Resource):
         return {
             'code': 200,
             'verified': result['verified'],
+            'content_verified': result.get('content_verified', False),
             'message': result['message'],
             'data': {
                 'asset_id': asset.id,
                 'asset_code': asset.asset_code,
                 'title': asset.title,
                 'watermark_id': asset.watermark_id,
-                'chain_status': asset.chain_status
+                'chain_status': asset.chain_status,
+                'method': result.get('method', 'registry')
             }
         }, 200
 
@@ -173,13 +201,23 @@ class WatermarkTraceResource(Resource):
             result = WatermarkService.trace_from_file(temp_path)
 
             if result['success'] and result.get('watermark_id'):
-                # 查找对应资产
-                asset = Asset.query.filter_by(watermark_id=result['watermark_id']).first()
+                # 公开溯源只能命中已发布资产，避免通过水印编号探测草稿
+                asset = Asset.query.filter_by(
+                    watermark_id=result['watermark_id'], status='published'
+                ).first()
 
                 if asset:
-                    # 查找区块链存证记录
+                    # 查找当前版本的区块链存证证书；历史证书不再作为当前证据
                     from app.models.blockchain import Certificate
-                    certificate = Certificate.query.filter_by(asset_id=asset.id).first()
+                    certificate = (
+                        Certificate.query.filter_by(
+                            certificate_id=asset.certificate_id
+                        ).first()
+                        if asset.certificate_id else
+                        Certificate.query.filter_by(
+                            asset_id=asset.id
+                        ).order_by(Certificate.id.desc()).first()
+                    )
 
                     return {
                         'code': 200,
@@ -193,6 +231,7 @@ class WatermarkTraceResource(Resource):
                             'created_at': asset.created_at.isoformat() if asset.created_at else None,
                             'nc_value': result.get('nc_value', 0),
                             'certificate_id': certificate.certificate_id if certificate else None,
+                            'version_no': certificate.version_no if certificate else None,
                             'tx_hash': certificate.tx_hash if certificate else None,
                             'confirmed_at': certificate.created_at.isoformat() if certificate and certificate.created_at else None
                         }
@@ -216,6 +255,76 @@ class WatermarkTraceResource(Resource):
                 }, 200
         finally:
             # 清理临时文件
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+
+class WatermarkBenchmarkResource(Resource):
+    """水印鲁棒性实验
+
+    上传一张图片，真实执行嵌入与多种攻击，返回 PSNR/NC/ID 恢复情况。
+    需要登录：算法计算成本较高，避免匿名请求打满 CPU。
+    """
+
+    @rate_limit(limit=4, window=60)
+    @jwt_required()
+    def post(self):
+        if 'file' not in request.files:
+            return {'code': 400, 'message': '未上传图片'}, 400
+
+        file = request.files['file']
+        if not file.filename:
+            return {'code': 400, 'message': '未选择图片'}, 400
+
+        import os
+        import uuid
+
+        from app.services.watermark_benchmark import ALLOWED_IMAGE_EXTS
+
+        ext = os.path.splitext(file.filename)[1].lower()
+        if ext not in ALLOWED_IMAGE_EXTS:
+            return {'code': 400, 'message': '仅支持 PNG/JPG/BMP/TIFF/WebP 图片'}, 400
+
+        max_bytes = current_app.config.get(
+            'WATERMARK_BENCHMARK_MAX_BYTES', 10 * 1024 * 1024
+        )
+        file.seek(0, os.SEEK_END)
+        file_size = file.tell()
+        file.seek(0)
+        if file_size > max_bytes:
+            return {
+                'code': 400,
+                'message': f'图片大小超过限制 ({max_bytes // 1024 // 1024}MB)'
+            }, 400
+
+        upload_root = os.path.join(
+            current_app.config.get('UPLOAD_FOLDER', './uploads'), 'benchmark_tmp'
+        )
+        os.makedirs(upload_root, exist_ok=True)
+        temp_path = os.path.join(upload_root, f'upload_{uuid.uuid4().hex}{ext}')
+        file.save(temp_path)
+
+        try:
+            from app.services.watermark_benchmark import run_benchmark
+
+            result = run_benchmark(
+                temp_path,
+                max_side=current_app.config.get('WATERMARK_BENCHMARK_MAX_SIDE', 640),
+            )
+            return {
+                'code': 200,
+                'message': '鲁棒性实验完成',
+                'data': result,
+            }, 200
+        except ValueError as exc:
+            return {'code': 400, 'message': str(exc)}, 400
+        except Exception:
+            current_app.logger.exception('水印鲁棒性实验失败')
+            return {
+                'code': 500,
+                'message': '实验执行失败，请更换图片后重试'
+            }, 500
+        finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 

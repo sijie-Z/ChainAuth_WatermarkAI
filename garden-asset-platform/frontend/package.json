@@ -1,6 +1,6 @@
 {
   "name": "garden-asset-frontend",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "苏州园林数字资产安全分发与溯源系统前端",
   "author": "苏州园林数字资产平台团队",
   "license": "MIT",
@@ -13,9 +13,10 @@
     "lint:check": "eslint src --ext .vue,.js,.jsx,.cjs,.mjs",
     "format": "prettier --write src/",
     "test": "vitest",
-    "test:ci": "vitest run --passWithNoTests",
+    "test:ci": "vitest run --passWithNoTests --maxWorkers=1 --pool=vmThreads",
     "test:e2e": "playwright test",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage",
+    "test:ci:safe": "node scripts/run-tests.mjs"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
@@ -26,7 +27,9 @@
     "lodash-es": "^4.17.21",
     "nprogress": "^0.2.0",
     "pinia": "^2.1.7",
+    "qrcode": "^1.5.4",
     "qs": "^6.11.2",
+    "three": "^0.180.0",
     "vue": "^3.5.42",
     "vue-router": "^4.2.5"
   },

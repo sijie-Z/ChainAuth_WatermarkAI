@@ -4,34 +4,40 @@
 import os
 import uuid
 import hashlib
-from datetime import datetime
+import json
+from datetime import datetime, timedelta
 from flask import request, current_app
 from flask_restful import Resource
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.extensions import db
 from app.models.user import User
-from app.models.asset import Asset, AssetTag, AssetFeature
+from app.models.asset import Asset, AssetTag, AssetFeature, AssetVersion
 from app.models.garden import Garden
 from app.models.license import LicenseApplication, License
 from app.models.log import OperationLog
 from app.utils.middleware import rate_limit
-from sqlalchemy import func, or_
+from app.services.notification_service import add_notification_event
+from sqlalchemy import case, func, or_
 
 
 ADMIN_ROLES = ('admin', 'asset_admin', 'license_admin', 'adm1', 'adm2')
+# 资产写操作（编辑、删除、标签）只允许超级管理员与资产管理员；
+# 审批员可查看/审核，但不应该能改删他人资产。
+ASSET_MANAGE_ROLES = ('admin', 'asset_admin')
 ASSET_STATUSES = ('draft', 'pending', 'published', 'rejected', 'deleted')
 
 
 class PublicStatsResource(Resource):
     """公开统计数据（无需登录）"""
 
+    @rate_limit(limit=120, window=60)
     def get(self):
-        total = Asset.query.filter(Asset.status != 'deleted').count()
+        total = Asset.query.filter_by(status='published').count()
         watermarked = Asset.query.filter(
-            Asset.watermark_id.isnot(None), Asset.status != 'deleted'
+            Asset.watermark_id.isnot(None), Asset.status == 'published'
         ).count()
         chained = Asset.query.filter(
-            Asset.chain_tx_hash.isnot(None), Asset.status != 'deleted'
+            Asset.chain_tx_hash.isnot(None), Asset.status == 'published'
         ).count()
         total_licenses = License.query.join(Asset).filter(Asset.status != 'deleted').count()
 
@@ -144,6 +150,29 @@ def generate_asset_code(garden_code, asset_type):
     return f"{garden_code}-{type_code}-{timestamp}-{random_suffix}"
 
 
+class TagListResource(Resource):
+    """已发布资产的标签分面"""
+
+    def get(self):
+        rows = db.session.query(
+            AssetTag.name, func.count(Asset.id)
+        ).join(
+            Asset, AssetTag.asset_id == Asset.id
+        ).filter(
+            Asset.status == 'published',
+            AssetTag.name.isnot(None)
+        ).group_by(AssetTag.name).order_by(
+            func.count(Asset.id).desc(), AssetTag.name.asc()
+        ).all()
+        return {
+            'code': 200,
+            'data': [
+                {'name': name, 'count': count}
+                for name, count in rows if name
+            ]
+        }, 200
+
+
 class AssetListResource(Resource):
     """资产列表"""
 
@@ -163,6 +192,11 @@ class AssetListResource(Resource):
         watermark_status = (request.args.get('watermark_status') or '').strip()
         chain_status = (request.args.get('chain_status') or '').strip()
         keyword = request.args.get('keyword')
+        tag = (request.args.get('tag') or '').strip()
+        file_format = (request.args.get('file_format') or '').strip().lower()
+        uploader_id = request.args.get('uploader_id', type=int)
+        date_from = (request.args.get('date_from') or '').strip()
+        date_to = (request.args.get('date_to') or '').strip()
 
         query = Asset.query
 
@@ -188,10 +222,64 @@ class AssetListResource(Resource):
         if chain_status in ('none', 'pending', 'confirmed', 'failed'):
             query = query.filter_by(chain_status=chain_status)
         if keyword:
-            query = query.filter(Asset.title.ilike(f'%{keyword}%'))
+            like = f'%{keyword}%'
+            query = query.filter(or_(
+                Asset.title.ilike(like),
+                Asset.asset_code.ilike(like),
+                Asset.description.ilike(like),
+                Asset.tags.any(or_(
+                    AssetTag.name.ilike(like), AssetTag.tag_name.ilike(like)
+                )),
+                Asset.garden.has(or_(
+                    Garden.name.ilike(like), Garden.code.ilike(like)
+                )),
+                Asset.uploader.has(or_(
+                    User.username.ilike(like), User.nickname.ilike(like)
+                )),
+            ))
+        if tag:
+            query = query.filter(Asset.tags.any(AssetTag.name == tag))
+        if file_format:
+            query = query.filter(func.lower(Asset.file_format) == file_format)
+        if uploader_id:
+            query = query.filter(Asset.uploader_id == uploader_id)
+        if date_from:
+            try:
+                query = query.filter(
+                    Asset.created_at >= datetime.fromisoformat(date_from)
+                )
+            except ValueError:
+                return {'code': 400, 'message': '开始日期格式无效'}, 400
+        if date_to:
+            try:
+                end = datetime.fromisoformat(date_to)
+                if len(date_to) == 10:
+                    end += timedelta(days=1)
+                    query = query.filter(Asset.created_at < end)
+                else:
+                    query = query.filter(Asset.created_at <= end)
+            except ValueError:
+                return {'code': 400, 'message': '结束日期格式无效'}, 400
 
-        # 排序
-        query = query.order_by(Asset.created_at.desc())
+        # 排序：带关键词且未指定排序时按相关度，标题/编码命中优先
+        sort = (request.args.get('sort') or ('relevance' if keyword else 'newest')).strip()
+        if sort == 'oldest':
+            query = query.order_by(Asset.created_at.asc())
+        elif sort == 'popular':
+            query = query.order_by(Asset.view_count.desc(), Asset.created_at.desc())
+        elif sort == 'downloads':
+            query = query.order_by(Asset.download_count.desc(), Asset.created_at.desc())
+        elif sort == 'relevance' and keyword:
+            like = f'%{keyword}%'
+            relevance = case(
+                (Asset.title.ilike(like), 5),
+                (Asset.asset_code.ilike(like), 4),
+                (Asset.description.ilike(like), 2),
+                else_=1,
+            )
+            query = query.order_by(relevance.desc(), Asset.created_at.desc())
+        else:
+            query = query.order_by(Asset.created_at.desc())
 
         # 分页
         pagination = query.paginate(page=page, per_page=per_page, error_out=False)
@@ -253,16 +341,35 @@ class AssetResource(Resource):
             return {'code': 404, 'message': '资产不存在'}, 404
 
         # 权限检查
-        if asset.creator_id != user_id and user.role not in ADMIN_ROLES:
+        is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
+        if not is_owner and user.role not in ASSET_MANAGE_ROLES:
             return {'code': 403, 'message': '无权限修改'}, 403
 
         data = request.get_json()
+
+        # 标签为整体替换：先校验，避免部分字段已修改后才报错
+        normalized_tags = None
+        if 'tags' in data:
+            raw_tags = data.get('tags')
+            if not isinstance(raw_tags, list) or len(raw_tags) > 20:
+                return {'code': 400, 'message': '标签格式错误'}, 400
+            normalized_tags = []
+            for raw_tag in raw_tags:
+                name = str(raw_tag).strip()[:50]
+                if name and name not in normalized_tags:
+                    normalized_tags.append(name)
 
         # 更新字段
         if 'title' in data:
             asset.title = data['title']
         if 'description' in data:
             asset.description = data['description']
+        if normalized_tags is not None:
+            AssetTag.query.filter_by(asset_id=asset_id).delete(
+                synchronize_session=False
+            )
+            for name in normalized_tags:
+                db.session.add(AssetTag(asset_id=asset_id, name=name))
 
         db.session.commit()
 
@@ -293,13 +400,47 @@ class AssetResource(Resource):
             return {'code': 404, 'message': '资产不存在'}, 404
 
         # 权限检查
-        if asset.creator_id != user_id and user.role not in ADMIN_ROLES:
+        is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
+        if not is_owner and user.role not in ASSET_MANAGE_ROLES:
             return {'code': 403, 'message': '无权限删除'}, 403
 
+        if asset.status != 'deleted':
+            asset.previous_status = asset.status
+            asset.deleted_at = datetime.utcnow()
+        asset.deleted_by = user_id
         asset.status = 'deleted'
-        # 删除后撤销仍然有效的授权，避免继续下载
-        License.query.filter_by(asset_id=asset_id, status='active').update(
-            {'status': 'revoked'}, synchronize_session=False
+
+        # 删除后撤销仍然有效的授权，通知被授权方；同时取消待审申请
+        active_licenses = License.query.filter_by(
+            asset_id=asset_id, status='active'
+        ).all()
+        for license_row in active_licenses:
+            license_row.status = 'revoked'
+            add_notification_event(
+                license_row.licensee_id,
+                'license_revoked',
+                '资产已删除，授权已撤销',
+                f'《{asset.title}》已从平台删除，原授权停止使用',
+                '/license/my'
+            )
+        pending_apps = LicenseApplication.query.filter(
+            LicenseApplication.asset_id == asset_id,
+            LicenseApplication.status.in_(('pending', 'adm1_approved'))
+        ).all()
+        for application in pending_apps:
+            application.status = 'cancelled'
+            add_notification_event(
+                application.applicant_id,
+                'license_rejected',
+                '资产已删除，申请已取消',
+                f'《{asset.title}》已从平台删除',
+                '/license/my?tab=applications'
+            )
+
+        # 排队中的水印/存证任务不再有执行意义
+        from app.models.task import AsyncTask
+        AsyncTask.query.filter_by(asset_id=asset_id, status='queued').update(
+            {'status': 'cancelled'}, synchronize_session=False
         )
         db.session.commit()
 
@@ -313,7 +454,58 @@ class AssetResource(Resource):
             request=request
         )
 
-        return {'code': 200, 'message': '删除成功'}, 200
+        return {'code': 200, 'message': '资产已移入回收站，可联系管理员恢复'}, 200
+
+
+class AssetRestoreResource(Resource):
+    """恢复已删除资产（退回草稿，授权不自动恢复）"""
+
+    @jwt_required()
+    def post(self, asset_id):
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        asset = Asset.query.get(asset_id)
+        if not asset:
+            return {'code': 404, 'message': '资产不存在'}, 404
+        if asset.status != 'deleted':
+            return {'code': 400, 'message': '该资产不在回收站'}, 400
+
+        is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
+        if not is_owner and user.role not in ASSET_MANAGE_ROLES:
+            return {'code': 403, 'message': '无权限恢复'}, 403
+
+        asset.status = 'draft'
+        asset.deleted_at = None
+        asset.deleted_by = None
+        asset.previous_status = None
+        db.session.commit()
+
+        OperationLog.log(
+            user=user,
+            action='restore',
+            module='asset',
+            description=f'恢复资产: {asset.asset_code}',
+            target_type='asset',
+            target_id=asset_id,
+            request=request
+        )
+
+        owner_id = asset.owner_id or asset.creator_id or asset.uploader_id
+        if owner_id and owner_id != user_id:
+            add_notification_event(
+                owner_id,
+                'asset_restored',
+                '资产已恢复',
+                f'《{asset.title}》已由管理员恢复到草稿，请重新完成发布流程',
+                f'/assets/{asset.id}'
+            )
+            db.session.commit()
+
+        return {
+            'code': 200,
+            'message': '资产已恢复为草稿，请重新水印/存证并提交发布',
+            'data': asset.to_dict()
+        }, 200
 
 
 class AssetUploadResource(Resource):
@@ -365,13 +557,28 @@ class AssetUploadResource(Resource):
         # 计算文件哈希（用于去重）
         file_hash = calculate_file_hash(file)
 
-        # 检查是否已存在相同文件
-        existing = Asset.query.filter_by(file_hash=file_hash).first()
+        # 检查是否已存在相同文件。只向有权限查看该资产的人返回 ID，
+        # 避免通过哈希探测他人草稿/已删除资产。
+        existing = Asset.query.filter(
+            Asset.file_hash == file_hash,
+            Asset.status != 'deleted',
+        ).first()
         if existing:
+            visible = user and (
+                user.role in ADMIN_ROLES
+                or user_id in (existing.creator_id, existing.owner_id, existing.uploader_id)
+            )
+            data = None
+            if visible:
+                data = {
+                    'existing_asset_id': existing.id,
+                    'asset_code': existing.asset_code,
+                    'status': existing.status
+                }
             return {
                 'code': 400,
-                'message': '文件已存在',
-                'data': {'existing_asset_id': existing.id}
+                'message': '该文件已上传过，请勿重复上传',
+                'data': data
             }, 400
 
         # 生成文件名和路径（UUID + 已验证扩展名；中文原名会被 secure_filename 剥掉扩展名）
@@ -417,6 +624,44 @@ class AssetUploadResource(Resource):
         )
 
         db.session.add(asset)
+        db.session.flush()
+
+        # 标签是可选字段，格式错误不应阻断上传
+        tags_raw = request.form.get('tags')
+        if tags_raw:
+            try:
+                tag_names = json.loads(tags_raw)
+            except (TypeError, ValueError):
+                tag_names = []
+            if isinstance(tag_names, list):
+                for tag_name in tag_names[:20]:
+                    name = str(tag_name).strip()[:50]
+                    if name:
+                        db.session.add(AssetTag(asset_id=asset.id, name=name))
+
+        # 缩略图失败不应影响上传本身，前端会在缺图时回退到占位图
+        if asset_type == 'image':
+            try:
+                from app.utils.thumbnails import generate_thumbnail_set
+                detail_path, _ = generate_thumbnail_set(file_path, asset.id)
+                asset.thumbnail_path = detail_path
+            except Exception as e:
+                current_app.logger.warning(f'缩略图生成失败: {e}', exc_info=True)
+
+        # 初始版本与资产在同一事务内入库，保证资产一定有 v1
+        db.session.add(AssetVersion(
+            asset_id=asset.id,
+            version_no=1,
+            file_path=os.path.abspath(file_path),
+            file_name=original_name[:255],
+            file_format=ext.upper(),
+            file_size=file_size,
+            file_hash=file_hash,
+            thumbnail_path=asset.thumbnail_path,
+            change_note='初始版本',
+            created_by=user_id
+        ))
+
         db.session.commit()
 
         # 记录日志
@@ -441,49 +686,283 @@ class AssetUploadResource(Resource):
         }, 200
 
 
-class AssetDownloadResource(Resource):
-    """资产下载"""
+class AssetRelatedResource(Resource):
+    """同园林的相关资产"""
 
     @jwt_required()
     def get(self, asset_id):
-        """下载资产"""
-        user_id = get_jwt_identity()
-        user = User.query.get(user_id)
         asset = Asset.query.get(asset_id)
-
-        if not asset:
+        if not asset or asset.status == 'deleted':
             return {'code': 404, 'message': '资产不存在'}, 404
 
-        is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
+        query = Asset.query.filter(
+            Asset.id != asset.id,
+            Asset.status == 'published'
+        )
+        if asset.garden_id:
+            query = query.filter(Asset.garden_id == asset.garden_id)
+        related = query.order_by(Asset.view_count.desc(), Asset.created_at.desc()).limit(4).all()
 
-        # 所有者与管理员可下载未发布资产；已删除仅管理员可见
-        if asset.status == 'deleted' and user.role not in ADMIN_ROLES:
-            return {'code': 404, 'message': '资产不存在'}, 404
-        if asset.status != 'published' and not (is_owner or user.role in ADMIN_ROLES):
-            return {'code': 403, 'message': '资产未发布'}, 403
+        return {'code': 200, 'data': [item.to_dict() for item in related]}, 200
 
-        # 检查下载权限：有效授权未过期，或本人/管理员
-        from app.models.license import License
-        now = datetime.utcnow()
-        has_license = License.query.filter(
-            License.asset_id == asset_id,
-            License.licensee_id == user_id,
-            License.status == 'active',
-            or_(License.end_time.is_(None), License.end_time > now),
-        ).first()
 
-        if not has_license and not is_owner and user.role not in ADMIN_ROLES:
-            return {'code': 403, 'message': '无下载权限，请先申请授权'}, 403
+class AssetThumbnailResource(Resource):
+    """资产缩略图（公开只读，URL 使用不可枚举的资产 UUID）"""
 
-        # 记录下载
+    def get(self, asset_id):
+        asset = Asset.query.get(asset_id)
+        if not asset or asset.status == 'deleted':
+            return {'code': 404, 'message': '缩略图不存在'}, 404
+
+        try:
+            safe_id = str(uuid.UUID(str(asset_id)))
+        except (ValueError, TypeError, AttributeError):
+            return {'code': 404, 'message': '缩略图不存在'}, 404
+
+        from flask import send_from_directory
+        from app.utils.thumbnails import thumbnail_dir
+
+        # 列表用 640px 卡片图，详情用 1600px 大图；旧数据缺少卡片图时回退到大图
+        size = (request.args.get('size') or '').strip()
+        filename = f'{safe_id}-card.jpg' if size == 'card' else f'{safe_id}.jpg'
+        full_path = os.path.join(thumbnail_dir(), filename)
+        if not os.path.isfile(full_path):
+            if size != 'card':
+                return {'code': 404, 'message': '缩略图不存在'}, 404
+            filename = f'{safe_id}.jpg'
+            if not os.path.isfile(os.path.join(thumbnail_dir(), filename)):
+                return {'code': 404, 'message': '缩略图不存在'}, 404
+
+        return send_from_directory(
+            thumbnail_dir(),
+            filename,
+            mimetype='image/jpeg',
+            conditional=True,
+            max_age=86400
+        )
+
+
+def _download_ticket_serializer():
+    from itsdangerous import URLSafeTimedSerializer
+    return URLSafeTimedSerializer(
+        current_app.config['SECRET_KEY'],
+        salt='asset-download-ticket'
+    )
+
+
+DOWNLOAD_TICKET_MAX_AGE = 120
+
+
+def _download_ticket_max_age():
+    return int(current_app.config.get(
+        'DOWNLOAD_TICKET_MAX_AGE', DOWNLOAD_TICKET_MAX_AGE
+    ))
+
+
+def _verify_download_ticket(ticket):
+    try:
+        return _download_ticket_serializer().loads(
+            ticket, max_age=_download_ticket_max_age()
+        )
+    except Exception:
+        return None
+
+
+def _asset_download_error(asset, user, user_id):
+    """资产基础可下载性检查；None 表示通过。"""
+    if not asset:
+        return {'code': 404, 'message': '资产不存在'}, 404
+
+    is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
+    if asset.status == 'deleted' and user.role not in ADMIN_ROLES:
+        return {'code': 404, 'message': '资产不存在'}, 404
+    if asset.status != 'published' and not (is_owner or user.role in ADMIN_ROLES):
+        return {'code': 403, 'message': '资产未发布'}, 403
+    return None
+
+
+def _download_scope_decision(asset, user_id, user, purpose, territory):
+    """返回 (可用授权, 拒绝原因, 台账使用的授权ID)。"""
+    now = datetime.utcnow()
+    licenses = License.query.filter(
+        License.asset_id == asset.id,
+        License.licensee_id == user_id,
+        License.status == 'active',
+        License.start_time <= now,
+        or_(License.end_time.is_(None), License.end_time > now),
+    ).order_by(License.id.asc()).all()
+
+    is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
+    bypass_scope = is_owner or user.role in ADMIN_ROLES
+    current_version = AssetVersion.query.filter_by(
+        asset_id=asset.id
+    ).order_by(AssetVersion.version_no.desc()).first()
+
+    selected_license = None
+    denial_reason = None
+    if not bypass_scope:
+        if not licenses:
+            denial_reason = '无下载权限，请先申请授权'
+        else:
+            from app.services.license_scope import scope_violation
+            reasons = []
+            for license_row in licenses:
+                reason = scope_violation(
+                    license_row,
+                    source_format=asset.file_format,
+                    purpose=purpose,
+                    territory=territory,
+                    current_version_id=current_version.id if current_version else None,
+                    current_version_no=current_version.version_no if current_version else None,
+                )
+                if not reason:
+                    selected_license = license_row
+                    break
+                reasons.append(reason)
+            if not selected_license:
+                denial_reason = reasons[0] if reasons else '无下载权限'
+
+    return selected_license, denial_reason, (licenses[0].id if licenses else None)
+
+
+def _record_denied_download(asset, user, user_id, purpose, territory,
+                            denial_reason, license_id):
+    from app.models.extra import DownloadRecord
+
+    record = DownloadRecord(
+        asset_id=asset.id,
+        user_id=user_id,
+        license_id=license_id,
+        status='denied',
+        denial_reason=denial_reason[:300],
+        usage_purpose=purpose,
+        territory=territory,
+        ip_address=request.remote_addr,
+        user_agent=request.headers.get('User-Agent', '')[:500]
+    )
+    db.session.add(record)
+    db.session.commit()
+    OperationLog.log(
+        user=user,
+        action='download_denied',
+        module='license',
+        description=f'下载被拒: {asset.asset_code} · {denial_reason}',
+        target_type='asset',
+        target_id=asset.id,
+        request=request,
+        status='failed',
+        error_message=denial_reason
+    )
+
+
+def _asset_file_path(asset):
+    raw_path = asset.watermarked_path or asset.storage_path
+    return os.path.abspath(raw_path) if raw_path else ''
+
+
+def _download_file_path(asset, license_row, user):
+    """生成（或复用）指纹副本并返回实际文件路径与指纹。"""
+    fingerprint = None
+    if license_row and asset.asset_type == 'image':
+        try:
+            from app.services.fingerprint_service import get_or_create_fingerprint
+            fingerprint, _ = get_or_create_fingerprint(asset, license_row, user)
+        except Exception:
+            current_app.logger.warning(
+                '生成下载指纹失败，回退到普通水印副本', exc_info=True
+            )
+
+    file_path = (
+        fingerprint.file_path if fingerprint else _asset_file_path(asset)
+    )
+    return file_path, fingerprint
+
+
+def _download_display_name(asset, file_path):
+    actual_ext = os.path.splitext(file_path)[1].lstrip('.').lower()
+    download_ext = actual_ext or (asset.file_format or '').lower()
+    if not download_ext:
+        return asset.asset_code
+    return f'{asset.asset_code}.{download_ext}'
+
+
+class AssetDownloadResource(Resource):
+    """资产下载（支持 JWT 或短时下载票据，浏览器可直接流式落盘）"""
+
+    @jwt_required(optional=True)
+    def get(self, asset_id):
+        """下载资产"""
+        ticket = (request.args.get('ticket') or '').strip()
+        if ticket:
+            payload = _verify_download_ticket(ticket)
+            if not payload or payload.get('asset_id') != asset_id:
+                return {
+                    'code': 401,
+                    'message': '下载凭证无效或已过期，请重新发起下载'
+                }, 401
+            user_id = payload.get('user_id')
+            user = User.query.get(user_id)
+            if not user or user.status != 'active':
+                return {'code': 401, 'message': '账号不可用，请重新登录'}, 401
+            purpose = payload.get('purpose') or None
+            territory = payload.get('territory') or None
+        else:
+            user_id = get_jwt_identity()
+            if not user_id:
+                return {'code': 401, 'message': '未授权访问'}, 401
+            user = User.query.get(user_id)
+            if not user:
+                return {'code': 401, 'message': '账号不存在或已被禁用'}, 401
+            purpose = (request.args.get('purpose') or '').strip() or None
+            territory = (request.args.get('territory') or '').strip() or None
+            from app.services.license_scope import PURPOSE_OPTIONS, TERRITORY_OPTIONS
+            if purpose and purpose not in PURPOSE_OPTIONS:
+                return {'code': 400, 'message': '使用目的选项无效'}, 400
+            if territory and territory not in TERRITORY_OPTIONS:
+                return {'code': 400, 'message': '使用地域选项无效'}, 400
+
+        asset = Asset.query.get(asset_id)
+        error = _asset_download_error(asset, user, user_id)
+        if error:
+            return error
+
+        # 检查下载权限：有效授权未过期且在授权范围内，或本人/管理员
         from app.models.extra import DownloadRecord
+
+        selected_license, denial_reason, fallback_license_id = (
+            _download_scope_decision(asset, user_id, user, purpose, territory)
+        )
+        if denial_reason:
+            _record_denied_download(
+                asset, user, user_id, purpose, territory,
+                denial_reason, fallback_license_id
+            )
+            return {'code': 403, 'message': denial_reason}, 403
+
+        # 先确认文件存在，避免“下载失败但下载量已经增加”
+        file_path, fingerprint = _download_file_path(
+            asset, selected_license, user
+        )
+        if not file_path or not os.path.isfile(file_path):
+            return {'code': 404, 'message': '文件不存在'}, 404
+
+        # 记录下载（关联本次使用的授权与指纹副本，便于后续审计）
         record = DownloadRecord(
             asset_id=asset_id,
             user_id=user_id,
+            license_id=selected_license.id if selected_license else None,
+            fingerprint_id=fingerprint.id if fingerprint else None,
+            status='success',
+            usage_purpose=purpose,
+            territory=territory,
             ip_address=request.remote_addr,
             user_agent=request.headers.get('User-Agent', '')[:500]
         )
         db.session.add(record)
+        if selected_license:
+            selected_license.download_count = (
+                selected_license.download_count or 0
+            ) + 1
         asset.download_count += 1
         db.session.commit()
 
@@ -498,32 +977,313 @@ class AssetDownloadResource(Resource):
         )
 
         from flask import send_file as flask_send_file
-
-        # 优先返回嵌入水印后的文件，否则返回原始文件
-        # send_file 以 app.root_path 为基准解析相对路径，这里统一转成绝对路径
-        file_path = os.path.abspath(asset.watermarked_path or asset.storage_path or '')
-        if not file_path or not os.path.exists(file_path):
-            return {'code': 404, 'message': '文件不存在'}, 404
-
-        download_name = f"{asset.asset_code}.{asset.file_format.lower()}" if asset.file_format else asset.asset_code
-
-        return flask_send_file(
+        response = flask_send_file(
             file_path,
             as_attachment=True,
-            download_name=download_name
+            download_name=_download_display_name(asset, file_path)
         )
+        if fingerprint:
+            response.headers['X-Download-Fingerprint'] = (
+                fingerprint.fingerprint_code
+            )
+        return response
+
+
+class AssetDownloadTicketResource(Resource):
+    """签发短时下载票据，供浏览器直接流式下载大文件"""
+
+    @rate_limit(limit=30, window=60)
+    @jwt_required()
+    def post(self, asset_id):
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        if not user:
+            return {'code': 401, 'message': '账号不存在或已被禁用'}, 401
+
+        asset = Asset.query.get(asset_id)
+        error = _asset_download_error(asset, user, user_id)
+        if error:
+            return error
+
+        data = request.get_json(silent=True) or {}
+        purpose = (data.get('purpose') or '').strip() or None
+        territory = (data.get('territory') or '').strip() or None
+        from app.services.license_scope import PURPOSE_OPTIONS, TERRITORY_OPTIONS
+        if purpose and purpose not in PURPOSE_OPTIONS:
+            return {'code': 400, 'message': '使用目的选项无效'}, 400
+        if territory and territory not in TERRITORY_OPTIONS:
+            return {'code': 400, 'message': '使用地域选项无效'}, 400
+
+        selected_license, denial_reason, fallback_license_id = (
+            _download_scope_decision(asset, user_id, user, purpose, territory)
+        )
+        if denial_reason:
+            _record_denied_download(
+                asset, user, user_id, purpose, territory,
+                denial_reason, fallback_license_id
+            )
+            return {'code': 403, 'message': denial_reason}, 403
+
+        file_path = _asset_file_path(asset)
+        if not file_path or not os.path.isfile(file_path):
+            return {'code': 404, 'message': '文件不存在'}, 404
+
+        fingerprint_code = None
+        if selected_license and asset.asset_type == 'image':
+            try:
+                from app.services.fingerprint_service import (
+                    get_or_create_fingerprint
+                )
+                fingerprint, _ = get_or_create_fingerprint(
+                    asset, selected_license, user
+                )
+                fingerprint_code = fingerprint.fingerprint_code
+            except Exception:
+                current_app.logger.warning(
+                    '生成下载指纹失败，下载时将回退到普通水印副本',
+                    exc_info=True
+                )
+
+        payload = {
+            'asset_id': asset_id,
+            'user_id': user_id,
+            'purpose': purpose,
+            'territory': territory,
+            'nonce': uuid.uuid4().hex,
+        }
+        ticket = _download_ticket_serializer().dumps(payload)
+        return {
+            'code': 200,
+            'data': {
+                'ticket': ticket,
+                'expires_in': _download_ticket_max_age(),
+                'fingerprint_code': fingerprint_code,
+            }
+        }, 200
+
+
+PREVIEW_TICKET_MAX_AGE = 3600
+
+
+def _preview_ticket_serializer():
+    from itsdangerous import URLSafeTimedSerializer
+    return URLSafeTimedSerializer(
+        current_app.config['SECRET_KEY'],
+        salt='asset-preview-ticket'
+    )
+
+
+def _preview_ticket_max_age():
+    return int(current_app.config.get(
+        'PREVIEW_TICKET_MAX_AGE', PREVIEW_TICKET_MAX_AGE
+    ))
+
+
+def _verify_preview_ticket(ticket):
+    try:
+        return _preview_ticket_serializer().loads(
+            ticket, max_age=_preview_ticket_max_age()
+        )
+    except Exception:
+        return None
+
+
+def _preview_asset_error(asset, user, user_id):
+    """预览权限：草稿仅所有者/管理员；已发布需有效授权且版本匹配。"""
+    if not asset:
+        return {'code': 404, 'message': '资产不存在'}, 404
+
+    is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
+    is_admin = user.role in ADMIN_ROLES
+    if asset.status == 'deleted' and not is_admin:
+        return {'code': 404, 'message': '资产不存在'}, 404
+    if asset.status != 'published' and not (is_owner or is_admin):
+        return {'code': 403, 'message': '资产未发布'}, 403
+
+    if asset.status == 'published' and not (is_owner or is_admin):
+        now = datetime.utcnow()
+        license_row = License.query.filter(
+            License.asset_id == asset.id,
+            License.licensee_id == user_id,
+            License.status == 'active',
+            License.start_time <= now,
+            or_(License.end_time.is_(None), License.end_time > now),
+        ).first()
+        if not license_row:
+            return {'code': 403, 'message': '获得授权后可在线预览'}, 403
+        current_version = AssetVersion.query.filter_by(
+            asset_id=asset.id
+        ).order_by(AssetVersion.version_no.desc()).first()
+        if (
+            license_row.version_id
+            and (
+                not current_version
+                or current_version.id != license_row.version_id
+            )
+        ):
+            return {
+                'code': 403,
+                'message': '授权对应历史版本，请重新申请后再预览'
+            }, 403
+
+    return None
+
+
+def _send_preview_file(asset, file_path):
+    ext = os.path.splitext(file_path)[1].lstrip('.').lower()
+    download_name = f'{asset.asset_code}.{ext}' if ext else asset.asset_code
+    from flask import send_file as flask_send_file
+    return flask_send_file(
+        file_path,
+        as_attachment=False,
+        download_name=download_name,
+        conditional=True,
+    )
+
+
+class AssetPreviewResource(Resource):
+    """在线预览（支持 JWT 或预览票据，视频/PDF 可直接 Range 流式加载）
+
+    预览不写入下载台账、不增加下载量；已发布资产需要有效授权才能预览，
+    草稿仅所有者与管理员可用。
+    """
+
+    @jwt_required(optional=True)
+    def get(self, asset_id):
+        ticket = (request.args.get('ticket') or '').strip()
+        if ticket:
+            payload = _verify_preview_ticket(ticket)
+            if not payload or payload.get('asset_id') != asset_id:
+                return {
+                    'code': 401,
+                    'message': '预览凭证无效或已过期，请刷新页面重试'
+                }, 401
+            user_id = payload.get('user_id')
+            user = User.query.get(user_id)
+            if not user or user.status != 'active':
+                return {'code': 401, 'message': '账号不可用，请重新登录'}, 401
+        else:
+            user_id = get_jwt_identity()
+            if not user_id:
+                return {'code': 401, 'message': '未授权访问'}, 401
+            user = User.query.get(user_id)
+            if not user:
+                return {'code': 401, 'message': '账号不存在或已被禁用'}, 401
+
+        asset = Asset.query.get(asset_id)
+        error = _preview_asset_error(asset, user, user_id)
+        if error:
+            return error
+
+        file_path = _asset_file_path(asset)
+        if not file_path or not os.path.isfile(file_path):
+            return {'code': 404, 'message': '文件不存在'}, 404
+
+        return _send_preview_file(asset, file_path)
+
+
+class AssetPreviewTicketResource(Resource):
+    """签发预览票据，供 video/iframe/三维加载器直接按 Range 读取"""
+
+    @rate_limit(limit=60, window=60)
+    @jwt_required()
+    def post(self, asset_id):
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        if not user:
+            return {'code': 401, 'message': '账号不存在或已被禁用'}, 401
+
+        asset = Asset.query.get(asset_id)
+        error = _preview_asset_error(asset, user, user_id)
+        if error:
+            return error
+
+        file_path = _asset_file_path(asset)
+        if not file_path or not os.path.isfile(file_path):
+            return {'code': 404, 'message': '文件不存在'}, 404
+
+        ticket = _preview_ticket_serializer().dumps({
+            'asset_id': asset_id,
+            'user_id': user_id,
+            'nonce': uuid.uuid4().hex,
+        })
+        return {
+            'code': 200,
+            'data': {
+                'ticket': ticket,
+                'expires_in': _preview_ticket_max_age(),
+            }
+        }, 200
+
+
+class FavoriteListResource(Resource):
+    """当前用户的收藏列表"""
+
+    @jwt_required()
+    def get(self):
+        from app.models.extra import Favorite
+
+        user_id = get_jwt_identity()
+        page = max(request.args.get('page', 1, type=int), 1)
+        per_page = min(max(request.args.get('per_page', 20, type=int), 1), 100)
+
+        query = Favorite.query.join(Asset, Favorite.asset_id == Asset.id).filter(
+            Favorite.user_id == user_id,
+            Asset.status != 'deleted'
+        ).order_by(Favorite.created_at.desc())
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+
+        items = []
+        for favorite in pagination.items:
+            data = favorite.asset.to_dict()
+            data['favorited_at'] = favorite.created_at.isoformat() if favorite.created_at else None
+            items.append(data)
+
+        return {
+            'code': 200,
+            'data': {
+                'items': items,
+                'total': pagination.total,
+                'page': page,
+                'per_page': per_page
+            }
+        }, 200
 
 
 class AssetFavoriteResource(Resource):
     """资产收藏"""
 
     @jwt_required()
+    def get(self, asset_id):
+        """查询当前用户是否已收藏"""
+        from app.models.extra import Favorite
+
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        asset = Asset.query.get(asset_id)
+        if not asset:
+            return {'code': 404, 'message': '资产不存在'}, 404
+
+        from app.resources.comments import can_view_asset
+        if not can_view_asset(user, user_id, asset):
+            return {'code': 404, 'message': '资产不存在'}, 404
+
+        favorited = Favorite.query.filter_by(user_id=user_id, asset_id=asset_id).first() is not None
+        count = Favorite.query.filter_by(asset_id=asset_id).count()
+        return {'code': 200, 'data': {'favorited': favorited, 'count': count}}, 200
+
+    @jwt_required()
     def post(self, asset_id):
         """添加收藏"""
         user_id = get_jwt_identity()
+        user = User.query.get(user_id)
         asset = Asset.query.get(asset_id)
 
         if not asset:
+            return {'code': 404, 'message': '资产不存在'}, 404
+
+        from app.resources.comments import can_view_asset
+        if not can_view_asset(user, user_id, asset):
             return {'code': 404, 'message': '资产不存在'}, 404
 
         from app.models.extra import Favorite
@@ -533,7 +1293,8 @@ class AssetFavoriteResource(Resource):
         ).first()
 
         if existing:
-            return {'code': 400, 'message': '已收藏'}, 400
+            count = Favorite.query.filter_by(asset_id=asset_id).count()
+            return {'code': 200, 'message': '已收藏', 'data': {'favorited': True, 'count': count}}, 200
 
         favorite = Favorite(
             user_id=user_id,
@@ -541,14 +1302,15 @@ class AssetFavoriteResource(Resource):
             created_at=datetime.utcnow()
         )
         db.session.add(favorite)
-        asset.favorite_count += 1
+        asset.favorite_count = (asset.favorite_count or 0) + 1
         db.session.commit()
 
-        return {'code': 200, 'message': '收藏成功'}, 200
+        count = Favorite.query.filter_by(asset_id=asset_id).count()
+        return {'code': 200, 'message': '收藏成功', 'data': {'favorited': True, 'count': count}}, 200
 
     @jwt_required()
     def delete(self, asset_id):
-        """取消收藏"""
+        """取消收藏（幂等）"""
         user_id = get_jwt_identity()
 
         from app.models.extra import Favorite
@@ -557,17 +1319,15 @@ class AssetFavoriteResource(Resource):
             asset_id=asset_id
         ).first()
 
-        if not favorite:
-            return {'code': 404, 'message': '收藏不存在'}, 404
-
         asset = Asset.query.get(asset_id)
-        if asset:
-            asset.favorite_count -= 1
+        if favorite:
+            if asset:
+                asset.favorite_count = max((asset.favorite_count or 0) - 1, 0)
+            db.session.delete(favorite)
+            db.session.commit()
 
-        db.session.delete(favorite)
-        db.session.commit()
-
-        return {'code': 200, 'message': '取消收藏成功'}, 200
+        count = Favorite.query.filter_by(asset_id=asset_id).count()
+        return {'code': 200, 'message': '取消收藏成功', 'data': {'favorited': False, 'count': count}}, 200
 
 
 class AssetStatsResource(Resource):
@@ -604,14 +1364,33 @@ class AssetStatsResource(Resource):
         # 待审批授权数量
         pending_licenses = LicenseApplication.query.filter_by(status='pending').count()
 
-        # 水印嵌入趋势（最近7天）
-        seven_days_ago = datetime.utcnow() - timedelta(days=7)
+        # 按创建时间统计类型分布（本周 / 本月），供仪表盘切换使用
+        now = datetime.utcnow()
+        week_ago = now - timedelta(days=7)
+        month_ago = now - timedelta(days=30)
+
+        def count_by_type(since):
+            rows = db.session.query(
+                Asset.asset_type, func.count(Asset.id)
+            ).filter(
+                Asset.status == 'published',
+                Asset.created_at >= since
+            ).group_by(Asset.asset_type).all()
+            counts = {name: 0 for name in ['image', 'model', 'vector', 'document', 'video']}
+            for asset_type, count in rows:
+                counts[asset_type] = count
+            return counts
+
+        by_type_week = count_by_type(week_ago)
+        by_type_month = count_by_type(month_ago)
+
+        # 水印嵌入趋势（最近30天，前端按周/月截取）
         watermark_trends = db.session.query(
             func.date(Asset.watermark_embedded_at).label('date'),
             func.count(Asset.id).label('count')
         ).filter(
-            Asset.watermark_embedded_at >= seven_days_ago,
-            Asset.watermark_status == 'embedded'
+            Asset.watermark_embedded_at >= month_ago,
+            Asset.watermark_status.in_(['embedded', 'verified'])
         ).group_by(
             func.date(Asset.watermark_embedded_at)
         ).order_by(
@@ -619,8 +1398,10 @@ class AssetStatsResource(Resource):
         ).all()
 
         # 最近活动
+        # 最近活动只展示业务操作；登录/登出次数多且信息量低
         recent_activities = OperationLog.query.filter(
-            OperationLog.status == 'success'
+            OperationLog.status == 'success',
+            OperationLog.action.notin_(('login', 'logout')),
         ).order_by(OperationLog.created_at.desc()).limit(10).all()
 
         # 最近上传
@@ -633,6 +1414,8 @@ class AssetStatsResource(Resource):
             'data': {
                 'total': total,
                 'by_type': by_type,
+                'by_type_week': by_type_week,
+                'by_type_month': by_type_month,
                 'by_status': by_status,
                 'watermarked': watermarked,
                 'chained': chained,
@@ -686,8 +1469,14 @@ class AssetTagsResource(Resource):
     @jwt_required()
     def get(self, asset_id):
         """获取资产标签"""
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
         asset = Asset.query.get(asset_id)
         if not asset:
+            return {'code': 404, 'message': '资产不存在'}, 404
+
+        from app.resources.comments import can_view_asset
+        if not can_view_asset(user, user_id, asset):
             return {'code': 404, 'message': '资产不存在'}, 404
 
         tags = AssetTag.query.filter_by(asset_id=asset_id).all()
@@ -707,7 +1496,7 @@ class AssetTagsResource(Resource):
             return {'code': 404, 'message': '资产不存在'}, 404
 
         is_owner = user_id in (asset.creator_id, asset.owner_id, asset.uploader_id)
-        if not is_owner and user.role not in ADMIN_ROLES:
+        if not is_owner and user.role not in ASSET_MANAGE_ROLES:
             return {'code': 403, 'message': '无权限修改标签'}, 403
 
         data = request.get_json() or {}
@@ -744,17 +1533,32 @@ class AssetPublishResource(Resource):
         if not asset:
             return {'code': 404, 'message': '资产不存在'}, 404
 
-        if asset.creator_id != user_id:
+        if user_id not in (asset.creator_id, asset.owner_id, asset.uploader_id):
             return {'code': 403, 'message': '无权限'}, 403
 
-        if asset.status != 'draft':
-            return {'code': 400, 'message': '只有草稿状态才能提交发布'}, 400
+        if asset.status not in ('draft', 'rejected'):
+            return {'code': 400, 'message': '只有草稿或已驳回的资产才能提交发布'}, 400
+
+        if asset.asset_type in ('image', 'vector') and asset.watermark_status not in ('embedded', 'verified'):
+            return {'code': 400, 'message': '提交发布前请先完成水印嵌入'}, 400
 
         asset.status = 'pending'
-        db.session.commit()
+        asset.reject_reason = None
 
-        # 发送通知给审核人员
-        # TODO: 实现通知机制
+        reviewers = User.query.filter(
+            User.role.in_(('admin', 'asset_admin')),
+            User.status == 'active'
+        ).all()
+        for reviewer in reviewers:
+            add_notification_event(
+                reviewer.id,
+                'asset_pending',
+                '有新的资产待审核',
+                f'{asset.asset_code} · {asset.title}',
+                '/admin/assets?status=pending'
+            )
+
+        db.session.commit()
 
         return {'code': 200, 'message': '提交发布成功，等待审核'}, 200
 
@@ -775,6 +1579,10 @@ class AssetApproveResource(Resource):
         if user.role not in ('admin', 'asset_admin', 'adm1', 'adm2'):
             return {'code': 403, 'message': '无审核权限'}, 403
 
+        # 执行“上传者与审核人分离”，避免自己审核自己的资产
+        if user_id in (asset.creator_id, asset.uploader_id):
+            return {'code': 403, 'message': '不能审核自己上传的资产'}, 403
+
         if asset.status != 'pending':
             return {'code': 400, 'message': '只有待审核状态才能审核'}, 400
 
@@ -786,11 +1594,30 @@ class AssetApproveResource(Resource):
             asset.status = 'published'
             asset.approver_id = user_id
             asset.approve_time = datetime.utcnow()
+            asset.publish_at = datetime.utcnow()
         elif action == 'reject':
             asset.status = 'rejected'
             asset.reject_reason = reason
         else:
             return {'code': 400, 'message': '无效操作'}, 400
+
+        recipient_id = asset.uploader_id or asset.creator_id or asset.owner_id
+        if action == 'approve':
+            add_notification_event(
+                recipient_id,
+                'asset_approved',
+                '资产审核通过',
+                f'《{asset.title}》已发布到资产档案',
+                f'/assets/{asset_id}'
+            )
+        else:
+            add_notification_event(
+                recipient_id,
+                'asset_rejected',
+                '资产审核未通过',
+                f'《{asset.title}》 · {reason or "请查看资产详情"}',
+                f'/assets/{asset_id}'
+            )
 
         db.session.commit()
 

@@ -20,7 +20,7 @@ VECTOR_SEARCH_ENABLED = os.environ.get('VECTOR_SEARCH_ENABLED', 'true').lower() 
 OBJECT_STORAGE_ENABLED = os.environ.get('OBJECT_STORAGE_ENABLED', 'false').lower() == 'true'
 
 # 异步任务
-CELERY_ENABLED = os.environ.get('CELERY_ENABLED', 'false').lower() == 'true'
+TASK_WORKER_ENABLED = os.environ.get('TASK_WORKER_ENABLED', 'false').lower() == 'true'
 
 # 操作日志
 OPERATION_LOG_ENABLED = os.environ.get('OPERATION_LOG_ENABLED', 'true').lower() == 'true'
@@ -38,7 +38,7 @@ FEATURE_FLAGS = {
     'ai': AI_ENABLED,
     'vector_search': VECTOR_SEARCH_ENABLED,
     'object_storage': OBJECT_STORAGE_ENABLED,
-    'celery': CELERY_ENABLED,
+    'task_worker': TASK_WORKER_ENABLED,
     'operation_log': OPERATION_LOG_ENABLED,
     'file_dedup': FILE_DEDUP_ENABLED,
     'register': REGISTER_ENABLED

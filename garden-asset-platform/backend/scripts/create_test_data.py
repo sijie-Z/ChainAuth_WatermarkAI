@@ -7,8 +7,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import create_app
 from app.extensions import db
-from app.models import User, Garden, Asset, AssetTag
-from datetime import datetime
+from app.models import User, Garden, Asset, AssetTag, License
+from datetime import datetime, timedelta
 import uuid
 
 
@@ -27,7 +27,7 @@ def create_test_assets():
         # 获取园林和管理员
         gardens = Garden.query.all()
         admin = User.query.filter_by(role='admin').first()
-
+        demo_user = User.query.filter_by(username='user1').first()
         if not gardens or not admin:
             print("请先运行 init_db.py 创建基础数据")
             return
@@ -44,10 +44,24 @@ def create_test_assets():
             {'title': '拙政园历史文献', 'type': 'document', 'garden': 'ZZY', 'desc': '拙政园相关历史文献资料'},
         ]
 
-        for data in assets_data:
+        upload_root = os.path.abspath(os.path.join(
+            app.config.get('UPLOAD_FOLDER') or 'uploads', 'originals'
+        ))
+        os.makedirs(upload_root, exist_ok=True)
+
+        for index, data in enumerate(assets_data):
             garden = next((g for g in gardens if g.code == data['garden']), None)
             if not garden:
                 continue
+
+            ext = 'jpg' if data['type'] == 'image' else (
+                'shp' if data['type'] == 'vector' else 'pdf'
+            )
+            seed_path = os.path.join(
+                upload_root, f"seed-{uuid.uuid4().hex}.{ext}"
+            )
+            with open(seed_path, 'wb') as seed_file:
+                seed_file.write(b'chainauth-demo-seed')
 
             asset = Asset(
                 asset_code=generate_asset_code(data['garden'], data['type']),
@@ -58,16 +72,33 @@ def create_test_assets():
                 creator_id=admin.id,
                 uploader_id=admin.id,
                 owner_id=admin.id,
-                file_format='jpg' if data['type'] == 'image' else ('shp' if data['type'] == 'vector' else 'pdf'),
-                file_size=1024*1024,
+                file_format=ext,
+                file_size=os.path.getsize(seed_path),
+                storage_path=seed_path,
+                watermarked_path=seed_path,
                 status='published',
                 watermark_status='none',
                 chain_status='none'
             )
             db.session.add(asset)
+            db.session.flush()
+
+            # 为前两件影像准备一条生效授权，供 E2E 覆盖授权页与票据下载。
+            if demo_user and index < 2 and data['type'] == 'image':
+                db.session.add(License(
+                    license_code=f'LIC-SEED-{uuid.uuid4().hex[:8].upper()}',
+                    asset_id=asset.id,
+                    licensor_id=admin.id,
+                    licensee_id=demo_user.id,
+                    license_type='personal',
+                    usage_scope='演示授权',
+                    start_time=datetime.utcnow() - timedelta(days=1),
+                    end_time=datetime.utcnow() + timedelta(days=365),
+                    status='active',
+                ))
 
         db.session.commit()
-        print(f"创建了 {len(assets_data)} 个测试资产")
+        print(f"创建了 {len(assets_data)} 个测试资产与 2 条演示授权")
 
 
 if __name__ == '__main__':

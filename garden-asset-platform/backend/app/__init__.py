@@ -26,6 +26,13 @@ def create_app(config_name='default'):
     # 初始化扩展
     init_extensions(app)
 
+    # 反向代理后的真实客户端 IP（仅显式开启时信任，避免伪造 X-Forwarded-For）
+    if app.config.get('TRUST_PROXY_HEADERS'):
+        from werkzeug.middleware.proxy_fix import ProxyFix
+        app.wsgi_app = ProxyFix(
+            app.wsgi_app, x_for=1, x_proto=1, x_host=0, x_port=0, x_prefix=0
+        )
+
     # 配置日志
     setup_logging(app)
 
@@ -50,6 +57,9 @@ def create_app(config_name='default'):
     # 初始化任务调度器
     init_scheduler(app)
 
+    # 启动异步任务 worker（水印/存证）
+    init_task_worker(app)
+
     # 创建必要的目录
     create_folders(app)
 
@@ -57,6 +67,10 @@ def create_app(config_name='default'):
     config_cls = config.get(config_name, config['default'])
     if hasattr(config_cls, 'init_app'):
         config_cls.init_app(app)
+
+    if config_name == 'production' and not app.config.get('TESTING'):
+        from app.config import validate_production_config
+        validate_production_config(app)
 
     # 健康检查端点
     @app.route('/health')
@@ -69,6 +83,17 @@ def create_app(config_name='default'):
         except Exception:
             status['database'] = 'disconnected'
             status['status'] = 'degraded'
+        status['integrations'] = {
+            'redis': 'connected' if app.extensions.get('redis') else 'memory-fallback',
+            'blockchain': 'enabled' if app.config.get('BLOCKCHAIN_ENABLED') else 'simulated',
+            'ai': 'enabled' if app.config.get('AI_ENABLED') else 'disabled',
+            'scheduler': 'enabled' if app.config.get('SCHEDULER_ENABLED') else 'disabled',
+            'task_worker': 'enabled' if app.config.get('TASK_WORKER_ENABLED') else 'disabled',
+            'mail': 'enabled' if (
+                app.config.get('MAIL_ENABLED') and app.config.get('MAIL_HOST')
+            ) else 'disabled',
+            'sse': 'enabled' if app.config.get('SSE_ENABLED') else 'disabled'
+        }
         return jsonify(status), 200 if status['status'] == 'healthy' else 503
 
     return app
@@ -108,7 +133,79 @@ def register_commands(app):
 def register_api_resources(app):
     """注册API资源"""
     from flask_restful import Api
-    api = Api(app, prefix='/api')
+    from flask_jwt_extended.exceptions import (
+        CSRFError,
+        FreshTokenRequired,
+        InvalidHeaderError,
+        InvalidQueryParamError,
+        JWTDecodeError,
+        NoAuthorizationError,
+        RevokedTokenError,
+        UserClaimsVerificationError,
+        UserLookupError,
+        WrongTokenError,
+    )
+    from jwt.exceptions import (
+        DecodeError,
+        ExpiredSignatureError,
+        InvalidAudienceError,
+        InvalidIssuerError,
+        InvalidTokenError,
+        MissingRequiredClaimError,
+    )
+
+    # debug/testing 关闭时 Flask-RESTful 会自行接管非 HTTP 异常，绕过
+    # JWTManager 注册的 401 处理器，导致缺少/过期 Token 变成 500。
+    # 显式登记 JWT 异常，保证生产模式下前端仍能收到 401 并刷新或跳登录。
+    jwt_error_messages = {
+        'NoAuthorizationError': '缺少认证Token',
+        'ExpiredSignatureError': 'Token已过期，请重新登录',
+        'InvalidTokenError': '无效的Token',
+        'RevokedTokenError': 'Token已被撤销',
+        'UserLookupError': '账号不存在或已被禁用',
+    }
+    jwt_error_classes = (
+        CSRFError, FreshTokenRequired, InvalidHeaderError,
+        InvalidQueryParamError, JWTDecodeError, NoAuthorizationError,
+        RevokedTokenError, UserClaimsVerificationError, UserLookupError,
+        WrongTokenError, DecodeError, ExpiredSignatureError,
+        InvalidAudienceError, InvalidIssuerError, InvalidTokenError,
+        MissingRequiredClaimError,
+    )
+    rest_errors = {
+        cls.__name__: {
+            'status': 401,
+            'code': 401,
+            'message': jwt_error_messages.get(cls.__name__, '认证失败，请重新登录'),
+        }
+        for cls in jwt_error_classes
+    }
+    # Flask-RESTful 会接管资源内的 HTTP 异常，默认把 Werkzeug 英文描述
+    # 直接返回给前端；这里统一成中文提示。
+    rest_errors.update({
+        'MethodNotAllowed': {
+            'status': 405,
+            'code': 405,
+            'message': '该接口不支持当前请求方法',
+        },
+        'RequestEntityTooLarge': {
+            'status': 413,
+            'code': 413,
+            'message': '上传文件过大，请压缩或拆分后重试',
+        },
+        'UnsupportedMediaType': {
+            'status': 415,
+            'code': 415,
+            'message': '不支持的文件类型或请求格式',
+        },
+        'TooManyRequests': {
+            'status': 429,
+            'code': 429,
+            'message': '请求过于频繁，请稍后再试',
+        },
+    })
+
+    api = Api(app, prefix='/api', errors=rest_errors)
 
     # 认证相关
     from app.resources.auth import (
@@ -128,21 +225,123 @@ def register_api_resources(app):
     # 资产相关
     from app.resources.asset import (
         AssetListResource, AssetResource, AssetUploadResource,
-        AssetDownloadResource, AssetFavoriteResource, AssetStatsResource,
+        AssetDownloadResource, AssetDownloadTicketResource,
+        AssetFavoriteResource, AssetStatsResource,
         MyAssetsResource, AssetTagsResource, AssetPublishResource, AssetApproveResource,
-        PublicStatsResource
+        AssetThumbnailResource, AssetRelatedResource, FavoriteListResource,
+        PublicStatsResource, TagListResource, AssetPreviewResource,
+        AssetPreviewTicketResource, AssetRestoreResource
     )
     api.add_resource(PublicStatsResource, '/stats')
+    api.add_resource(TagListResource, '/tags')
     api.add_resource(AssetListResource, '/assets')
     api.add_resource(AssetResource, '/assets/<string:asset_id>')
+    api.add_resource(AssetRestoreResource, '/assets/<string:asset_id>/restore')
+    api.add_resource(AssetThumbnailResource, '/assets/<string:asset_id>/thumbnail')
+    api.add_resource(AssetPreviewResource, '/assets/<string:asset_id>/preview')
+    api.add_resource(
+        AssetPreviewTicketResource,
+        '/assets/<string:asset_id>/preview-ticket'
+    )
+    api.add_resource(AssetRelatedResource, '/assets/<string:asset_id>/related')
+    api.add_resource(FavoriteListResource, '/favorites')
     api.add_resource(AssetUploadResource, '/assets/upload')
     api.add_resource(AssetDownloadResource, '/assets/<string:asset_id>/download')
+    api.add_resource(
+        AssetDownloadTicketResource,
+        '/assets/<string:asset_id>/download-ticket'
+    )
     api.add_resource(AssetFavoriteResource, '/assets/<string:asset_id>/favorite')
     api.add_resource(AssetStatsResource, '/assets/stats')
     api.add_resource(MyAssetsResource, '/assets/my')
     api.add_resource(AssetTagsResource, '/assets/<string:asset_id>/tags')
     api.add_resource(AssetPublishResource, '/assets/<string:asset_id>/publish')
     api.add_resource(AssetApproveResource, '/assets/<string:asset_id>/approve')
+
+    # 资产版本历史
+    from app.resources.versions import (
+        AssetVersionListResource, AssetVersionDownloadResource,
+        AssetVersionRestoreResource
+    )
+    api.add_resource(AssetVersionListResource, '/assets/<string:asset_id>/versions')
+    api.add_resource(
+        AssetVersionDownloadResource,
+        '/assets/<string:asset_id>/versions/<int:version_id>/download'
+    )
+    api.add_resource(
+        AssetVersionRestoreResource,
+        '/assets/<string:asset_id>/versions/<int:version_id>/restore'
+    )
+
+    # 资产评论（讨论）
+    from app.resources.comments import (
+        AssetCommentListResource, AssetCommentResource
+    )
+    api.add_resource(
+        AssetCommentListResource, '/assets/<string:asset_id>/comments'
+    )
+    api.add_resource(
+        AssetCommentResource,
+        '/assets/<string:asset_id>/comments/<int:comment_id>'
+    )
+
+    # 图纸/影像区域标注
+    from app.resources.annotations import (
+        AssetAnnotationListResource, AssetAnnotationResource
+    )
+    api.add_resource(
+        AssetAnnotationListResource, '/assets/<string:asset_id>/annotations'
+    )
+    api.add_resource(
+        AssetAnnotationResource,
+        '/assets/<string:asset_id>/annotations/<int:annotation_id>'
+    )
+
+    # 证据链与公开分享
+    from app.resources.evidence import (
+        AssetEvidenceResource, AssetEvidencePackageResource,
+        EvidencePackageVerifyResource
+    )
+    from app.resources.share import (
+        AssetShareListResource, ShareResource,
+        PublicShareResource, PublicShareDownloadResource,
+        PublicShareDownloadTicketResource
+    )
+    api.add_resource(AssetEvidenceResource, '/assets/<string:asset_id>/evidence')
+    api.add_resource(
+        AssetEvidencePackageResource,
+        '/assets/<string:asset_id>/evidence-package'
+    )
+    api.add_resource(EvidencePackageVerifyResource, '/evidence/verify-package')
+    api.add_resource(AssetShareListResource, '/assets/<string:asset_id>/shares')
+    api.add_resource(PublicShareResource, '/shares/<string:token>')
+    api.add_resource(PublicShareDownloadResource, '/shares/<string:token>/download')
+    api.add_resource(
+        PublicShareDownloadTicketResource,
+        '/shares/<string:token>/download-ticket'
+    )
+    api.add_resource(ShareResource, '/shares/<int:share_id>')
+
+    # 下载台账
+    from app.resources.downloads import (
+        MyDownloadsResource, DownloadLedgerResource, AssetDownloadSummaryResource
+    )
+    api.add_resource(MyDownloadsResource, '/downloads/my')
+    api.add_resource(DownloadLedgerResource, '/downloads')
+    api.add_resource(AssetDownloadSummaryResource, '/assets/<string:asset_id>/downloads')
+
+    # 用户合集
+    from app.resources.collections import (
+        CollectionListResource, CollectionResource,
+        CollectionAssetsResource, CollectionAssetResource
+    )
+    api.add_resource(CollectionListResource, '/collections')
+    api.add_resource(CollectionResource, '/collections/<int:collection_id>')
+    api.add_resource(CollectionAssetsResource, '/collections/<int:collection_id>/assets')
+    api.add_resource(
+        CollectionAssetResource,
+        '/collections/<int:collection_id>/assets/<string:asset_id>'
+    )
 
     # 园林相关
     from app.resources.garden import GardenListResource, GardenResource, GardenStatsResource
@@ -154,12 +353,13 @@ def register_api_resources(app):
     from app.resources.watermark import (
         WatermarkEmbedResource, WatermarkExtractResource,
         WatermarkVerifyResource, WatermarkTraceResource,
-        WatermarkLogsResource
+        WatermarkBenchmarkResource, WatermarkLogsResource
     )
     api.add_resource(WatermarkEmbedResource, '/watermark/embed')
     api.add_resource(WatermarkExtractResource, '/watermark/extract')
     api.add_resource(WatermarkVerifyResource, '/watermark/verify')
     api.add_resource(WatermarkTraceResource, '/watermark/trace')
+    api.add_resource(WatermarkBenchmarkResource, '/watermark/benchmark')
     api.add_resource(WatermarkLogsResource, '/watermark/logs')
 
     # 区块链相关
@@ -188,14 +388,87 @@ def register_api_resources(app):
     from app.resources.license import (
         LicenseApplyResource, LicensePendingResource,
         LicenseApproveResource, LicenseApprovedResource,
-        MyLicenseResource, MyApplicationsResource
+        MyLicenseResource, MyApplicationsResource,
+        LicenseCancelResource, LicenseContractResource,
+        LicenseRevokeResource, LicenseRenewResource,
+        AssetLicenseResource
     )
     api.add_resource(LicenseApplyResource, '/license/apply')
     api.add_resource(LicensePendingResource, '/license/pending')
+    api.add_resource(AssetLicenseResource, '/assets/<string:asset_id>/licenses')
+    api.add_resource(LicenseCancelResource, '/license/applications/<int:application_id>/cancel')
+    api.add_resource(LicenseContractResource, '/license/<int:license_id>/contract')
+    api.add_resource(LicenseRevokeResource, '/license/<int:license_id>/revoke')
+    api.add_resource(LicenseRenewResource, '/license/<int:license_id>/renew')
     api.add_resource(LicenseApproveResource, '/license/approve/<int:application_id>')
     api.add_resource(LicenseApprovedResource, '/license/approved')
     api.add_resource(MyLicenseResource, '/license/my')
     api.add_resource(MyApplicationsResource, '/license/my-applications')
+
+    # 授权使用报表
+    from app.resources.license_usage import LicenseUsageReportResource
+    api.add_resource(LicenseUsageReportResource, '/license/usage-report')
+
+    # 站内待办提醒与通知渠道
+    from app.resources.notifications import (
+        NotificationsResource, NotificationReadResource,
+        NotificationPreferenceResource, NotificationTestEmailResource,
+        NotificationStreamResource
+    )
+    api.add_resource(NotificationsResource, '/notifications')
+    api.add_resource(NotificationReadResource, '/notifications/read')
+    api.add_resource(NotificationPreferenceResource, '/notifications/preferences')
+    api.add_resource(NotificationTestEmailResource, '/notifications/test-email')
+    api.add_resource(NotificationStreamResource, '/notifications/stream')
+
+    # 疑似侵权线索
+    from app.resources.infringements import (
+        InfringementReportResource, MyInfringementListResource,
+        InfringementListResource, InfringementResource,
+        InfringementReviewResource, InfringementFileResource,
+        InfringementPatrolResource
+    )
+    api.add_resource(InfringementReportResource, '/infringements/report')
+    api.add_resource(InfringementPatrolResource, '/infringements/patrol')
+    api.add_resource(MyInfringementListResource, '/infringements/mine')
+    api.add_resource(InfringementListResource, '/infringements')
+    api.add_resource(InfringementResource, '/infringements/<int:report_id>')
+    api.add_resource(
+        InfringementReviewResource, '/infringements/<int:report_id>/review'
+    )
+    api.add_resource(
+        InfringementFileResource, '/infringements/<int:report_id>/file'
+    )
+
+    # 操作日志
+    from app.resources.logs import LogListResource, LogIntegrityResource
+    api.add_resource(LogListResource, '/logs')
+    api.add_resource(LogIntegrityResource, '/logs/integrity')
+
+    # 系统能力状态（管理员）
+    from app.resources.system import (
+        SystemStatusResource, SystemStorageResource, NotificationWebhookResource,
+        NotificationWebhookTestResource
+    )
+    api.add_resource(SystemStatusResource, '/system/status')
+    api.add_resource(SystemStorageResource, '/system/storage')
+    api.add_resource(
+        NotificationWebhookResource, '/system/notification-webhook'
+    )
+    api.add_resource(
+        NotificationWebhookTestResource, '/system/notification-webhook/test'
+    )
+
+    # 异步任务（水印/存证）
+    from app.resources.tasks import (
+        TaskListResource, TaskResource, TaskRetryResource, TaskCancelResource,
+        TaskHealthResource
+    )
+    api.add_resource(TaskListResource, '/tasks')
+    api.add_resource(TaskHealthResource, '/tasks/health')
+    api.add_resource(TaskResource, '/tasks/<string:task_id>')
+    api.add_resource(TaskRetryResource, '/tasks/<string:task_id>/retry')
+    api.add_resource(TaskCancelResource, '/tasks/<string:task_id>/cancel')
 
 
 def init_services(app):
@@ -221,12 +494,26 @@ def init_scheduler(app):
         logging.getLogger(__name__).warning(f'调度器初始化失败（非致命）: {e}')
 
 
+def init_task_worker(app):
+    """启动进程内异步任务 worker（可被 TASK_WORKER_ENABLED 关闭）"""
+    if app.config.get('TESTING') or not app.config.get('TASK_WORKER_ENABLED', False):
+        return
+    try:
+        import atexit
+        from app.services.task_service import start_worker, stop_worker
+        start_worker(app)
+        atexit.register(stop_worker)
+    except Exception as e:
+        logging.getLogger(__name__).warning(f'异步任务 worker 启动失败（非致命）: {e}')
+
+
 def create_folders(app):
     """创建必要的文件夹"""
     folders = [
         app.config.get('UPLOAD_FOLDER', './uploads'),
         app.config.get('WATERMARK_FOLDER', './watermarks'),
         app.config.get('EXTRACTED_FOLDER', './extracted'),
+        app.config.get('BACKUP_DIR', './backups'),
         './logs',
         './data/watermark',
         './data/models',

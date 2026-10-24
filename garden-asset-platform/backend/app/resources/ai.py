@@ -7,6 +7,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models.user import User
 from app.models.asset import Asset
 from app.services.ai_service import ai_service
+from app.utils.middleware import rate_limit
 
 
 def ai_unavailable():
@@ -19,6 +20,7 @@ def ai_unavailable():
 class AIAnalyzeResource(Resource):
     """AI分析"""
 
+    @rate_limit(limit=20, window=60)
     @jwt_required()
     def post(self):
         """分析资产"""
@@ -58,6 +60,7 @@ class AIAnalyzeResource(Resource):
 class AISearchResource(Resource):
     """AI相似搜索"""
 
+    @rate_limit(limit=10, window=60)
     @jwt_required()
     def post(self):
         """搜索相似图像"""
@@ -100,6 +103,7 @@ class AISearchResource(Resource):
 class AIInfringementResource(Resource):
     """AI侵权检测"""
 
+    @rate_limit(limit=10, window=60)
     @jwt_required()
     def post(self):
         """检测侵权"""
@@ -139,6 +143,7 @@ class AIInfringementResource(Resource):
 class AIChatResource(Resource):
     """AI智能对话"""
 
+    @rate_limit(limit=20, window=60)
     @jwt_required()
     def post(self):
         """智能问答"""

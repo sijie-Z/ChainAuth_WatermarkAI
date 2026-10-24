@@ -1,7 +1,62 @@
 """
 区块链模块测试
 """
+import hashlib
+import uuid
+from datetime import datetime
+
 import pytest
+
+from app.extensions import db
+from app.models.asset import Asset, AssetVersion
+from app.models.blockchain import BlockchainTransaction, Certificate
+from app.models.user import User
+
+
+def _draft_document(app, with_certificate=True):
+    with app.app_context():
+        user = User.query.filter_by(username='testuser').first()
+        asset = Asset(
+            asset_code=f'DOC-{uuid.uuid4().hex[:8].upper()}',
+            title='无盲水印文档存证测试',
+            asset_type='document',
+            file_format='PDF',
+            file_hash='a' * 64,
+            status='draft',
+            creator_id=user.id,
+            owner_id=user.id,
+            uploader_id=user.id,
+        )
+        db.session.add(asset)
+        db.session.flush()
+        version = AssetVersion(
+            asset_id=asset.id,
+            version_no=1,
+            file_path='/tmp/not-present.pdf',
+            file_name='brief.pdf',
+            file_format='PDF',
+            file_size=128,
+            file_hash='a' * 64,
+        )
+        db.session.add(version)
+        db.session.flush()
+        certificate = None
+        if with_certificate:
+            certificate = Certificate(
+                certificate_id=f'CERT-{uuid.uuid4().hex[:12].upper()}',
+                asset_id=asset.id,
+                version_id=version.id,
+                version_no=1,
+                tx_hash='0x' + 'b' * 64,
+                block_number=100,
+                watermark_id=None,
+                file_hash='a' * 64,
+                creator_name=user.username,
+                status='valid',
+            )
+            db.session.add(certificate)
+        db.session.commit()
+        return asset.id, certificate.certificate_id if certificate else None
 
 
 class TestBlockchain:
@@ -51,6 +106,85 @@ class TestBlockchain:
 
         assert response.status_code == 404
 
+    def test_verify_by_watermark_returns_trace_fields(
+        self, client, app, tmp_path, auth_header
+    ):
+        content = b'trace-asset-content'
+        file_path = tmp_path / 'trace.jpg'
+        file_path.write_bytes(content)
+        digest = hashlib.sha256(content).hexdigest()
+        tx_hash = '0x' + 'ef' * 32
+
+        with app.app_context():
+            user = User.query.filter_by(username='testuser').first()
+            asset = Asset(
+                asset_code='TRACE-IMG-001',
+                title='溯源字段测试影像',
+                asset_type='image',
+                file_format='JPG',
+                file_size=len(content),
+                file_hash=digest,
+                storage_path=str(file_path),
+                watermark_id='WM-TRACE-001',
+                watermark_status='verified',
+                status='published',
+                creator_id=user.id,
+                owner_id=user.id,
+                uploader_id=user.id,
+            )
+            db.session.add(asset)
+            db.session.flush()
+            version = AssetVersion(
+                asset_id=asset.id,
+                version_no=1,
+                file_path=str(file_path),
+                file_name='trace.jpg',
+                file_format='JPG',
+                file_size=len(content),
+                file_hash=digest,
+            )
+            db.session.add(version)
+            db.session.flush()
+            db.session.add(Certificate(
+                certificate_id='CERT-TRACE-001',
+                asset_id=asset.id,
+                version_id=version.id,
+                version_no=1,
+                tx_hash=tx_hash,
+                block_number=42,
+                watermark_id='WM-TRACE-001',
+                file_hash=digest,
+                creator_name=user.username,
+                status='valid',
+            ))
+            db.session.add(BlockchainTransaction(
+                tx_hash=tx_hash,
+                tx_type='asset_register',
+                asset_id=asset.id,
+                block_number=42,
+                status='confirmed',
+                confirmations=1,
+                confirmed_at=datetime.utcnow(),
+            ))
+            asset.chain_status = 'confirmed'
+            asset.chain_tx_hash = tx_hash
+            asset.certificate_id = 'CERT-TRACE-001'
+            db.session.commit()
+
+        response = client.post(
+            '/api/blockchain/verify',
+            json={'watermark_id': 'WM-TRACE-001'},
+        )
+        assert response.status_code == 200, response.get_json()
+        payload = response.get_json()
+        assert payload['verified'] is True
+        data = payload['data']
+        assert data['watermark_id'] == 'WM-TRACE-001'
+        assert data['asset_type'] == 'image'
+        assert data['title'] == '溯源字段测试影像'
+        assert data['created_at']
+        assert data['certificate_id'] == 'CERT-TRACE-001'
+
     def test_verify_by_watermark_missing_id(self, client):
         """测试通过水印ID验证缺少ID"""
         response = client.post('/api/blockchain/verify',
@@ -65,9 +199,15 @@ class TestBlockchain:
 
         assert response.status_code == 404
 
-    def test_history_all(self, client, auth_header):
-        """测试获取所有存证历史（需登录）"""
+    def test_history_all_requires_admin(self, client, auth_header):
+        """全平台存证历史只允许管理员读取"""
         response = client.get('/api/blockchain/history', headers=auth_header)
+
+        assert response.status_code == 403
+
+    def test_history_all_admin(self, client, admin_header):
+        """管理员可以获取全平台存证历史"""
+        response = client.get('/api/blockchain/history', headers=admin_header)
 
         assert response.status_code == 200
         data = response.get_json()
@@ -79,3 +219,73 @@ class TestBlockchain:
         response = client.get('/api/blockchain/history/nonexistent-id', headers=auth_header)
 
         assert response.status_code == 404
+
+    def test_document_can_be_certified_without_watermark(
+        self, client, app, auth_header
+    ):
+        """模型/文档/视频没有盲水印，也应能按文件哈希存证并形成完整证据链"""
+        asset_id, _ = _draft_document(app, with_certificate=False)
+
+        response = client.post(
+            '/api/blockchain/register',
+            json={'asset_id': asset_id},
+            headers=auth_header,
+        )
+
+        assert response.status_code == 200, response.get_json()
+        certificate_id = response.get_json()['data']['certificate_id']
+        assert certificate_id
+
+        evidence = client.get(
+            f'/api/assets/{asset_id}/evidence', headers=auth_header
+        ).get_json()['data']
+        watermark = next(
+            item for item in evidence['items'] if item['key'] == 'watermark'
+        )
+        assert watermark['state'] == 'done'
+        assert '不适用' in watermark['description']
+        assert evidence['summary']['verified'] is True
+
+    def test_image_still_requires_watermark_before_chaining(
+        self, client, sample_asset, auth_header
+    ):
+        response = client.post(
+            '/api/blockchain/register',
+            json={'asset_id': sample_asset},
+            headers=auth_header,
+        )
+
+        assert response.status_code == 400
+        assert '水印' in response.get_json()['message']
+
+    def test_draft_certificate_is_only_visible_to_owner(
+        self, client, app, auth_header, adm1_header
+    ):
+        """草稿证书不能通过公开接口或无关账号枚举"""
+        asset_id, certificate_id = _draft_document(app)
+
+        anonymous = client.get(f'/api/blockchain/certificate/{certificate_id}')
+        assert anonymous.status_code == 404
+
+        unrelated = client.get(
+            f'/api/blockchain/certificate/{certificate_id}',
+            headers=adm1_header,
+        )
+        assert unrelated.status_code == 404
+
+        owner = client.get(
+            f'/api/blockchain/certificate/{certificate_id}',
+            headers=auth_header,
+        )
+        assert owner.status_code == 200
+        assert owner.get_json()['data']['asset']['title'] == '无盲水印文档存证测试'
+
+    def test_public_chain_status_hides_rpc_url(self, client, admin_header):
+        public = client.get('/api/blockchain/status').get_json()['data']
+        assert 'rpc_url' not in public
+        assert 'rpc_configured' in public
+
+        admin = client.get(
+            '/api/blockchain/status', headers=admin_header
+        ).get_json()['data']
+        assert 'rpc_url' in admin

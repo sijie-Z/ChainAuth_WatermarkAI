@@ -1,18 +1,32 @@
 <template>
-  <ErrorBoundary>
-    <router-view v-slot="{ Component, route }">
-      <transition name="fade-slide" mode="out-in">
-        <component :is="Component" :key="route.path" />
-      </transition>
-    </router-view>
-  </ErrorBoundary>
+  <el-config-provider :locale="zhCn" size="default">
+    <SiteHeader v-if="showSiteHeader" />
+    <ErrorBoundary>
+      <router-view v-slot="{ Component, route }">
+        <component
+          :is="Component"
+          :key="route.matched[0]?.path === '/admin' ? '/admin' : route.path"
+        />
+      </router-view>
+    </ErrorBoundary>
+    <CommandPalette />
+  </el-config-provider>
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
+import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
 import { useUserStore } from '@/stores/user'
+import SiteHeader from '@/components/common/SiteHeader.vue'
+import CommandPalette from '@/components/common/CommandPalette.vue'
 
+const route = useRoute()
 const userStore = useUserStore()
+
+const showSiteHeader = computed(() =>
+  route.matched.some(record => record.meta.siteHeader)
+)
 
 onMounted(() => {
   userStore.initStore()
@@ -23,23 +37,13 @@ onMounted(() => {
 #app {
   width: 100%;
   min-height: 100vh;
+  background: #f4f6f3;
 }
 
 img {
   max-width: 100%;
   height: auto;
   vertical-align: middle;
-}
-
-// 页面过渡
-.fade-slide-enter-active,
-.fade-slide-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.fade-slide-enter-from,
-.fade-slide-leave-to {
-  opacity: 0;
 }
 
 // 工具类
@@ -56,6 +60,12 @@ img {
 .gap-2 { gap: 8px; }
 .gap-3 { gap: 12px; }
 .gap-4 { gap: 16px; }
+
+@media print {
+  .site-header {
+    display: none !important;
+  }
+}
 
 .mt-1 { margin-top: 4px; }
 .mt-2 { margin-top: 8px; }
