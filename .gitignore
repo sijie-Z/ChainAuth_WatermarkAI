@@ -96,3 +96,6 @@ data/models/*
 # Claude Code
 .claude/plans/
 .claude/settings.local.json
+
+# 本地演示数据与临时文件（照片、演示库、测试临时目录）
+.scratch/

@@ -12,7 +12,7 @@ from typing import Optional, Dict, Any
 from flask import current_app
 from app.extensions import db
 from app.models.blockchain import BlockchainTransaction, Certificate
-from app.models.asset import Asset
+from app.models.asset import Asset, AssetVersion
 
 
 logger = logging.getLogger(__name__)
@@ -108,28 +108,70 @@ class BlockchainService:
         import random
         return random.randint(21000, 300000)
 
+    @staticmethod
+    def current_version(asset: Asset):
+        return AssetVersion.query.filter_by(asset_id=asset.id).order_by(
+            AssetVersion.version_no.desc()
+        ).first()
+
+    @staticmethod
+    def certificate_for_version(asset: Asset, version=None):
+        if version:
+            return Certificate.query.filter_by(
+                asset_id=asset.id, version_id=version.id
+            ).first()
+        return Certificate.query.filter_by(asset_id=asset.id).order_by(
+            Certificate.id.desc()
+        ).first()
+
+    @staticmethod
+    def _existing_result(certificate):
+        return {
+            'success': True,
+            'already': True,
+            'message': '当前版本已存证',
+            'tx_hash': certificate.tx_hash,
+            'certificate_id': certificate.certificate_id,
+            'block_number': certificate.block_number,
+            'version_id': certificate.version_id,
+            'version_no': certificate.version_no,
+            'simulated': not (blockchain_service.enabled and blockchain_service._web3),
+        }
+
     def register_asset(self, asset: Asset, user=None) -> Dict[str, Any]:
         """
-        资产上链存证
+        资产上链存证（按当前文件版本签发证书）
 
         Args:
             asset: 资产对象
             user: 操作用户
 
         Returns:
-            存证结果字典
+            存证结果字典；同一版本重复提交时返回已有证书（already=True），
+            不会重复生成交易与证书。
         """
-        # 检查是否已存证
-        if asset.chain_status == 'confirmed':
-            return {
-                'success': False,
-                'message': '资产已存证'
-            }
-
-        # 准备存证数据
+        version = self.current_version(asset)
         file_hash = None
         if asset.storage_path and os.path.exists(asset.storage_path):
             file_hash = self.generate_file_hash(asset.storage_path)
+        elif version and version.file_hash:
+            file_hash = version.file_hash
+
+        if not file_hash:
+            return {
+                'success': False,
+                'message': '资产文件不存在，无法计算存证指纹'
+            }
+
+        # 幂等：同一版本已签发证书时直接返回原证书
+        existing = self.certificate_for_version(asset, version)
+        if existing and existing.file_hash == file_hash:
+            return self._existing_result(existing)
+        if version and existing:
+            return {
+                'success': False,
+                'message': '当前版本已有证书，但文件指纹与证书不一致，请先核查文件'
+            }
 
         # 特征哈希（如果有）
         feature_hash = None
@@ -140,7 +182,14 @@ class BlockchainService:
         tx = BlockchainTransaction(
             tx_type='asset_register',
             asset_id=asset.id,
-            status='pending'
+            status='pending',
+            raw_data={
+                'asset_code': asset.asset_code,
+                'version_id': version.id if version else None,
+                'version_no': version.version_no if version else None,
+                'file_hash': file_hash,
+                'watermark_id': asset.watermark_id,
+            }
         )
 
         if self.enabled and self._web3 and self._contract:
@@ -186,10 +235,12 @@ class BlockchainService:
                 'message': tx.error_message or '链上存证失败'
             }
 
-        # 创建证书
+        # 创建证书（绑定当前文件版本）
         certificate = Certificate(
             certificate_id=Certificate.generate_certificate_id(),
             asset_id=asset.id,
+            version_id=version.id if version else None,
+            version_no=version.version_no if version else None,
             tx_hash=tx.tx_hash,
             block_number=tx.block_number,
             watermark_id=asset.watermark_id,
@@ -201,7 +252,7 @@ class BlockchainService:
 
         db.session.add(certificate)
 
-        # 更新资产状态
+        # 更新资产状态（指向当前版本证书）
         asset.chain_status = 'confirmed'
         asset.chain_tx_hash = tx.tx_hash
         asset.chain_timestamp = datetime.utcnow()
@@ -209,13 +260,16 @@ class BlockchainService:
 
         try:
             db.session.commit()
-            logger.info(f"资产存证成功: {asset.asset_code}")
+            logger.info(f"资产存证成功: {asset.asset_code} v{certificate.version_no or '-'}")
 
             return {
                 'success': True,
+                'already': False,
                 'tx_hash': tx.tx_hash,
                 'certificate_id': certificate.certificate_id,
                 'block_number': tx.block_number,
+                'version_id': certificate.version_id,
+                'version_no': certificate.version_no,
                 'simulated': not (self.enabled and self._web3 and self._contract)
             }
         except Exception as e:
@@ -279,7 +333,7 @@ class BlockchainService:
 
     def verify_asset(self, asset: Asset) -> Dict[str, Any]:
         """
-        验证资产存证
+        验证资产当前版本的存证
 
         Args:
             asset: 资产对象
@@ -287,40 +341,110 @@ class BlockchainService:
         Returns:
             验证结果字典
         """
-        if not asset.chain_tx_hash:
+        version = self.current_version(asset)
+        certificate = None
+        if asset.certificate_id:
+            certificate = Certificate.query.filter_by(
+                certificate_id=asset.certificate_id
+            ).first()
+        if not certificate:
+            certificate = Certificate.query.filter_by(asset_id=asset.id).order_by(
+                Certificate.id.desc()
+            ).first()
+
+        if not certificate:
             return {
                 'verified': False,
                 'message': '资产未存证'
             }
 
+        tx_hash = certificate.tx_hash or asset.chain_tx_hash
+
         # 查询交易记录
         tx = BlockchainTransaction.query.filter_by(
-            tx_hash=asset.chain_tx_hash,
+            tx_hash=tx_hash,
             asset_id=asset.id
         ).first()
 
         if not tx:
             return {
                 'verified': False,
-                'message': '未找到存证记录'
+                'message': '未找到存证记录',
+                'certificate_id': certificate.certificate_id
             }
 
         if tx.status != 'confirmed':
             return {
                 'verified': False,
-                'message': f'存证状态异常: {tx.status}'
+                'message': f'存证状态异常: {tx.status}',
+                'certificate_id': certificate.certificate_id
             }
 
-        # 查询证书
-        certificate = Certificate.query.filter_by(asset_id=asset.id).first()
+        # 证书是否对应当前文件版本（旧数据没有 version_id 时按文件指纹判断）
+        version_matches = True
+        if certificate.version_id and version:
+            version_matches = certificate.version_id == version.id
+        elif certificate.version_id and not version:
+            version_matches = False
+
+        checks = {
+            'chain_record': True,
+            'watermark': bool(asset.watermark_id),
+            'certificate': False,
+            'version': version_matches,
+            'file_hash': None
+        }
+
+        expired = bool(
+            certificate.valid_until and certificate.valid_until <= datetime.utcnow()
+        )
+        checks['certificate'] = certificate.status == 'valid' and not expired
+
+        # 证书记录的是原始文件指纹；水印文件是派生副本。
+        # 因此原始文件或水印文件任一与证书指纹一致，都视为文件未被替换。
+        candidate_paths = []
+        if certificate.version_id and certificate.version:
+            candidate_paths.append(certificate.version.file_path)
+        candidate_paths.extend([asset.storage_path, asset.watermarked_path])
+        candidate_hashes = []
+        for file_path in candidate_paths:
+            if not file_path or not os.path.exists(file_path):
+                continue
+            sha256 = hashlib.sha256()
+            with open(file_path, 'rb') as file_obj:
+                for chunk in iter(lambda: file_obj.read(8192), b''):
+                    sha256.update(chunk)
+            candidate_hashes.append(sha256.hexdigest())
+
+        if candidate_hashes and certificate.file_hash:
+            checks['file_hash'] = certificate.file_hash in candidate_hashes
+
+        simulated = not (self.enabled and self._web3 and self._contract)
+        verified = all(value is True for value in checks.values())
+
+        if verified and simulated:
+            message = '本地存证记录校验通过（演示环境，未连接链节点）'
+        elif verified:
+            message = '存证验证通过'
+        elif not version_matches:
+            message = '证书对应历史版本，当前版本尚未存证'
+        elif checks['file_hash'] is None:
+            message = '无法完成文件指纹比对（文件缺失或未签发证书）'
+        else:
+            message = '存证校验未通过，请检查文件、水印或证书状态'
 
         return {
-            'verified': True,
-            'message': '存证验证通过',
+            'verified': verified,
+            'simulated': simulated,
+            'checks': checks,
+            'message': message,
             'tx_hash': tx.tx_hash,
             'block_number': tx.block_number,
             'confirmed_at': tx.confirmed_at.isoformat() if tx.confirmed_at else None,
-            'certificate_id': certificate.certificate_id if certificate else None
+            'certificate_id': certificate.certificate_id,
+            'version_id': certificate.version_id,
+            'version_no': certificate.version_no,
+            'current_version_no': version.version_no if version else None
         }
 
     def get_asset_history(self, asset: Asset) -> list:

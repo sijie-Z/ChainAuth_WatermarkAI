@@ -43,6 +43,9 @@ class OperationLog(db.Model):
     # 额外数据
     extra_data = db.Column(db.JSON, nullable=True)
 
+    # 服务端 HMAC-SHA256 完整性签名（旧数据可能为空，可用 flask audit rebuild 补签）
+    integrity_hash = db.Column(db.String(64), nullable=True)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
     user = db.relationship('User', backref='operation_logs')
@@ -59,6 +62,7 @@ class OperationLog(db.Model):
             'target_id': self.target_id,
             'ip_address': self.ip_address,
             'status': self.status,
+            'signed': bool(self.integrity_hash),
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
@@ -86,6 +90,15 @@ class OperationLog(db.Model):
             log.user_agent = request.headers.get('User-Agent', '')[:500]
             log.request_url = request.url[:500]
             log.request_method = request.method
+
+        # 先固定时间再签名，避免数据库默认值在 flush 时改变参与签名的内容
+        log.created_at = datetime.utcnow()
+        try:
+            from app.utils.audit import sign_log
+            log.integrity_hash = sign_log(log)
+        except Exception:
+            # 签名失败不能阻断业务操作；该条日志会被校验为“未签名”
+            log.integrity_hash = None
 
         db.session.add(log)
         try:

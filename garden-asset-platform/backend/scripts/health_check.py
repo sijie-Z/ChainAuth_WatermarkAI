@@ -32,8 +32,7 @@ def check_packages():
         ('geopandas', 'GeoPandas'),
         ('zhipuai', 'ZhipuAI'),
         ('web3', 'Web3'),
-        ('redis', 'Redis'),
-        ('celery', 'Celery')
+        ('redis', 'Redis')
     ]
 
     all_ok = True

@@ -3,11 +3,29 @@
  */
 
 /**
+ * 解析后端日期。
+ * 后端统一存 UTC 但 isoformat 不带时区（如 2026-10-21T09:30:00），
+ * 直接 new Date() 会被浏览器当成本地时间；这里补 Z 后再解析。
+ */
+export function parseBackendDate(value) {
+  if (!value) return null
+  if (value instanceof Date) return value
+  if (typeof value === 'string') {
+    const naive = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/
+    const normalized = naive.test(value) ? `${value}Z` : value
+    const date = new Date(normalized)
+    return Number.isNaN(date.getTime()) ? null : date
+  }
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+/**
  * 格式化日期
  */
 export function formatDate(date, format = 'YYYY-MM-DD') {
-  if (!date) return ''
-  const d = new Date(date)
+  const d = parseBackendDate(date)
+  if (!d) return ''
   const year = d.getFullYear()
   const month = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')

@@ -87,7 +87,7 @@ class Config:
     PRIVATE_KEY = os.environ.get('PRIVATE_KEY', '')
 
     # AI配置
-    AI_ENABLED = os.environ.get('AI_ENABLED', 'true').lower() == 'true'
+    AI_ENABLED = os.environ.get('AI_ENABLED', 'false').lower() == 'true'
     ZHIPU_API_KEY = os.environ.get('ZHIPU_API_KEY', '')
     MILVUS_DB_PATH = os.environ.get('MILVUS_DB_PATH', './data/milvus.db')
 
@@ -100,12 +100,47 @@ class Config:
     UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', './uploads')
     WATERMARK_FOLDER = os.environ.get('WATERMARK_FOLDER', './watermarks')
     EXTRACTED_FOLDER = os.environ.get('EXTRACTED_FOLDER', './extracted')
+    BACKUP_DIR = os.environ.get('BACKUP_DIR', './backups')
+
+    # 水印鲁棒性实验室：限制工作尺寸与上传大小，控制单次实验的 CPU 占用
+    WATERMARK_BENCHMARK_MAX_SIDE = int(
+        os.environ.get('WATERMARK_BENCHMARK_MAX_SIDE', '640')
+    )
+    WATERMARK_BENCHMARK_MAX_BYTES = int(
+        os.environ.get('WATERMARK_BENCHMARK_MAX_BYTES', str(10 * 1024 * 1024))
+    )
+
+    # 证据包默认最多打包 200MB 二进制文件；超出时只导出清单与证书
+    EVIDENCE_PACKAGE_MAX_BYTES = int(
+        os.environ.get('EVIDENCE_PACKAGE_MAX_BYTES', str(200 * 1024 * 1024))
+    )
+    EVIDENCE_VERIFY_MAX_BYTES = int(
+        os.environ.get('EVIDENCE_VERIFY_MAX_BYTES', str(20 * 1024 * 1024))
+    )
+    DOWNLOAD_TICKET_MAX_AGE = int(
+        os.environ.get('DOWNLOAD_TICKET_MAX_AGE', '120')
+    )
+    PREVIEW_TICKET_MAX_AGE = int(
+        os.environ.get('PREVIEW_TICKET_MAX_AGE', '3600')
+    )
+    SHARE_TICKET_MAX_AGE = int(
+        os.environ.get('SHARE_TICKET_MAX_AGE', '120')
+    )
+
+    # 审计日志 HMAC 密钥；留空时回退到 SECRET_KEY
+    AUDIT_HMAC_KEY = os.environ.get('AUDIT_HMAC_KEY', '')
 
     # 文件上传大小限制 (500MB)
     MAX_CONTENT_LENGTH = int(os.environ.get('MAX_CONTENT_LENGTH', str(500 * 1024 * 1024)))
 
     # CORS 配置
     CORS_ORIGINS = os.environ.get('CORS_ORIGINS', '*')
+
+    # 仅在确认后端不直接对外暴露（例如只经 nginx 反代）时开启，
+    # 否则客户端可伪造 X-Forwarded-For 绕过限流。
+    TRUST_PROXY_HEADERS = os.environ.get(
+        'TRUST_PROXY_HEADERS', 'false'
+    ).lower() == 'true'
 
     # 限流配置
     RATELIMIT_ENABLED = os.environ.get('RATELIMIT_ENABLED', 'true').lower() == 'true'
@@ -119,10 +154,59 @@ class Config:
     # 任务调度器：多 worker 部署（gunicorn 4 workers）会各自启动一份，默认关闭避免重复执行
     SCHEDULER_ENABLED = os.environ.get('SCHEDULER_ENABLED', 'false').lower() == 'true'
 
+    # 异步任务队列：开发环境默认启动进程内 worker；
+    # 生产环境建议保持关闭并用 `flask tasks run` 单独跑 worker，
+    # 避免多个 gunicorn worker 各自轮询（任务领取有原子保护，但会浪费连接）。
+    TASK_WORKER_ENABLED = os.environ.get(
+        'TASK_WORKER_ENABLED', 'false'
+    ).lower() == 'true'
+    TASK_WORKER_POLL_INTERVAL = float(
+        os.environ.get('TASK_WORKER_POLL_INTERVAL', '1.0')
+    )
+    TASK_MAX_ATTEMPTS = int(os.environ.get('TASK_MAX_ATTEMPTS', '3'))
+    TASK_STUCK_TIMEOUT_MINUTES = int(
+        os.environ.get('TASK_STUCK_TIMEOUT_MINUTES', '15')
+    )
+    # worker 心跳多久未刷新视为离线；排队数达到阈值时健康度降为 warning
+    TASK_WORKER_STALE_SECONDS = int(
+        os.environ.get('TASK_WORKER_STALE_SECONDS', '90')
+    )
+    TASK_BACKLOG_THRESHOLD = int(
+        os.environ.get('TASK_BACKLOG_THRESHOLD', '50')
+    )
+
+    # 站内实时通知（SSE）
+    SSE_ENABLED = os.environ.get('SSE_ENABLED', 'true').lower() == 'true'
+    SSE_MAX_SECONDS = int(os.environ.get('SSE_MAX_SECONDS', '300'))
+    SSE_POLL_INTERVAL = float(os.environ.get('SSE_POLL_INTERVAL', '5'))
+    SSE_MAX_CONNECTIONS_PER_USER = int(
+        os.environ.get('SSE_MAX_CONNECTIONS_PER_USER', '3')
+    )
+
+    # 邮件通知（默认关闭；配置 SMTP 后可在账号设置中开启）
+    MAIL_ENABLED = os.environ.get('MAIL_ENABLED', 'false').lower() == 'true'
+    MAIL_HOST = os.environ.get('MAIL_HOST', '')
+    MAIL_PORT = int(os.environ.get('MAIL_PORT', '587'))
+    MAIL_USERNAME = os.environ.get('MAIL_USERNAME', '')
+    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD', '')
+    MAIL_FROM = os.environ.get('MAIL_FROM', '')
+    MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS', 'true').lower() == 'true'
+    MAIL_USE_SSL = os.environ.get('MAIL_USE_SSL', 'false').lower() == 'true'
+    MAIL_TIMEOUT = int(os.environ.get('MAIL_TIMEOUT', '10'))
+    PUBLIC_BASE_URL = os.environ.get('PUBLIC_BASE_URL', 'http://localhost:5173')
+
+    # Webhook 默认禁止内网地址，避免 SSRF；内部自动化场景可显式开启
+    WEBHOOK_ALLOW_PRIVATE = os.environ.get(
+        'WEBHOOK_ALLOW_PRIVATE', 'false'
+    ).lower() == 'true'
+
 
 class DevelopmentConfig(Config):
     """开发环境配置"""
     DEBUG = True
+    TASK_WORKER_ENABLED = os.environ.get(
+        'TASK_WORKER_ENABLED', 'true'
+    ).lower() == 'true'
 
 
 class ProductionConfig(Config):
@@ -146,6 +230,11 @@ class TestingConfig(Config):
     AI_ENABLED = False
     BLOCKCHAIN_ENABLED = False
     SCHEDULER_ENABLED = False
+    TASK_WORKER_ENABLED = False
+    SSE_MAX_SECONDS = 1
+    SSE_POLL_INTERVAL = 0.2
+    MAIL_ENABLED = False
+    WEBHOOK_ALLOW_PRIVATE = True
 
 
 config = {
@@ -154,3 +243,26 @@ config = {
     'testing': TestingConfig,
     'default': DevelopmentConfig
 }
+
+
+PLACEHOLDER_SECRET_MARKERS = (
+    'change-me', 'changeme', 'your-secret', 'secret-key',
+    'example', 'admin123', 'password',
+)
+
+
+def validate_production_config(app):
+    """生产环境拒绝示例/过短密钥，避免用可猜测的 SECRET_KEY 签发 Token。"""
+    problems = []
+    for key in ('SECRET_KEY', 'JWT_SECRET_KEY'):
+        value = str(app.config.get(key) or '')
+        lowered = value.lower()
+        if len(value) < 32:
+            problems.append(f'{key} 长度不足 32 位')
+        elif any(marker in lowered for marker in PLACEHOLDER_SECRET_MARKERS):
+            problems.append(f'{key} 仍包含示例占位文本')
+    if problems:
+        raise RuntimeError(
+            '生产配置不安全：' + '；'.join(problems)
+            + '。请运行 python scripts/generate_secrets.py 生成随机密钥并写入环境变量。'
+        )

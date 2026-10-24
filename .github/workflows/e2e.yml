@@ -57,6 +57,9 @@ jobs:
 
       - name: Start backend
         working-directory: garden-asset-platform/backend
+        env:
+          # Playwright 在数十个用例中复用同一 IP；关闭限流避免后半段登录被 429
+          RATELIMIT_ENABLED: "false"
         run: |
           nohup python -c "from app import create_app; app=create_app('development'); app.run(host='127.0.0.1', port=5000, debug=False, use_reloader=False)" > /tmp/backend.log 2>&1 &
           for _ in $(seq 1 30); do

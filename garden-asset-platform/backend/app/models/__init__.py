@@ -1,18 +1,33 @@
 # backend/app/models/__init__.py
 from app.models.user import User, UserToken
 from app.models.garden import Garden
-from app.models.asset import Asset, AssetTag, AssetFeature
+from app.models.asset import Asset, AssetTag, AssetFeature, AssetVersion
 from app.models.license import License, LicenseApplication, LicenseContract
 from app.models.blockchain import BlockchainTransaction, Certificate
 from app.models.log import OperationLog
-from app.models.extra import Favorite, DownloadRecord, SystemConfig
+from app.models.extra import (
+    Favorite, DownloadRecord, AssetShare, ShareDownload, NotificationRead,
+    NotificationEvent, NotificationPreference, NotificationDelivery,
+    Collection, CollectionAsset, SystemConfig
+)
+from app.models.comment import AssetComment
+from app.models.annotation import AssetAnnotation
+from app.models.task import AsyncTask, WorkerHeartbeat
+from app.models.report import InfringementReport
+from app.models.fingerprint import DownloadFingerprint
 
 __all__ = [
     'User', 'UserToken',
     'Garden',
-    'Asset', 'AssetTag', 'AssetFeature',
+    'Asset', 'AssetTag', 'AssetFeature', 'AssetVersion',
     'License', 'LicenseApplication', 'LicenseContract',
     'BlockchainTransaction', 'Certificate',
     'OperationLog',
-    'Favorite', 'DownloadRecord', 'SystemConfig'
+    'Favorite', 'DownloadRecord', 'AssetShare', 'ShareDownload',
+    'NotificationRead', 'NotificationEvent',
+    'NotificationPreference', 'NotificationDelivery',
+    'Collection', 'CollectionAsset', 'SystemConfig',
+    'AssetComment', 'AssetAnnotation', 'AsyncTask', 'WorkerHeartbeat',
+    'InfringementReport',
+    'DownloadFingerprint'
 ]

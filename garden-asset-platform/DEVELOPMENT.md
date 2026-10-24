@@ -44,7 +44,7 @@ backend/
 │   │   ├── cache.py             # Redis缓存工具
 │   │   ├── errors.py            # 错误处理器
 │   │   └── commands.py          # Flask CLI命令
-│   └── tasks.py                 # Celery异步任务（预留，当前未部署 worker）
+│   └── tasks.py                 # 旧任务入口（转发到 services/task_service.py 持久化队列）
 ├── algorithm/                   # 水印算法
 │   ├── vector/                  # 矢量水印
 │   │   ├── embed.py             # 坐标扰动嵌入
@@ -109,6 +109,10 @@ frontend/
 │       │   └── upload.vue       # 上传资产
 │       ├── trace/
 │       │   └── index.vue        # 溯源查询
+│       ├── watermark/
+│       │   └── lab.vue          # 水印鲁棒性实验室
+│       ├── evidence/
+│       │   └── verify.vue       # 证据包核验
 │       ├── license/
 │       │   ├── apply.vue        # 申请授权
 │       │   └── my.vue           # 我的授权
@@ -201,6 +205,7 @@ frontend/
 | POST | /extract | 提取水印 | 是 |
 | POST | /verify | 验证水印ID | 否 |
 | POST | /trace | 上传图片溯源 | 否 |
+| POST | /benchmark | 水印鲁棒性实验（登录，限流，临时文件） | 是 |
 | GET | /logs | 操作日志 | 管理员 |
 
 ### 区块链模块 `/api/blockchain`
@@ -263,7 +268,7 @@ frontend/
 - [x] 3个业务服务层
 - [x] 水印算法迁移 (矢量+栅格)
 - [x] 7个工具模块
-- [x] Celery异步任务配置
+- [x] 异步任务队列（async_tasks + worker + flask tasks run）
 - [x] 数据库初始化脚本
 - [x] Flask CLI命令
 - [x] 错误处理中间件
@@ -288,7 +293,7 @@ frontend/
 
 ### 🚧 进行中
 
-- [x] 前端单元测试 (Vitest，41 个用例)
+- [x] 前端单元测试 (Vitest，49 个用例)
 - [ ] API文档 (Swagger UI)
 
 ### 📋 待完成
@@ -303,7 +308,7 @@ frontend/
 - Python 3.11+
 - Node.js 22+
 - PostgreSQL 14+ (或SQLite用于开发)
-- Redis 6+ (可选，用于限流/缓存；Celery 预留在未来启用)
+- Redis 6+ (可选，用于限流/缓存；异步任务队列使用数据库，不依赖 Redis)
 
 ### 后端启动
 
@@ -390,7 +395,7 @@ flask reset-password user1 newpassword
 | Flask-Migrate | 4.0.5 | 数据库迁移 |
 | Flask-JWT-Extended | 4.6.0 | JWT认证 |
 | Flask-CORS | 4.0.0 | 跨域支持 |
-| Celery | 5.3.4 | 异步任务（预留，当前未部署 worker） |
+| 异步任务 | 数据库队列 | 水印/存证任务入队、重试与超时对账（`flask tasks run`） |
 | Pillow | 10.1.0 | 图像处理 |
 | GeoPandas | 0.14.1 | 空间数据处理 |
 | zhipuai | 2.0.1 | GLM API |
@@ -475,13 +480,13 @@ flask reset-password user1 newpassword
 | 模块 | 状态 | 完成度 | 说明 |
 |-----|------|-------|------|
 | 用户认证 | ✅ | 95% | JWT双Token、角色权限、密码修改 |
-| 资产管理 | ✅ | 95% | 上传/下载/分类/去重/收藏 |
+| 资产管理 | ✅ | 95% | 上传/下载/分类/去重/收藏；回收站恢复、标签编辑、票据流式下载与预览 |
 | 水印处理 | ✅ | 90% | 矢量+栅格算法、嵌入/提取/溯源 |
 | 区块链存证 | ✅ | 85% | 模拟模式完整、真实链需配置FISCO BCOS |
 | 授权审批 | ✅ | 95% | 双重审批、合同生成、5种授权类型 |
 | AI分析 | ✅ | 80% | GLM-4/CLIP集成，需配置API Key |
 | 前端界面 | ✅ | 90% | 19页面+骨架屏+设计系统 |
-| 单元测试 | ✅ | 95% | 后端 194 个用例 + 前端 41 个用例 + 5 个 Playwright 用例，CI 全量执行 |
+| 单元测试 | ✅ | 95% | 后端 374 个用例 + 前端 52 个用例 + 24 个 Playwright 用例，CI 全量执行 |
 | Docker部署 | ✅ | 90% | 多服务编排、健康检查、HTTPS待配置 |
 | CI/CD | ✅ | 100% | Git Flow + 16 个工作流 + 机器人体系 |
 
@@ -493,7 +498,7 @@ flask reset-password user1 newpassword
 4. **AI智能分析**: GLM-4 + CLIP特征提取
 5. **向量检索**: Milvus相似度搜索
 6. **微服务架构**: Docker容器化部署
-7. **完整测试**: pytest单元测试
+7. **完整测试**: pytest 单测；Windows 内存受限时用 `scripts/run_tests.py` 逐文件隔离子进程运行
 8. **CI/CD**: GitHub Actions自动化
 
 ---

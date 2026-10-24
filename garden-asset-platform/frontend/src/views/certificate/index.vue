@@ -32,6 +32,16 @@
           <div class="cert-id">证书编号：{{ certificate.certificate_id }}</div>
         </div>
 
+        <el-alert
+          v-if="certificate.hasNewerVersion"
+          class="cert-version-alert no-print"
+          type="warning"
+          :closable="false"
+          show-icon
+          title="该证书对应历史版本"
+          :description="`本证书签发给 v${certificate.versionNo || '未知'}，资产当前为 v${certificate.currentVersionNo}。当前版本需要重新水印并存证后才会签发新证书。`"
+        />
+
         <div class="cert-divider" aria-hidden="true"></div>
 
         <!-- 存证信息 -->
@@ -50,6 +60,24 @@
               <span class="info-label">资产标题</span>
               <span class="info-value">{{ certificate.asset_title || '-' }}</span>
             </div>
+            <div class="info-item">
+              <span class="info-label">资产版本</span>
+              <span class="info-value">
+                v{{ certificate.versionNo || '未记录' }}
+                <el-tag
+                  v-if="certificate.versionNo"
+                  size="small"
+                  :type="certificate.hasNewerVersion ? 'info' : 'success'"
+                  effect="plain"
+                >
+                  {{ certificate.hasNewerVersion ? '历史版本' : '当前版本' }}
+                </el-tag>
+              </span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">证书编号</span>
+              <span class="info-value mono">{{ certificate.certificate_id }}</span>
+            </div>
             <div class="info-item full">
               <span class="info-label">文件哈希 (SHA256)</span>
               <span class="info-value hash">{{ certificate.file_hash || '-' }}</span>
@@ -60,8 +88,8 @@
             </div>
             <div class="info-item">
               <span class="info-label">水印状态</span>
-              <el-tag :type="certificate.watermark_id ? 'success' : 'info'" size="small">
-                {{ certificate.watermark_id ? '已嵌入' : '未嵌入' }}
+              <el-tag :type="certificate.watermark_id ? 'success' : (watermarkApplicable ? 'info' : 'warning')" size="small">
+                {{ certificate.watermark_id ? '已嵌入' : (watermarkApplicable ? '未嵌入' : '不适用（哈希存证）') }}
               </el-tag>
             </div>
           </div>
@@ -73,8 +101,14 @@
           <div class="blockchain-card">
             <el-icon class="bc-icon"><Link /></el-icon>
             <div class="bc-info">
-              <div class="bc-name">FISCO BCOS 联盟链</div>
-              <div class="bc-desc">国产自主可控区块链底层平台</div>
+              <div class="bc-name">
+                {{ certificate.simulated ? '本地模拟存证（演示环境）' : 'FISCO BCOS 联盟链' }}
+              </div>
+              <div class="bc-desc">
+                {{ certificate.simulated
+                  ? '未连接链节点，交易哈希与区块为本地模拟数据'
+                  : '国产自主可控区块链底层平台' }}
+              </div>
             </div>
           </div>
           <div class="info-grid">
@@ -106,15 +140,15 @@
             </div>
             <div class="info-item">
               <span class="info-label">权利类型</span>
-              <span class="info-value">{{ certificate.right_type || '著作权' }}</span>
+              <span class="info-value">{{ certificate.right_type || '未提供' }}</span>
             </div>
             <div class="info-item">
               <span class="info-label">登记时间</span>
-              <span class="info-value">{{ formatDate(certificate.created_at) }}</span>
+              <span class="info-value">{{ formatDate(certificate.created_at) || '未提供' }}</span>
             </div>
             <div class="info-item">
               <span class="info-label">有效期</span>
-              <span class="info-value">永久有效</span>
+              <span class="info-value">{{ certificate.valid_until ? formatDate(certificate.valid_until) : '未设置' }}</span>
             </div>
           </div>
         </div>
@@ -126,10 +160,16 @@
             <CircleClose v-else />
           </el-icon>
           <div class="verify-text">
-            <div class="verify-title">{{ certificate.tx_hash ? '链上存证已确认' : '尚未生成链上存证交易' }}</div>
+            <div class="verify-title">
+              {{ certificate.tx_hash
+                ? (certificate.simulated ? '本地存证记录已生成（演示环境）' : '链上存证交易已生成')
+                : '尚未生成存证交易' }}
+            </div>
             <div class="verify-desc">
               {{ certificate.tx_hash
-                ? '该证书对应的存证信息已写入区块链，可通过交易哈希与区块高度在链上核验。'
+                ? (certificate.simulated
+                  ? '当前未连接 FISCO BCOS 节点，交易哈希与区块为本地模拟数据，不能用于链上复核。'
+                  : '存证信息已写入区块链，可凭交易哈希与区块高度在链上复核。')
                 : '该资产尚未完成上链存证，请先完成水印嵌入与上链操作后再查看证书。' }}
             </div>
           </div>
@@ -137,27 +177,35 @@
 
         <!-- 平台签章 -->
         <div class="cert-signature">
-          <span class="signature-org">苏州园林数字资产平台</span>
-          <span class="cert-seal" aria-hidden="true">园</span>
+          <figure v-if="qrDataUrl" class="cert-qr">
+            <img :src="qrDataUrl" alt="证书核验二维码" />
+            <figcaption>扫码核验证书</figcaption>
+          </figure>
+          <div class="signature-right">
+            <span class="signature-org">苏州园林数字资产平台</span>
+            <span class="cert-seal" aria-hidden="true">园</span>
+          </div>
         </div>
 
         <!-- 页脚 -->
         <div class="cert-footer">
-          <p>本证书由苏州园林数字资产平台基于 FISCO BCOS 区块链技术签发</p>
-          <p>证书数据已上链存证，不可篡改，永久可追溯</p>
-          <p class="cert-footer-date">签发日期：{{ formatDate(certificate.created_at || new Date().toISOString()) }}</p>
+          <p>本证书由苏州园林数字资产平台签发，链上状态以交易哈希与区块高度为准</p>
+          <p>证书字段以平台台账记录为准，如需权属证明请联系权利人核验</p>
+          <p class="cert-footer-date">签发日期：{{ formatDate(certificate.created_at) || '未提供' }}</p>
         </div>
       </template>
 
-      <el-empty v-else-if="!loading" description="证书不存在或已失效">
-        <el-button type="primary" @click="$router.push('/home')">返回首页</el-button>
+      <el-empty v-else-if="!loading" :description="loadError ? '证书加载失败' : '证书不存在或已失效'">
+        <el-button v-if="loadError" type="primary" @click="loadCertificate">重试</el-button>
+        <el-button v-else type="primary" @click="$router.push('/home')">返回首页</el-button>
       </el-empty>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
+import { copyToClipboard, parseBackendDate } from '@/utils'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Printer, Share, Link, CircleCheck, CircleClose } from '@element-plus/icons-vue'
@@ -166,12 +214,18 @@ import { blockchainApi } from '@/api/modules'
 const route = useRoute()
 const router = useRouter()
 
-const loading = ref(false)
+const loading = ref(true)
+const loadError = ref(false)
 const certificate = ref({})
 const certBody = ref(null)
+const qrDataUrl = ref('')
+const watermarkApplicable = computed(() =>
+  ['image', 'vector'].includes(certificate.value.asset_type)
+)
 
 async function loadCertificate() {
   loading.value = true
+  loadError.value = false
   try {
     const response = await blockchainApi.getCertificate(route.params.id)
     if (response.data.code === 200) {
@@ -182,25 +236,54 @@ async function loadCertificate() {
       certificate.value = {
         ...assetData,
         ...certificateData,
+        simulated: payload.simulated === true,
         asset_title: assetData.title || certificateData.asset_title || '',
         owner_name: certificateData.creator_name || assetData.owner_name || '',
         confirmed_at: certificateData.confirmed_at || certificateData.created_at,
-        right_type: getOwnershipName(certificateData.ownership_type)
+        right_type: getOwnershipName(certificateData.ownership_type),
+        versionNo: payload.version?.version_no ?? certificateData.version_no,
+        currentVersionNo: payload.current_version_no,
+        hasNewerVersion: payload.has_newer_version === true,
+        isCurrentVersion: payload.is_current_version !== false,
+        certificateCount: payload.certificate_count || 1,
+        versionFileName: payload.version?.file_name || ''
       }
+      await buildQrCode()
     } else {
       certificate.value = {}
+      qrDataUrl.value = ''
     }
   } catch {
-    ElMessage.error('加载证书失败')
+    loadError.value = true
+    certificate.value = {}
+    qrDataUrl.value = ''
   } finally {
     loading.value = false
   }
 }
 
-function copyHash(hash) {
+async function buildQrCode() {
+  if (!certificate.value.certificate_id) {
+    qrDataUrl.value = ''
+    return
+  }
+  try {
+    const { default: QRCode } = await import('qrcode')
+    qrDataUrl.value = await QRCode.toDataURL(window.location.href, {
+      margin: 1,
+      width: 220,
+      errorCorrectionLevel: 'M',
+      color: { dark: '#2f6b5a', light: '#ffffff' }
+    })
+  } catch {
+    qrDataUrl.value = ''
+  }
+}
+
+async function copyHash(hash) {
   if (!hash) return
-  navigator.clipboard.writeText(hash)
-  ElMessage.success('已复制到剪贴板')
+  const ok = await copyToClipboard(hash)
+  ElMessage[ok ? 'success' : 'error'](ok ? '已复制到剪贴板' : '复制失败，请手动选择')
 }
 
 function printCertificate() {
@@ -213,9 +296,9 @@ function viewAsset() {
   }
 }
 
-function shareCertificate() {
-  navigator.clipboard.writeText(window.location.href)
-  ElMessage.success('证书链接已复制')
+async function shareCertificate() {
+  const ok = await copyToClipboard(window.location.href)
+  ElMessage[ok ? 'success' : 'error'](ok ? '证书链接已复制' : '复制失败，请手动复制地址栏链接')
 }
 
 function getTypeName(type) {
@@ -226,12 +309,12 @@ function getTypeName(type) {
 
 function getOwnershipName(type) {
   const map = { original: '原创', authorized: '授权使用', derived: '衍生作品' }
-  return map[type] || '著作权'
+  return map[type] || '未提供'
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return ''
-  return new Date(dateStr).toLocaleString('zh-CN')
+  const date = parseBackendDate(dateStr)
+  return date ? date.toLocaleString('zh-CN') : ''
 }
 
 onMounted(() => {
@@ -322,6 +405,10 @@ onMounted(() => {
   color: $text-secondary;
 }
 
+.cert-version-alert {
+  margin-bottom: 20px;
+}
+
 .cert-divider {
   margin: 28px 0;
   border-top: 1px solid $border-color;
@@ -366,6 +453,12 @@ onMounted(() => {
     font-size: 13px;
     font-weight: 500;
     color: $text-primary;
+
+    &.mono {
+      font-family: $font-mono;
+      font-size: 12px;
+      word-break: break-all;
+    }
 
     &.hash {
       font-family: $font-mono;
@@ -453,11 +546,38 @@ onMounted(() => {
 // 朱砂印章
 .cert-signature {
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
+  align-items: flex-end;
+  justify-content: space-between;
   gap: 16px;
   margin-bottom: 20px;
   padding-top: 4px;
+}
+
+.cert-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+
+  img {
+    width: 88px;
+    height: 88px;
+    padding: 4px;
+    background: #fff;
+    border: 1px solid $border-color;
+  }
+
+  figcaption {
+    font-size: 10px;
+    color: $text-placeholder;
+  }
+}
+
+.signature-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .signature-org {
@@ -546,7 +666,12 @@ onMounted(() => {
   }
 
   .cert-signature {
+    align-items: flex-start;
     justify-content: flex-start;
+  }
+
+  .signature-right {
+    margin-left: auto;
   }
 }
 </style>

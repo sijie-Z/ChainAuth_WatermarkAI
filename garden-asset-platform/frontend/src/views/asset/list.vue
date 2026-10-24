@@ -5,7 +5,10 @@
       <div class="header-content">
         <div class="title-section">
           <h1 class="page-title">资产中心</h1>
-          <p class="page-subtitle">浏览和管理苏州园林数字资产</p>
+          <p class="page-subtitle">
+            浏览和管理苏州园林数字资产
+            <router-link to="/guide" class="subtitle-guide">不熟悉流程？看使用指南 →</router-link>
+          </p>
         </div>
         <div class="header-actions">
           <el-button type="primary" class="upload-btn" @click="goToUpload">
@@ -16,30 +19,42 @@
       </div>
     </div>
 
+    <!-- 首次使用提示 -->
+    <div v-if="showGuideTip" class="guide-tip">
+      <span>
+        第一次使用？建议先看
+        <router-link to="/guide">3 分钟使用指南</router-link>
+        ，再按“上传 → 水印 → 上链 → 发布 → 申请授权”的顺序操作。
+      </span>
+      <button type="button" class="guide-tip-close" @click="dismissGuideTip">知道了</button>
+    </div>
+
     <!-- 统计卡片 -->
     <div class="stats-section">
-      <el-skeleton :loading="statsLoading" animated :count="4">
-        <template #template>
-          <div class="stat-card" v-for="i in 4" :key="i">
-            <el-skeleton-item variant="circle" style="width: 56px; height: 56px; flex-shrink: 0" />
-            <div class="stat-info">
-              <el-skeleton-item variant="text" style="width: 60px; height: 28px" />
-              <el-skeleton-item variant="text" style="width: 40px; height: 14px; margin-top: 4px" />
-            </div>
+      <div v-if="statsError" class="stats-error">
+        <span>统计数据暂不可用</span>
+        <el-button text type="primary" @click="loadStats">重试</el-button>
+      </div>
+      <template v-else-if="statsLoading">
+        <div class="stat-card stat-card-skeleton" v-for="i in 4" :key="`stat-skeleton-${i}`" aria-hidden="true">
+          <el-skeleton-item variant="circle" style="width: 42px; height: 42px; flex-shrink: 0" />
+          <div class="stat-info">
+            <el-skeleton-item variant="text" style="width: 64px; height: 24px" />
+            <el-skeleton-item variant="text" style="width: 44px; height: 12px; margin-top: 6px" />
           </div>
-        </template>
-        <template #default>
-          <div class="stat-card" v-for="stat in stats" :key="stat.key">
-            <div class="stat-icon" :style="{ background: stat.gradient }">
-              <el-icon><component :is="stat.icon" /></el-icon>
-            </div>
-            <div class="stat-info">
-              <div class="stat-value">{{ stat.value }}</div>
-              <div class="stat-label">{{ stat.label }}</div>
-            </div>
+        </div>
+      </template>
+      <template v-else>
+        <div class="stat-card" v-for="stat in stats" :key="stat.key">
+          <div class="stat-icon" :style="{ background: stat.gradient }">
+            <el-icon><component :is="stat.icon" /></el-icon>
           </div>
-        </template>
-      </el-skeleton>
+          <div class="stat-info">
+            <div class="stat-value">{{ stat.value }}</div>
+            <div class="stat-label">{{ stat.label }}</div>
+          </div>
+        </div>
+      </template>
     </div>
 
     <!-- 搜索筛选区 -->
@@ -49,15 +64,25 @@
           <div class="filter-item search-input">
             <el-input
               v-model="search.keyword"
-              placeholder="搜索资产名称或编码..."
+              placeholder="搜索标题、编码或描述..."
               prefix-icon="Search"
               clearable
               size="large"
               @keyup.enter="handleSearch"
             />
           </div>
+          <el-button
+            class="filter-toggle"
+            plain
+            size="large"
+            :aria-expanded="filtersOpen"
+            @click="filtersOpen = !filtersOpen"
+          >
+            {{ filtersOpen ? '收起筛选' : activeAdvancedCount ? `筛选 · ${activeAdvancedCount}` : '筛选' }}
+          </el-button>
+          <div class="filter-advanced" :class="{ open: filtersOpen }">
           <div class="filter-item">
-            <el-select v-model="search.asset_type" placeholder="资产类型" clearable size="large" style="width: 140px">
+            <el-select v-model="search.asset_type" placeholder="资产类型" clearable size="large" style="width: 140px" @change="handleSearch">
               <el-option label="全部类型" value="" />
               <el-option label="影像" value="image" />
               <el-option label="三维模型" value="model" />
@@ -67,27 +92,64 @@
             </el-select>
           </div>
           <div class="filter-item">
-            <el-select v-model="search.garden_id" placeholder="所属园林" clearable size="large" style="width: 160px">
+            <el-select
+              v-model="search.garden_id"
+              placeholder="所属园林"
+              clearable
+              size="large"
+              style="width: 160px"
+              :disabled="gardensOffline"
+              @change="handleSearch"
+            >
               <el-option label="全部园林" value="" />
-              <el-option v-for="g in gardens" :key="g.id" :label="gardensOffline ? `${g.name}（离线示例）` : g.name" :value="g.id" />
+              <el-option v-for="g in gardens" :key="g.id" :label="g.name" :value="g.id" />
             </el-select>
           </div>
           <div class="filter-item">
-            <el-select v-model="search.status" placeholder="状态" clearable size="large" style="width: 120px">
+            <el-select v-model="search.tag" placeholder="标签" clearable size="large" style="width: 150px" @change="handleSearch">
+              <el-option label="全部标签" value="" />
+              <el-option v-for="tag in tags" :key="tag.name" :label="`${tag.name}（${tag.count}）`" :value="tag.name" />
+            </el-select>
+          </div>
+          <div class="filter-item">
+            <el-date-picker
+              v-model="search.dateRange"
+              type="daterange"
+              range-separator="至"
+              start-placeholder="上传开始"
+              end-placeholder="上传结束"
+              value-format="YYYY-MM-DD"
+              size="large"
+              style="width: 240px"
+              @change="handleSearch"
+            />
+          </div>
+          <div class="filter-item">
+            <el-select v-model="search.status" placeholder="状态" clearable size="large" style="width: 120px" @change="handleSearch">
               <el-option label="全部状态" value="" />
               <el-option label="已发布" value="published" />
-              <el-option label="待审核" value="pending" />
-              <el-option label="已拒绝" value="rejected" />
-              <el-option label="草稿" value="draft" />
+              <el-option v-if="canSeeAllStatuses" label="待审核" value="pending" />
+              <el-option v-if="canSeeAllStatuses" label="已拒绝" value="rejected" />
+              <el-option v-if="canSeeAllStatuses" label="草稿" value="draft" />
+            </el-select>
+          </div>
+          <div class="filter-item">
+            <el-select v-model="search.sort" size="large" style="width: 130px" aria-label="排序方式" @change="handleSearch">
+              <el-option label="最新上传" value="newest" />
+              <el-option label="最多浏览" value="popular" />
+              <el-option label="最多下载" value="downloads" />
+              <el-option label="最早上传" value="oldest" />
             </el-select>
           </div>
           <el-button type="primary" size="large" @click="handleSearch">
             <el-icon><Search /></el-icon>
             搜索
           </el-button>
-          <el-tag v-if="gardensOffline" type="warning" size="small" effect="plain">
-            园林筛选为离线示例数据
-          </el-tag>
+          <div v-if="gardensOffline" class="garden-offline">
+            <el-tag type="warning" size="small" effect="plain">园林筛选暂不可用</el-tag>
+            <el-button link type="primary" size="small" @click="loadGardens">重试</el-button>
+          </div>
+          </div>
         </div>
       </div>
     </div>
@@ -98,10 +160,10 @@
         <span class="result-count">共 {{ pagination.total }} 项资产</span>
         <div class="view-switch">
           <el-radio-group v-model="viewMode" size="small">
-            <el-radio-button label="grid" aria-label="网格视图" title="网格视图">
+            <el-radio-button value="grid" aria-label="网格视图" title="网格视图">
               <el-icon aria-hidden="true"><Grid /></el-icon>
             </el-radio-button>
-            <el-radio-button label="list" aria-label="列表视图" title="列表视图">
+            <el-radio-button value="list" aria-label="列表视图" title="列表视图">
               <el-icon aria-hidden="true"><List /></el-icon>
             </el-radio-button>
           </el-radio-group>
@@ -109,70 +171,79 @@
       </div>
 
       <!-- 网格视图 -->
-      <div v-if="viewMode === 'grid'" class="assets-grid">
-        <el-skeleton :loading="loading" animated :count="8">
-          <template #template>
-            <div class="asset-card" v-for="i in 8" :key="i">
-              <el-skeleton-item variant="image" style="height: 180px" />
-              <div class="asset-content">
-                <el-skeleton-item variant="text" style="width: 70%; height: 18px" />
-                <el-skeleton-item variant="text" style="width: 40%; height: 12px; margin: 4px 0 12px" />
-                <el-skeleton-item variant="text" style="width: 50%; height: 12px" />
+      <div v-if="loadError" class="assets-error">
+        <el-empty description="资产列表加载失败">
+          <el-button type="primary" @click="loadAssets">重试</el-button>
+        </el-empty>
+      </div>
+      <div v-else-if="viewMode === 'grid'" class="assets-grid">
+        <template v-if="loading">
+          <div class="asset-card asset-card-skeleton" v-for="i in 8" :key="`card-skeleton-${i}`" aria-hidden="true">
+            <div class="asset-thumbnail skeleton"></div>
+            <div class="asset-content">
+              <div class="skeleton skeleton-line" style="width: 72%; height: 18px"></div>
+              <div class="skeleton skeleton-line" style="width: 46%; height: 12px"></div>
+              <div class="skeleton skeleton-line" style="width: 58%; height: 12px"></div>
+            </div>
+          </div>
+        </template>
+        <template v-else>
+          <div
+            class="asset-card"
+            v-for="asset in assets"
+            :key="asset.id"
+            role="button"
+            tabindex="0"
+            :aria-label="`查看资产 ${asset.title || asset.asset_code || ''}`"
+            @click="viewDetail(asset.id)"
+            @keydown.enter.prevent="viewDetail(asset.id)"
+            @keydown.space.prevent="viewDetail(asset.id)"
+          >
+            <div class="asset-thumbnail">
+              <img
+                :src="getThumbnail(asset)"
+                :alt="asset.title"
+                loading="lazy"
+                decoding="async"
+                @error="onThumbnailError($event, asset)"
+              />
+              <div class="asset-overlay">
+                <el-button type="primary" size="small" round>查看详情</el-button>
+              </div>
+              <div class="asset-type-badge" :class="asset.asset_type">
+                {{ getTypeName(asset.asset_type) }}
               </div>
             </div>
-          </template>
-          <template #default>
-        <div
-          class="asset-card"
-          v-for="asset in assets"
-          :key="asset.id"
-          role="button"
-          tabindex="0"
-          :aria-label="`查看资产 ${asset.title || asset.asset_code || ''}`"
-          @click="viewDetail(asset.id)"
-          @keydown.enter.prevent="viewDetail(asset.id)"
-          @keydown.space.prevent="viewDetail(asset.id)"
-        >
-          <div class="asset-thumbnail">
-            <img :src="getThumbnail(asset)" :alt="asset.title" />
-            <div class="asset-overlay">
-              <el-button type="primary" size="small" round>查看详情</el-button>
-            </div>
-            <div class="asset-type-badge" :class="asset.asset_type">
-              {{ getTypeName(asset.asset_type) }}
+            <div class="asset-content">
+              <h3 class="asset-title">{{ asset.title }}</h3>
+              <p class="asset-code">{{ asset.asset_code }}</p>
+              <div class="asset-meta">
+                <span class="meta-item">
+                  <el-icon><Calendar /></el-icon>
+                  {{ formatDate(asset.created_at) }}
+                </span>
+              </div>
+              <div class="asset-status">
+                <span class="status-tag" :class="asset.watermark_status">
+                  {{ getWatermarkStatus(asset.watermark_status) }}
+                </span>
+                <span class="status-tag" :class="asset.chain_status">
+                  {{ getChainStatus(asset.chain_status) }}
+                </span>
+              </div>
             </div>
           </div>
-          <div class="asset-content">
-            <h3 class="asset-title">{{ asset.title }}</h3>
-            <p class="asset-code">{{ asset.asset_code }}</p>
-            <div class="asset-meta">
-              <span class="meta-item">
-                <el-icon><Calendar /></el-icon>
-                {{ formatDate(asset.created_at) }}
-              </span>
-            </div>
-            <div class="asset-status">
-              <span class="status-tag" :class="asset.watermark_status">
-                {{ getWatermarkStatus(asset.watermark_status) }}
-              </span>
-              <span class="status-tag" :class="asset.chain_status">
-                {{ getChainStatus(asset.chain_status) }}
-              </span>
-            </div>
-          </div>
-        </div>
         </template>
-        </el-skeleton>
       </div>
 
       <!-- 列表视图 -->
-      <div v-else class="assets-list" v-loading="loading">
+      <div v-else-if="assets.length" class="assets-list" v-loading="loading">
         <el-table :data="assets" style="width: 100%" class="modern-table">
           <el-table-column label="资产信息" min-width="300">
             <template #default="{ row }">
               <div class="asset-info-cell">
                 <div class="asset-thumb-small">
-                  <img :src="getThumbnail(row)" alt="" />
+                  <img :src="getThumbnail(row)" alt="" loading="lazy" @error="onThumbnailError($event, row)" />
                 </div>
                 <div class="asset-meta-cell">
                   <div class="asset-title-cell">{{ row.title }}</div>
@@ -206,7 +277,7 @@
               {{ formatDate(row.created_at) }}
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="180" fixed="right">
+          <el-table-column label="操作" width="180">
             <template #default="{ row }">
               <div class="action-buttons">
                 <el-button type="primary" link size="small" @click.stop="viewDetail(row.id)">
@@ -222,7 +293,7 @@
       </div>
 
       <!-- 分页 -->
-      <div class="pagination-section">
+      <div class="pagination-section" v-if="!loadError && assets.length > 0">
         <el-pagination
           v-model:current-page="pagination.page"
           v-model:page-size="pagination.perPage"
@@ -231,14 +302,15 @@
           layout="total, sizes, prev, pager, next, jumper"
           background
           @size-change="loadAssets"
-          @current-change="loadAssets"
+          @current-change="handlePageChange"
         />
       </div>
 
       <!-- 空状态 -->
-      <div v-if="!loading && assets.length === 0" class="empty-state">
-        <el-empty description="暂无资产数据">
-          <el-button type="primary" @click="goToUpload">上传第一个资产</el-button>
+      <div v-if="!loading && !loadError && assets.length === 0" class="empty-state">
+        <el-empty :description="hasFilters ? '没有匹配的资产' : '暂无资产数据'">
+          <el-button v-if="hasFilters" type="primary" @click="clearFilters">清除筛选</el-button>
+          <el-button v-else type="primary" @click="goToUpload">上传第一个资产</el-button>
         </el-empty>
       </div>
     </div>
@@ -246,26 +318,58 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, shallowRef } from 'vue'
+import { ref, reactive, computed, onMounted, watch, shallowRef } from 'vue'
+import { parseBackendDate } from '@/utils'
 import { useRouter, useRoute } from 'vue-router'
 import { assetApi, gardenApi, publicApi } from '@/api/modules'
+import { useUserStore } from '@/stores/user'
 import { Upload, Search, Grid, List, Calendar, Picture, Document, Collection } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const route = useRoute()
+const userStore = useUserStore()
+const ADMIN_ROLES = ['admin', 'asset_admin', 'license_admin', 'adm1', 'adm2']
+const canSeeAllStatuses = computed(() => ADMIN_ROLES.includes(userStore.userRole))
 
 const loading = ref(false)
 const statsLoading = ref(true)
+const statsError = ref(false)
+const loadError = ref(false)
+let assetRequestId = 0
+const showGuideTip = ref(localStorage.getItem('hideAssetGuideTip') !== '1')
 const assets = ref([])
 const gardens = ref([])
 const gardensOffline = ref(false)
+const tags = ref([])
 const viewMode = ref('grid')
+const filtersOpen = ref(false)
 
 const search = reactive({
   keyword: '',
   asset_type: '',
   garden_id: '',
-  status: ''
+  tag: '',
+  dateRange: [],
+  status: 'published',
+  sort: 'newest'
+})
+
+const hasFilters = computed(() =>
+  Boolean(
+    search.keyword || search.asset_type || search.garden_id
+    || search.tag || search.dateRange?.length || search.status
+  )
+)
+
+const activeAdvancedCount = computed(() => {
+  let count = 0
+  if (search.asset_type) count += 1
+  if (search.garden_id) count += 1
+  if (search.tag) count += 1
+  if (search.dateRange?.length) count += 1
+  if (search.status && search.status !== 'published') count += 1
+  if (search.sort && search.sort !== 'newest') count += 1
+  return count
 })
 
 const pagination = reactive({
@@ -284,6 +388,7 @@ const stats = shallowRef([
 
 async function loadStats() {
   statsLoading.value = true
+  statsError.value = false
   try {
     const response = await publicApi.getStats()
     if (response.data?.code === 200) {
@@ -294,16 +399,20 @@ async function loadStats() {
         { key: 'model', label: '模型', value: d.by_type?.model || 0, icon: Collection, gradient: '#eaf0eb' },
         { key: 'vector', label: '矢量', value: d.by_type?.vector || 0, icon: Document, gradient: '#eaf0eb' }
       ]
+    } else {
+      statsError.value = true
     }
   } catch {
-    // 保持默认值
+    statsError.value = true
   } finally {
     statsLoading.value = false
   }
 }
 
 async function loadAssets() {
+  const requestId = ++assetRequestId
   loading.value = true
+  loadError.value = false
   try {
     const params = {
       page: pagination.page,
@@ -311,19 +420,31 @@ async function loadAssets() {
       keyword: search.keyword || undefined,
       asset_type: search.asset_type || undefined,
       garden_id: search.garden_id || undefined,
-      status: search.status || undefined
+      tag: search.tag || undefined,
+      date_from: search.dateRange?.[0] || undefined,
+      date_to: search.dateRange?.[1] || undefined,
+      status: search.status || undefined,
+      sort: search.sort || undefined
     }
     const response = await assetApi.getList(params)
+    // 快速切换筛选时只应用最后一次请求的结果
+    if (requestId !== assetRequestId) return
     if (response.data?.code === 200) {
       const data = response.data.data
       assets.value = data.items || []
       pagination.total = data.total || 0
+    } else {
+      loadError.value = true
     }
   } catch {
+    if (requestId !== assetRequestId) return
+    loadError.value = true
     assets.value = []
     pagination.total = 0
   } finally {
-    loading.value = false
+    if (requestId === assetRequestId) {
+      loading.value = false
+    }
   }
 }
 
@@ -333,22 +454,55 @@ async function loadGardens() {
     if (response.data?.code === 200) {
       gardens.value = response.data.data || []
       gardensOffline.value = false
+    } else {
+      gardensOffline.value = true
     }
   } catch (error) {
-    // 接口失败时使用兜底数据，并在界面明确标注为离线示例，避免掩盖故障
-    console.error('加载园林列表失败，使用离线示例数据:', error)
+    console.error('加载园林列表失败:', error)
     gardensOffline.value = true
-    gardens.value = [
-      { id: 1, name: '拙政园', code: 'ZZY' },
-      { id: 2, name: '留园', code: 'LY' },
-      { id: 3, name: '狮子林', code: 'SZL' }
-    ]
+    gardens.value = []
   }
 }
 
 function handleSearch() {
   pagination.page = 1
+  if (window.matchMedia('(max-width: 768px)').matches) {
+    filtersOpen.value = false
+  }
   loadAssets()
+}
+
+async function handlePageChange() {
+  await loadAssets()
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+function clearFilters() {
+  search.keyword = ''
+  search.asset_type = ''
+  search.garden_id = ''
+  search.tag = ''
+  search.dateRange = []
+  search.status = 'published'
+  search.sort = 'newest'
+  pagination.page = 1
+  loadAssets()
+}
+
+async function loadTags() {
+  try {
+    const response = await publicApi.getTags()
+    if (response.data?.code === 200) {
+      tags.value = response.data.data || []
+    }
+  } catch {
+    tags.value = []
+  }
+}
+
+function dismissGuideTip() {
+  showGuideTip.value = false
+  localStorage.setItem('hideAssetGuideTip', '1')
 }
 
 function goToUpload() {
@@ -364,11 +518,23 @@ function applyLicense(id) {
 }
 
 function getThumbnail(asset) {
-  if (asset.thumbnail_path) return asset.thumbnail_path
+  // 有资产 ID 时统一走后端缩略图端点；列表使用 640px 卡片图，避免解码大图卡顿
+  if (asset.id) return `/api/assets/${asset.id}/thumbnail?size=card&v=2`
+  return placeholderThumbnail(asset.asset_type)
+}
+
+function placeholderThumbnail(type) {
   const colors = { image: '#2f6b5a', vector: '#4c6e8a', model: '#6d5b7a', document: '#b07a2a', video: '#a6402f' }
-  const color = (colors[asset.asset_type] || '#5b675f').replace('#', '')
-  const label = (asset.asset_type || 'FILE').substring(0, 3).toUpperCase()
+  const color = (colors[type] || '#5b675f').replace('#', '')
+  const label = (type || 'FILE').substring(0, 3).toUpperCase()
   return `data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="300"%3E%3Crect fill="%23${color}" width="400" height="300" rx="8"/%3E%3Ctext x="200" y="160" text-anchor="middle" fill="white" font-size="28"%3E${label}%3C/text%3E%3C/svg%3E`
+}
+
+function onThumbnailError(event, asset) {
+  const img = event?.target
+  if (!img || img.dataset.fallbackApplied) return
+  img.dataset.fallbackApplied = '1'
+  img.src = placeholderThumbnail(asset?.asset_type)
 }
 
 function getTypeName(type) {
@@ -392,9 +558,8 @@ function getChainStatus(status) {
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+  const date = parseBackendDate(dateStr)
+  return date ? date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }) : ''
 }
 
 onMounted(() => {
@@ -404,6 +569,14 @@ onMounted(() => {
   loadStats()
   loadAssets()
   loadGardens()
+  loadTags()
+})
+
+// 首页园林卡会在已打开资产中心时只改 query，需要重新筛选
+watch(() => route.query.garden_id, (gardenId) => {
+  search.garden_id = gardenId ? Number(gardenId) : ''
+  pagination.page = 1
+  loadAssets()
 })
 </script>
 
@@ -442,6 +615,17 @@ onMounted(() => {
     .page-subtitle {
       font-size: 15px;
       color: $text-secondary;
+
+      .subtitle-guide {
+        margin-left: 10px;
+        font-size: 13px;
+        color: $primary-color;
+        white-space: nowrap;
+
+        &:hover {
+          color: $primary-dark;
+        }
+      }
     }
   }
 
@@ -454,6 +638,44 @@ onMounted(() => {
   }
 }
 
+// 首次使用提示
+.guide-tip {
+  max-width: 1400px;
+  margin: 18px auto 0;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: rgba(47, 107, 90, 0.06);
+  border: 1px solid rgba(47, 107, 90, 0.18);
+  border-radius: $radius-md;
+  font-size: 13px;
+  line-height: 1.7;
+  color: $text-secondary;
+
+  a {
+    color: $primary-dark;
+    font-weight: 500;
+  }
+
+  .guide-tip-close {
+    flex-shrink: 0;
+    padding: 3px 10px;
+    background: transparent;
+    border: 1px solid $border-color;
+    border-radius: $radius-xs;
+    font-size: 12px;
+    color: $text-secondary;
+    cursor: pointer;
+
+    &:hover {
+      border-color: $primary-color;
+      color: $primary-dark;
+    }
+  }
+}
+
 // 统计卡片
 .stats-section {
   max-width: 1400px;
@@ -462,6 +684,18 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 20px;
+  .stats-error {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 18px;
+    background: $bg-card;
+    border: 1px dashed $border-color;
+    border-radius: $radius-lg;
+    color: $text-secondary;
+  }
 
   .stat-card {
     background: $bg-card;
@@ -476,6 +710,10 @@ onMounted(() => {
 
     &:hover {
       border-color: $border-dark;
+    }
+
+    &.stat-card-skeleton {
+      pointer-events: none;
     }
 
     .stat-icon {
@@ -525,6 +763,7 @@ onMounted(() => {
     display: flex;
     gap: 12px;
     align-items: center;
+    flex-wrap: wrap;
 
     .filter-item {
       flex-shrink: 0;
@@ -535,6 +774,20 @@ onMounted(() => {
       }
     }
   }
+
+  .filter-advanced {
+    display: contents;
+  }
+
+  .filter-toggle {
+    display: none;
+  }
+}
+
+.garden-offline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 // 资产区域
@@ -561,7 +814,6 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 24px;
-
   .asset-card {
     background: $bg-card;
     border: 1px solid $border-color;
@@ -570,6 +822,19 @@ onMounted(() => {
     box-shadow: $shadow-sm;
     cursor: pointer;
     transition: border-color $transition-fast, box-shadow $transition-fast;
+
+    &.asset-card-skeleton {
+      pointer-events: none;
+
+      .asset-thumbnail.skeleton {
+        height: 180px;
+      }
+
+      .skeleton-line {
+        border-radius: $radius-xs;
+        margin-bottom: 10px;
+      }
+    }
 
     &:hover {
       border-color: $border-dark;
@@ -601,13 +866,18 @@ onMounted(() => {
         transition: transform $transition-slow;
       }
 
+      // 悬停时只压一条底部渐隐，不遮住画面主体
       .asset-overlay {
         position: absolute;
-        inset: 0;
-        background: rgba($primary-color, 0.85);
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 64px;
+        padding: 0 12px 12px;
+        background: linear-gradient(to top, rgba(14, 59, 51, 0.72), rgba(14, 59, 51, 0));
         display: flex;
-        align-items: center;
-        justify-content: center;
+        align-items: flex-end;
+        justify-content: flex-end;
         opacity: 0;
         transition: opacity $transition-base;
       }
@@ -620,8 +890,7 @@ onMounted(() => {
         font-size: 12px;
         font-weight: $font-weight-medium;
         color: white;
-        background: rgba(0, 0, 0, 0.42);
-        backdrop-filter: blur(4px);
+        background: rgba(0, 0, 0, 0.48);
         border: 1px solid rgba(252, 253, 251, 0.18);
         border-radius: $radius-xs;
 
@@ -695,8 +964,7 @@ onMounted(() => {
 }
 
 // 列表视图
-.assets-list {
-  .asset-info-cell {
+.assets-list {  .asset-info-cell {
     display: flex;
     align-items: center;
     gap: 12px;
@@ -757,6 +1025,10 @@ onMounted(() => {
   margin-top: 32px;
 }
 
+.assets-error {
+  padding: 48px 0;
+}
+
 // 空状态
 .empty-state {
   padding: 80px 0;
@@ -775,10 +1047,13 @@ onMounted(() => {
 
 @media (max-width: 768px) {
   .page-header {
-    padding: 24px;
-    flex-direction: column;
-    gap: 16px;
-    text-align: center;
+    padding: 24px 16px;
+
+    .header-content {
+      flex-direction: column;
+      gap: 16px;
+      text-align: center;
+    }
   }
 
   .stats-section,
@@ -787,17 +1062,115 @@ onMounted(() => {
     padding: 0 16px;
   }
 
+  .guide-tip {
+    margin: 14px 16px 0;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .filter-row {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .filter-section .filter-toggle {
+    display: inline-flex;
+    width: auto !important;
+    flex-shrink: 0;
+  }
+
+  .filter-section .filter-row .filter-item.search-input {
+    min-width: 0;
+    width: auto !important;
+    flex: 1;
+  }
+
+  .filter-row .filter-item {
+    width: 100% !important;
+
+    :deep(.el-select),
+    :deep(.el-date-editor) {
+      width: 100% !important;
+    }
+  }
+
+  .filter-section .filter-advanced {
+    display: none;
+    width: 100%;
+
+    &.open {
+      display: block;
+    }
+
+    > .el-button {
+      width: 100%;
+    }
+  }
+
   .assets-grid {
     grid-template-columns: repeat(2, 1fr);
     gap: 16px;
   }
 
-  .filter-row {
-    flex-wrap: wrap;
+  .asset-card .asset-title {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
 
-    .filter-item {
-      width: 100% !important;
+  .pagination-section {
+    :deep(.el-pagination__sizes),
+    :deep(.el-pagination__jump) {
+      display: none;
     }
+  }
+}
+
+@media (max-width: 480px) {
+  .page-header {
+    padding: 20px 16px 16px;
+
+    .page-title {
+      font-size: 28px;
+    }
+  }
+
+  .stats-section {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+
+    .stat-card {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 12px 10px;
+
+      .stat-icon {
+        width: 30px;
+        height: 30px;
+        font-size: 15px;
+      }
+
+      .stat-info {
+        .stat-value {
+          font-size: 20px;
+        }
+
+        .stat-label {
+          font-size: 11px;
+        }
+      }
+    }
+  }
+
+  .filter-section .filter-card {
+    padding: 12px 14px;
+  }
+
+  .assets-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

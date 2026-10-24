@@ -1,0 +1,10 @@
+# 水印鲁棒性实验的攻击项曾使用 key 字段（origin / jpeg90 / noise 等），
+# 被通用 API key 规则误判。该文件不含凭据；保留白名单以覆盖旧提交。
+[extend]
+useDefault = true
+
+[allowlist]
+description = "False positive: watermark benchmark attack labels use a key field"
+paths = [
+  '''garden-asset-platform/backend/app/services/watermark_benchmark.py''',
+]

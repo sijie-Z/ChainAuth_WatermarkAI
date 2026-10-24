@@ -87,36 +87,94 @@
         </el-card>
 
         <!-- 通知设置 -->
-        <el-card class="settings-card">
+        <el-card class="settings-card" v-loading="notificationLoading">
           <template #header>
             <div class="card-header">
               <el-icon class="card-icon"><Bell /></el-icon>
               <span>通知设置</span>
-              <el-tag size="small" type="info" effect="plain" class="local-pref-tag">本地偏好</el-tag>
+              <el-tag size="small" type="success" effect="plain" class="local-pref-tag">
+                服务端偏好
+              </el-tag>
             </div>
           </template>
+          <p class="setting-note">
+            站内通知通过 SSE 实时推送到顶栏铃铛；邮件通知需要服务端配置 SMTP，
+            开启后会按下方分组发送到你的账号邮箱。
+          </p>
+
+          <el-alert
+            v-if="!notificationLoading && !notificationPrefs.mail_configured"
+            type="info"
+            :closable="false"
+            show-icon
+            class="notification-alert"
+            title="当前部署未配置 SMTP"
+            description="邮件开关会保存，但在管理员配置 MAIL_ENABLED / MAIL_HOST 之前不会实际发送。"
+          />
+          <el-alert
+            v-if="!profileForm.email"
+            type="warning"
+            :closable="false"
+            show-icon
+            class="notification-alert"
+            title="请先在个人信息中填写邮箱"
+            description="没有邮箱时无法开启邮件通知。"
+          />
+
           <div class="setting-list">
             <div class="setting-item">
               <div class="setting-info">
-                <span class="setting-label">授权审批通知</span>
-                <span class="setting-desc">当授权申请状态变更时通知</span>
+                <span class="setting-label">站内实时通知</span>
+                <span class="setting-desc">审核、授权、任务结果会实时显示在顶栏铃铛</span>
               </div>
-              <el-switch v-model="notifications.license" />
+              <el-tag size="small" :type="notificationPrefs.sse_enabled ? 'success' : 'info'">
+                {{ notificationPrefs.sse_enabled ? '已启用' : '未启用' }}
+              </el-tag>
             </div>
             <div class="setting-item">
               <div class="setting-info">
-                <span class="setting-label">资产更新通知</span>
-                <span class="setting-desc">当资产信息发生变更时通知</span>
+                <span class="setting-label">邮件通知</span>
+                <span class="setting-desc">
+                  发送到 {{ notificationPrefs.email || '未设置邮箱' }}
+                </span>
               </div>
-              <el-switch v-model="notifications.asset" />
+              <el-switch
+                v-model="notificationPrefs.email_enabled"
+                :disabled="!profileForm.email"
+              />
             </div>
-            <div class="setting-item">
+            <div class="setting-item setting-item-block">
               <div class="setting-info">
-                <span class="setting-label">系统公告</span>
-                <span class="setting-desc">接收平台系统公告和维护通知</span>
+                <span class="setting-label">邮件通知范围</span>
+                <span class="setting-desc">只对勾选的事件分组发送邮件</span>
               </div>
-              <el-switch v-model="notifications.system" />
+              <el-checkbox-group
+                v-model="notificationPrefs.email_groups"
+                :disabled="!notificationPrefs.email_enabled"
+                class="group-checkboxes"
+              >
+                <el-checkbox
+                  v-for="group in availableGroups"
+                  :key="group.key"
+                  :label="group.key"
+                >
+                  {{ group.label }}
+                </el-checkbox>
+              </el-checkbox-group>
             </div>
+          </div>
+
+          <div class="setting-actions">
+            <el-button
+              :loading="testingEmail"
+              :disabled="!notificationPrefs.mail_configured || !profileForm.email"
+              @click="sendTestEmail"
+            >
+              发送测试邮件
+            </el-button>
+            <el-button type="primary" :loading="notificationSaving" @click="saveNotifications">
+              保存通知设置
+            </el-button>
           </div>
         </el-card>
       </div>
@@ -125,13 +183,15 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive, watch } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { userApi } from '@/api/modules'
+import { notificationApi, userApi } from '@/api/modules'
 import { ElMessage } from 'element-plus'
 import { User, Lock, Bell, ArrowLeft } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
+const router = useRouter()
 
 const roleLabel = computed(() => {
   const labels = {
@@ -150,8 +210,8 @@ const changingPassword = ref(false)
 
 const profileForm = reactive({
   username: userStore.username || '',
-  email: '',
-  phone: ''
+  email: userStore.user?.email || '',
+  phone: userStore.user?.phone || ''
 })
 
 const passwordFormRef = ref(null)
@@ -183,40 +243,91 @@ const passwordRules = {
   ]
 }
 
-// 通知开关为本地偏好，持久化在 localStorage
-const NOTIFICATION_PREF_KEY = 'notification-preferences'
+// 通知偏好保存在服务端；站内 SSE 默认启用，邮件按分组发送
+const notificationLoading = ref(true)
+const notificationSaving = ref(false)
+const testingEmail = ref(false)
+const availableGroups = ref([
+  { key: 'asset', label: '资产审核结果' },
+  { key: 'license', label: '授权审批、撤销与续期' },
+  { key: 'task', label: '水印/存证任务结果' },
+  { key: 'infringement', label: '侵权线索与处理结果' }
+])
+const notificationPrefs = reactive({
+  email_enabled: false,
+  email_groups: ['asset', 'license', 'task', 'infringement'],
+  email: '',
+  mail_configured: false,
+  sse_enabled: true
+})
 
-function loadNotificationPreferences() {
-  const defaults = { license: true, asset: true, system: false }
+async function loadNotificationPrefs() {
+  notificationLoading.value = true
   try {
-    const saved = JSON.parse(localStorage.getItem(NOTIFICATION_PREF_KEY) || 'null')
-    if (saved && typeof saved === 'object') {
-      return {
-        license: typeof saved.license === 'boolean' ? saved.license : defaults.license,
-        asset: typeof saved.asset === 'boolean' ? saved.asset : defaults.asset,
-        system: typeof saved.system === 'boolean' ? saved.system : defaults.system
+    const response = await notificationApi.getPreferences()
+    if (response.data?.code === 200) {
+      const data = response.data.data || {}
+      notificationPrefs.email_enabled = Boolean(data.email_enabled)
+      notificationPrefs.email_groups = data.email_groups || []
+      notificationPrefs.email = data.email || ''
+      notificationPrefs.mail_configured = Boolean(data.mail_configured)
+      notificationPrefs.sse_enabled = data.sse_enabled !== false
+      if (Array.isArray(data.available_groups) && data.available_groups.length) {
+        availableGroups.value = data.available_groups
       }
     }
-  } catch {
-    // 忽略损坏的本地数据，回退默认值
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '通知设置加载失败')
+  } finally {
+    notificationLoading.value = false
   }
-  return defaults
 }
 
-const notifications = reactive(loadNotificationPreferences())
+async function saveNotifications() {
+  notificationSaving.value = true
+  try {
+    const response = await notificationApi.updatePreferences({
+      email_enabled: notificationPrefs.email_enabled,
+      email_groups: notificationPrefs.email_groups
+    })
+    if (response.data?.code === 200) {
+      ElMessage.success('通知设置已保存')
+      const data = response.data.data || {}
+      notificationPrefs.email_enabled = Boolean(data.email_enabled)
+      notificationPrefs.email_groups = data.email_groups || notificationPrefs.email_groups
+    } else {
+      ElMessage.error(response.data?.message || '保存失败')
+    }
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '保存失败')
+  } finally {
+    notificationSaving.value = false
+  }
+}
 
-watch(notifications, value => {
-  localStorage.setItem(NOTIFICATION_PREF_KEY, JSON.stringify(value))
-}, { deep: true })
+async function sendTestEmail() {
+  testingEmail.value = true
+  try {
+    const response = await notificationApi.testEmail()
+    ElMessage.success(response.data?.message || '测试邮件已发送')
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '测试邮件发送失败')
+  } finally {
+    testingEmail.value = false
+  }
+}
 
 async function saveProfile() {
   saving.value = true
   try {
-    const data = {}
-    if (profileForm.email) data.email = profileForm.email
-    if (profileForm.phone) data.phone = profileForm.phone
+    const data = {
+      email: profileForm.email || '',
+      phone: profileForm.phone || ''
+    }
     const res = await userApi.updateProfile(data)
     if (res.data?.code === 200) {
+      userStore.setUser({ ...userStore.user, ...data })
+      notificationPrefs.email = data.email || ''
       ElMessage.success('个人信息已更新')
     } else {
       ElMessage.error(res.data?.message || '更新失败')
@@ -243,6 +354,8 @@ function changePassword() {
         passwordForm.currentPassword = ''
         passwordForm.newPassword = ''
         passwordForm.confirmPassword = ''
+        userStore.clearAuth()
+        router.push('/login')
       } else {
         ElMessage.error(res.data?.message || '修改失败')
       }
@@ -253,6 +366,10 @@ function changePassword() {
     }
   })
 }
+
+onMounted(() => {
+  loadNotificationPrefs()
+})
 </script>
 
 <style lang="scss" scoped>
@@ -339,6 +456,13 @@ function changePassword() {
   }
 }
 
+.setting-note {
+  margin: 0 0 14px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: $text-placeholder;
+}
+
 .setting-list {
   display: flex;
   flex-direction: column;
@@ -354,6 +478,29 @@ function changePassword() {
   &:last-child {
     border-bottom: none;
   }
+
+  &.setting-item-block {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+.notification-alert {
+  margin-bottom: 12px;
+}
+
+.group-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.setting-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
 }
 
 .setting-info {

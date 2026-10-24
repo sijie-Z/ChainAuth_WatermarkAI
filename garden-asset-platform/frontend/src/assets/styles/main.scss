@@ -97,6 +97,28 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   scroll-behavior: smooth;
+  background-color: $bg-primary;
+  color-scheme: light;
+  scrollbar-gutter: stable;
+}
+
+#app {
+  min-height: 100vh;
+  background-color: $bg-primary;
+}
+
+// 顶部加载进度条：点击导航立刻有反馈，避免“点了没反应”
+#nprogress {
+  pointer-events: none;
+
+  .bar {
+    background: $primary-color;
+    height: 2px;
+  }
+
+  .peg {
+    box-shadow: 0 0 10px $primary-color, 0 0 5px $primary-color;
+  }
 }
 
 body {
@@ -548,6 +570,15 @@ a {
   &:focus {
     background: $primary-dark !important;
     border-color: $primary-dark !important;
+  }
+
+  // 禁用态必须明显弱于可点击态，否则用户会反复点击“没反应”
+  &.is-disabled,
+  &:disabled {
+    background: #c7d8d1 !important;
+    border-color: #b1c8bf !important;
+    color: #f6f9f7 !important;
+    cursor: not-allowed;
   }
 }
 

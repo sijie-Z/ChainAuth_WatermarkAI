@@ -8,6 +8,7 @@ from flask_restful import Resource
 from flask_jwt_extended import (
     create_access_token,
     create_refresh_token,
+    decode_token,
     jwt_required,
     get_jwt_identity,
     get_jwt
@@ -16,6 +17,7 @@ from app.extensions import db
 from app.models.user import User, UserToken
 from app.models.log import OperationLog
 from app.utils.middleware import rate_limit
+from app.utils.tokens import invalidate_user_tokens
 from app.utils.validators import has_html_tags
 
 
@@ -32,8 +34,8 @@ class RegisterResource(Resource):
         # 参数校验
         username = data.get('username')
         password = data.get('password')
-        email = data.get('email')
-        phone = data.get('phone')
+        email = (data.get('email') or '').strip() or None
+        phone = (data.get('phone') or '').strip() or None
 
         if not username or not password:
             return {'code': 400, 'message': '用户名和密码不能为空'}, 400
@@ -160,7 +162,30 @@ class LogoutResource(Resource):
                 is_revoked=True,
                 expires_at=datetime.utcfromtimestamp(jwt_data['exp'])
             ))
-            db.session.commit()
+
+        # 前端会把 refresh token 一并提交；撤销后无法再换取新的 access token
+        data = request.get_json(silent=True) or {}
+        refresh_token = data.get('refresh_token')
+        if refresh_token:
+            try:
+                refresh_payload = decode_token(refresh_token)
+                if (
+                    refresh_payload.get('type') == 'refresh'
+                    and str(refresh_payload.get('sub')) == str(user_id)
+                    and refresh_payload.get('jti')
+                ):
+                    db.session.add(UserToken(
+                        user_id=user_id,
+                        token=refresh_payload['jti'],
+                        token_type='refresh',
+                        is_revoked=True,
+                        expires_at=datetime.utcfromtimestamp(refresh_payload['exp'])
+                    ))
+            except Exception:
+                # refresh token 无效不影响登出本地会话
+                logger.debug('登出时 refresh token 无效', exc_info=True)
+
+        db.session.commit()
 
         # 记录日志
         user = User.query.get(user_id)
@@ -222,18 +247,20 @@ class CurrentUserResource(Resource):
         data = request.get_json()
 
         if 'nickname' in data:
-            user.nickname = data['nickname']
+            user.nickname = (data.get('nickname') or '').strip()[:50] or None
         if 'email' in data:
+            email = (data.get('email') or '').strip() or None
             # 检查邮箱是否已被其他用户使用
-            existing = User.query.filter(User.email == data['email'], User.id != user_id).first()
+            existing = User.query.filter(User.email == email, User.id != user_id).first() if email else None
             if existing:
                 return {'code': 400, 'message': '邮箱已被使用'}, 400
-            user.email = data['email']
+            user.email = email
         if 'phone' in data:
-            existing = User.query.filter(User.phone == data['phone'], User.id != user_id).first()
+            phone = (data.get('phone') or '').strip() or None
+            existing = User.query.filter(User.phone == phone, User.id != user_id).first() if phone else None
             if existing:
                 return {'code': 400, 'message': '手机号已被使用'}, 400
-            user.phone = data['phone']
+            user.phone = phone
 
         try:
             db.session.commit()
@@ -268,9 +295,10 @@ class ChangePasswordResource(Resource):
             return {'code': 400, 'message': '新密码长度不能少于6位'}, 400
 
         user.set_password(new_password)
+        invalidate_user_tokens(user_id)
         db.session.commit()
 
-        return {'code': 200, 'message': '密码修改成功'}
+        return {'code': 200, 'message': '密码修改成功，请重新登录'}
 
 
 class UserListResource(Resource):
@@ -344,16 +372,37 @@ class UserResource(Resource):
 
         # 更新字段
         if 'email' in data:
-            user.email = data['email']
+            email = (data.get('email') or '').strip() or None
+            if email and User.query.filter(User.email == email, User.id != user.id).first():
+                return {'code': 400, 'message': '邮箱已被使用'}, 400
+            user.email = email
         if 'phone' in data:
-            user.phone = data['phone']
+            phone = (data.get('phone') or '').strip() or None
+            if phone and User.query.filter(User.phone == phone, User.id != user.id).first():
+                return {'code': 400, 'message': '手机号已被使用'}, 400
+            user.phone = phone
+        if data.get('nickname') is not None:
+            user.nickname = (data.get('nickname') or '').strip()[:50]
+
+        if data.get('password'):
+            if current_user.role != 'admin':
+                return {'code': 403, 'message': '只有管理员可以重置密码'}, 403
+            if len(str(data['password'])) < 6:
+                return {'code': 400, 'message': '密码至少 6 位'}, 400
+            user.set_password(str(data['password']))
+            invalidate_user_tokens(user.id)
+
         if 'role' in data and current_user.role == 'admin':
             if data['role'] not in ('user', 'asset_admin', 'license_admin', 'adm1', 'adm2', 'admin'):
                 return {'code': 400, 'message': '无效的角色'}, 400
+            if user.id == current_user_id and data['role'] != 'admin':
+                return {'code': 400, 'message': '不能降低自己的管理员角色'}, 400
             user.role = data['role']
         if 'status' in data and current_user.role == 'admin':
             if data['status'] not in ('active', 'inactive', 'banned'):
                 return {'code': 400, 'message': '无效的状态'}, 400
+            if user.id == current_user_id and data['status'] != 'active':
+                return {'code': 400, 'message': '不能停用自己的账号'}, 400
             user.status = data['status']
 
         db.session.commit()

@@ -15,35 +15,42 @@ from algorithm.raster.image_io import alpha_channel, load_image_array
 
 logger = logging.getLogger(__name__)
 
-# 水印 ID 固定占 48 字节（384 bit），不足补零；重复 5 份做多数表决
+# 水印 ID 固定占 48 字节（384 bit），不足补零；默认重复 20 份做多数表决。
+# 小图容量不足时自动降低重复份数；提取端兼容 5/8/12/20 等历史与自适应编码。
 ID_FIELD_BYTES = 48
 ID_BITS = ID_FIELD_BYTES * 8
-ID_REPEAT = 5
+ID_REPEAT = 20
+ID_REPEAT_CANDIDATES = (20, 12, 8, 5, 3, 1)
+LEGACY_ID_REPEATS = (12, 8, 5, 3, 1)
 ID_TOTAL_BITS = ID_BITS * ID_REPEAT
 DEFAULT_ALPHA = 32.0
 # 低频系数在 JPEG 量化表中步长更小，鲁棒性更好
 EMBED_POSITIONS = [(1, 1), (1, 2), (2, 1)]
 
 
-def id_to_bits(watermark_id):
-    """把水印 ID 编码为固定长度的比特序列（重复 5 份）"""
+def id_to_bits(watermark_id, repeat=None):
+    """把水印 ID 编码为固定长度的比特序列（默认重复 20 份）"""
     payload = watermark_id.encode('utf-8')[:ID_FIELD_BYTES].ljust(ID_FIELD_BYTES, b'\x00')
     bits = []
     for byte in payload:
         for shift in range(7, -1, -1):
             bits.append((byte >> shift) & 1)
-    return bits * ID_REPEAT
+    return bits * (repeat or ID_REPEAT)
 
 
-def bits_to_id(bits):
-    """从重复编码的比特序列还原水印 ID（多数表决）"""
-    if len(bits) < ID_TOTAL_BITS:
+def bits_to_id(bits, repeat=None):
+    """从重复编码的比特序列还原水印 ID（多数表决）
+
+    repeat 为空时使用当前默认重复份数；提取旧版本水印时可显式传 5。
+    """
+    repeat = repeat or ID_REPEAT
+    if len(bits) < ID_BITS * repeat:
         return None
 
     voted = []
     for i in range(ID_BITS):
-        ones = sum(bits[i + k * ID_BITS] for k in range(ID_REPEAT))
-        voted.append(1 if ones > ID_REPEAT // 2 else 0)
+        ones = sum(bits[i + k * ID_BITS] for k in range(repeat))
+        voted.append(1 if ones > repeat // 2 else 0)
 
     payload = bytearray()
     for i in range(0, ID_BITS, 8):
@@ -52,23 +59,26 @@ def bits_to_id(bits):
             byte = (byte << 1) | int(bit)
         payload.append(byte)
 
+    # 水印 ID 以 NUL 补齐到固定长度；攻击后填充区可能被噪声改写，
+    # 只取第一个 NUL 之前的内容，避免尾部噪声把合法 ID 判为无效。
+    raw = bytes(payload).split(b'\x00', 1)[0]
     try:
-        return payload.rstrip(b'\x00').decode('utf-8')
+        return raw.decode('utf-8')
     except UnicodeDecodeError:
         return None
 
 
-def payload_geometry(height, width):
+def payload_geometry(height, width, id_total_bits=None):
     """
     根据图像尺寸计算可嵌入的水印边长。
 
     DCT 每 8x8 块使用 3 个中频系数，容量为块数 * 3；
-    其中前 ID_BITS 位固定留给水印 ID，剩余容量给水印图像。
+    其中前 id_total_bits 位固定留给水印 ID，剩余容量给水印图像。
     """
     usable_height = ((height + 7) // 8) * 8
     usable_width = ((width + 7) // 8) * 8
     capacity = (usable_height // 8) * (usable_width // 8) * 3
-    available = capacity - ID_TOTAL_BITS
+    available = capacity - (id_total_bits or ID_TOTAL_BITS)
 
     if available < 64:
         raise ValueError('图像尺寸过小，无法嵌入水印')
@@ -77,14 +87,26 @@ def payload_geometry(height, width):
     return side, capacity
 
 
+def choose_id_repeat(height, width):
+    """按图像容量选择最大可行的 ID 重复份数，保证小图也能嵌入。"""
+    usable_height = ((height + 7) // 8) * 8
+    usable_width = ((width + 7) // 8) * 8
+    capacity = (usable_height // 8) * (usable_width // 8) * 3
+    for repeat in ID_REPEAT_CANDIDATES:
+        if capacity - ID_BITS * repeat >= 64:
+            return repeat
+    raise ValueError('图像尺寸过小，无法嵌入水印')
+
+
 def build_payload(watermark_path, height, width, watermark_id):
     """构建待嵌入比特：水印 ID + 缩放后的水印图像"""
-    side, _ = payload_geometry(height, width)
+    repeat = choose_id_repeat(height, width)
+    side, _ = payload_geometry(height, width, ID_BITS * repeat)
     watermark_image = Image.open(watermark_path).convert('L').resize(
         (side, side), Image.LANCZOS
     )
     watermark_bits = watermark_to_bits(np.array(watermark_image))
-    return id_to_bits(watermark_id) + watermark_bits, side
+    return id_to_bits(watermark_id, repeat) + watermark_bits, side, repeat
 
 
 def generate_watermark_id(garden_code, asset_type_code='IMG'):
@@ -236,7 +258,7 @@ def embed_raster_watermark(image_path, watermark_path, output_folder, method='dc
     image_array = load_image_array(image_path, 'L')
 
     height, width = image_array.shape[:2]
-    watermark_bits, watermark_side = build_payload(
+    watermark_bits, watermark_side, id_repeat = build_payload(
         watermark_path, height, width, watermark_id
     )
 
@@ -270,7 +292,8 @@ def embed_raster_watermark(image_path, watermark_path, output_folder, method='dc
         'watermark_id': watermark_id,
         'method': method,
         'psnr': psnr,
-        'watermark_bits_count': len(watermark_bits)
+        'watermark_bits_count': len(watermark_bits),
+        'id_repeat': id_repeat
     }
 
 
@@ -298,7 +321,7 @@ def embed_raster_watermark_color(image_path, watermark_path, output_folder, meth
     image_array = load_image_array(image_path, 'RGB')
     height, width = image_array.shape[:2]
 
-    watermark_bits, watermark_side = build_payload(
+    watermark_bits, watermark_side, id_repeat = build_payload(
         watermark_path, height, width, watermark_id
     )
 
@@ -339,5 +362,6 @@ def embed_raster_watermark_color(image_path, watermark_path, output_folder, meth
         'watermarked_path': output_path,
         'watermark_id': watermark_id,
         'method': method,
-        'psnr': avg_psnr
+        'psnr': avg_psnr,
+        'id_repeat': id_repeat
     }

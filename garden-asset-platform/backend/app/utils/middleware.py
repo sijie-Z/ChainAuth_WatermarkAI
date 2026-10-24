@@ -72,21 +72,25 @@ def rate_limit(limit=100, window=60):
                 response.status_code = 429
                 return response
 
-            # 优先使用Redis
+            # 优先使用Redis；限流判断本身不能包住视图调用，
+            # 否则视图异常会被 except 吞掉并再次执行一遍。
+            redis_allowed = None
             try:
                 redis_client = current_app.extensions.get('redis')
                 if redis_client:
                     count = redis_client.incr(key)
                     if count == 1:
                         redis_client.expire(key, window)
-                    if count > limit:
-                        return too_many_requests()
-                    return f(*args, **kwargs)
+                    redis_allowed = count <= limit
             except Exception as e:
                 logger.warning(f'Redis限流失败，切换到内存限流: {e}')
+                redis_allowed = None
+
+            if redis_allowed is False:
+                return too_many_requests()
 
             # 降级到内存限流
-            if not _check_rate_limit_memory(key, limit, window):
+            if redis_allowed is None and not _check_rate_limit_memory(key, limit, window):
                 return too_many_requests()
 
             return f(*args, **kwargs)
@@ -117,7 +121,8 @@ def security_headers(app):
             f"img-src 'self' data: blob:; "
             f"font-src 'self' data:; "
             f"connect-src 'self' blob:; "
-            f"media-src 'self'; "
+            f"media-src 'self' blob:; "
+            f"frame-src 'self' blob:; "
             f"object-src 'none'; "
             f"frame-ancestors 'none'; "
             f"base-uri 'self'; "

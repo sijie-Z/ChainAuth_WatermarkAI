@@ -16,11 +16,11 @@
     <div class="content-card">
       <div class="filter-bar">
         <el-radio-group v-model="filterStatus" @change="handleFilterChange">
-          <el-radio-button label="">全部</el-radio-button>
-          <el-radio-button label="pending">审批中</el-radio-button>
-          <el-radio-button label="active">生效中</el-radio-button>
-          <el-radio-button label="expired">已过期</el-radio-button>
-          <el-radio-button label="revoked">已撤销</el-radio-button>
+          <el-radio-button value="">全部</el-radio-button>
+          <el-radio-button value="pending">审批中</el-radio-button>
+          <el-radio-button value="active">生效中</el-radio-button>
+          <el-radio-button value="expired">已过期</el-radio-button>
+          <el-radio-button value="revoked">已撤销</el-radio-button>
         </el-radio-group>
       </div>
 
@@ -40,7 +40,7 @@
             <el-tag size="small">{{ getLicenseType(row.license_type) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="licensee_name" label="授权方" width="100">
+        <el-table-column prop="licensee_name" label="被授权方" width="100">
           <template #default="{ row }">
             {{ row.licensee_name || '-' }}
           </template>
@@ -67,11 +67,35 @@
             {{ row.approved_at ? formatDate(row.approved_at) : '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="240">
           <template #default="{ row }">
-            <el-button size="small" @click="viewDetail(row)">详情</el-button>
-            <el-button size="small" type="primary" @click="downloadContract(row)" :disabled="row.status !== 'active'">
+            <el-button size="small" link type="primary" @click="viewDetail(row)">详情</el-button>
+            <el-button
+              size="small"
+              link
+              type="primary"
+              @click="downloadContract(row)"
+              :disabled="!['active', 'expired'].includes(row.status)"
+            >
               合同
+            </el-button>
+            <el-button
+              v-if="row.can_renew"
+              size="small"
+              link
+              type="warning"
+              @click="openRenew(row)"
+            >
+              续期
+            </el-button>
+            <el-button
+              v-if="row.can_revoke"
+              size="small"
+              link
+              type="danger"
+              @click="openRevoke(row)"
+            >
+              撤销
             </el-button>
           </template>
         </el-table-column>
@@ -90,7 +114,7 @@
     </div>
 
     <!-- 详情对话框 -->
-    <el-dialog v-model="detailDialog.visible" title="授权详情" width="600px">
+    <el-dialog v-model="detailDialog.visible" title="授权详情" width="min(600px, 92vw)">
       <el-descriptions :column="2" border>
         <el-descriptions-item label="授权编码">{{ detailDialog.license_code || '-' }}</el-descriptions-item>
         <el-descriptions-item label="状态">
@@ -100,9 +124,20 @@
         </el-descriptions-item>
         <el-descriptions-item label="资产标题">{{ detailDialog.asset_title || '-' }}</el-descriptions-item>
         <el-descriptions-item label="授权类型">{{ getLicenseType(detailDialog.license_type) }}</el-descriptions-item>
-        <el-descriptions-item label="授权方">{{ detailDialog.licensee_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="被授权方">{{ detailDialog.licensee_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="申请方">{{ detailDialog.applicant_name || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="有效期">{{ detailDialog.end_time ? formatDate(detailDialog.end_time) : '-' }}</el-descriptions-item>
+        <el-descriptions-item label="有效期">{{ detailDialog.start_time ? formatDate(detailDialog.start_time) : '-' }} 至 {{ detailDialog.end_time ? formatDate(detailDialog.end_time) : '长期' }}</el-descriptions-item>
+        <el-descriptions-item label="授权地域">{{ detailDialog.territory || '未指定' }}</el-descriptions-item>
+        <el-descriptions-item label="授权版本">
+          {{ detailDialog.version_no ? `v${detailDialog.version_no}` : '历史授权（不限版本）' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="独家授权">{{ detailDialog.is_exclusive ? '是' : '否' }}</el-descriptions-item>
+        <el-descriptions-item label="执行范围" :span="2">
+          {{ detailDialog.scope_summary || '按授权合同约定' }}
+        </el-descriptions-item>
+        <el-descriptions-item v-if="detailDialog.max_downloads" label="下载用量" :span="2">
+          {{ detailDialog.download_count || 0 }} / {{ detailDialog.max_downloads }} 次
+        </el-descriptions-item>
         <el-descriptions-item label="审批人">{{ detailDialog.approver_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="申请用途" :span="2">{{ detailDialog.purpose || detailDialog.usage_scope || '-' }}</el-descriptions-item>
         <el-descriptions-item label="审批意见" :span="2">{{ detailDialog.approve_comment || '-' }}</el-descriptions-item>
@@ -111,14 +146,57 @@
         </el-descriptions-item>
       </el-descriptions>
     </el-dialog>
+
+    <!-- 续期 -->
+    <el-dialog v-model="renewDialog.visible" title="授权续期" width="min(460px, 92vw)">
+      <p class="dialog-note">
+        {{ renewDialog.license?.license_code }} · 当前到期
+        {{ renewDialog.license?.end_time ? formatDate(renewDialog.license.end_time) : '长期' }}
+      </p>
+      <el-date-picker
+        v-model="renewDialog.endTime"
+        type="date"
+        placeholder="选择新的到期日期"
+        value-format="YYYY-MM-DD"
+        :disabled-date="disabledRenewDate"
+        style="width: 100%"
+      />
+      <template #footer>
+        <el-button @click="renewDialog.visible = false">取消</el-button>
+        <el-button type="primary" :loading="renewDialog.loading" :disabled="!renewDialog.endTime" @click="submitRenew">
+          确认续期
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 撤销 -->
+    <el-dialog v-model="revokeDialog.visible" title="撤销授权" width="min(460px, 92vw)">
+      <p class="dialog-note">
+        撤销后 {{ revokeDialog.license?.licensee_name || '被授权方' }} 将立即无法继续下载该资产，历史下载记录仍保留。
+      </p>
+      <el-input
+        v-model="revokeDialog.reason"
+        type="textarea"
+        :rows="3"
+        maxlength="500"
+        show-word-limit
+        placeholder="撤销原因（可选）"
+      />
+      <template #footer>
+        <el-button @click="revokeDialog.visible = false">取消</el-button>
+        <el-button type="danger" :loading="revokeDialog.loading" @click="submitRevoke">
+          确认撤销
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { parseBackendDate } from '@/utils'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
-import api from '@/api'
 import { licenseApi } from '@/api/modules'
 
 const loading = ref(false)
@@ -131,6 +209,102 @@ const filterStatus = ref('')
 const detailDialog = ref({
   visible: false
 })
+
+const renewDialog = ref({
+  visible: false,
+  license: null,
+  endTime: '',
+  loading: false
+})
+
+const revokeDialog = ref({
+  visible: false,
+  license: null,
+  reason: '',
+  loading: false
+})
+
+function formatInputDate(date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function openRenew(row) {
+  const currentEnd = row.end_time ? parseBackendDate(row.end_time) : null
+  const base = currentEnd && currentEnd > new Date() ? new Date(currentEnd) : new Date()
+  base.setDate(base.getDate() + 365)
+  renewDialog.value = {
+    visible: true,
+    license: row,
+    endTime: formatInputDate(base),
+    loading: false
+  }
+}
+
+function disabledRenewDate(date) {
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  const currentEnd = renewDialog.value.license?.end_time
+    ? parseBackendDate(renewDialog.value.license.end_time)
+    : null
+  const minimum = currentEnd && currentEnd > now ? currentEnd : now
+  return date <= minimum
+}
+
+async function submitRenew() {
+  const license = renewDialog.value.license
+  if (!license || !renewDialog.value.endTime) return
+  renewDialog.value.loading = true
+  try {
+    const response = await licenseApi.renew(license.id, {
+      end_time: renewDialog.value.endTime
+    })
+    if (response.data?.code === 200) {
+      ElMessage.success('授权已续期')
+      renewDialog.value.visible = false
+      await loadLicenses()
+    } else {
+      ElMessage.error(response.data?.message || '续期失败')
+    }
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '续期失败')
+  } finally {
+    renewDialog.value.loading = false
+  }
+}
+
+function openRevoke(row) {
+  revokeDialog.value = {
+    visible: true,
+    license: row,
+    reason: '',
+    loading: false
+  }
+}
+
+async function submitRevoke() {
+  const license = revokeDialog.value.license
+  if (!license) return
+  revokeDialog.value.loading = true
+  try {
+    const response = await licenseApi.revoke(license.id, {
+      reason: revokeDialog.value.reason.trim()
+    })
+    if (response.data?.code === 200) {
+      ElMessage.success('授权已撤销')
+      revokeDialog.value.visible = false
+      await loadLicenses()
+    } else {
+      ElMessage.error(response.data?.message || '撤销失败')
+    }
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '撤销失败')
+  } finally {
+    revokeDialog.value.loading = false
+  }
+}
 
 function handleFilterChange() {
   page.value = 1
@@ -166,37 +340,29 @@ function viewDetail(row) {
   }
 }
 
-// 构造带鉴权的下载请求：/api 路径走默认 baseURL，站点根路径保持原样，绝对 URL 直接请求
-function buildDownloadRequest(path) {
-  const config = { responseType: 'blob', silent: true }
-  if (/^https?:\/\//i.test(path)) {
-    return { url: path, config }
-  }
-  if (path.startsWith('/api/')) {
-    return { url: path.slice(4), config }
-  }
-  if (path.startsWith('/')) {
-    return { url: path, config: { ...config, baseURL: '' } }
-  }
-  return { url: path, config }
-}
-
+// 合同按服务端生成的正文下载为文本，不再回退到资产文件
 async function downloadContract(row) {
-  const rawPath = row.contract_file || (row.asset_id ? `/api/assets/${row.asset_id}/download` : '')
-  if (!rawPath) {
-    ElMessage.warning('暂无合同文件')
+  if (!row?.id) {
+    ElMessage.warning('授权记录不存在')
     return
   }
 
   try {
-    // 通过 axios 实例下载，自动携带 Authorization 头
-    const { url: requestUrl, config } = buildDownloadRequest(rawPath)
-    const response = await api.get(requestUrl, config)
-    const blob = new Blob([response.data])
+    const response = await licenseApi.getContract(row.id)
+    if (response.data?.code !== 200) {
+      ElMessage.warning(response.data?.message || '合同暂不可用')
+      return
+    }
+    const content = response.data.data?.contract_content || ''
+    if (!content) {
+      ElMessage.warning('合同内容为空')
+      return
+    }
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
     const objectUrl = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = objectUrl
-    link.download = `${row.license_code || row.asset_code || 'license'}-contract`
+    link.download = `${row.license_code || row.asset_code || 'license'}-contract.txt`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -204,17 +370,22 @@ async function downloadContract(row) {
     ElMessage.success('合同下载开始')
   } catch (error) {
     console.error('下载合同失败:', error)
-    ElMessage.error('合同下载失败，请稍后重试')
+    ElMessage.error(error.response?.data?.message || '合同下载失败，请稍后重试')
   }
 }
 
 function getLicenseType(type) {
   const map = {
     personal: '个人使用',
+    non_commercial: '非商业使用',
     commercial: '商业使用',
+    commercial_ad: '商业-广告',
+    commercial_product: '商业-产品',
+    commercial_publish: '商业-出版',
     academic: '学术研究',
     display: '展览展示',
-    derivative: '衍生创作'
+    derivative: '衍生创作',
+    exclusive: '独家授权'
   }
   return map[type] || type || '-'
 }
@@ -242,8 +413,8 @@ function getStatusType(status) {
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString('zh-CN')
+  const date = parseBackendDate(dateStr)
+  return date ? date.toLocaleDateString('zh-CN') : ''
 }
 
 onMounted(() => {
@@ -297,6 +468,14 @@ onMounted(() => {
   border-radius: $radius-lg;
   box-shadow: $shadow-sm;
   padding: $spacing-xl;
+}
+
+// ========== 续期/撤销弹窗 ==========
+.dialog-note {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: $text-secondary;
 }
 
 // ========== 状态筛选 ==========

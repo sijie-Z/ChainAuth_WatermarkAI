@@ -8,7 +8,8 @@ import {
   getAssetTypeName,
   getLicenseTypeName,
   getStatusTagType,
-  getStatusText
+  getStatusText,
+  parseBackendDate
 } from '@/utils'
 
 describe('formatDate', () => {
@@ -21,6 +22,14 @@ describe('formatDate', () => {
     const date = new Date(2026, 0, 2, 3, 4, 5)
     expect(formatDate(date)).toBe('2026-01-02')
     expect(formatDate(date, 'YYYY/MM/DD HH:mm:ss')).toBe('2026/01/02 03:04:05')
+  })
+
+  it('treats backend naive timestamps as UTC', () => {
+    expect(parseBackendDate('2026-01-02T03:04:05').toISOString())
+      .toBe('2026-01-02T03:04:05.000Z')
+    expect(parseBackendDate('2026-01-02T03:04:05Z').toISOString())
+      .toBe('2026-01-02T03:04:05.000Z')
+    expect(parseBackendDate('not-a-date')).toBeNull()
   })
 })
 
