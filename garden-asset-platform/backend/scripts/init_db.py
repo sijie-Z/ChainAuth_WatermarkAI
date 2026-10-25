@@ -26,6 +26,18 @@ _ADMIN_PASSWORD_GENERATED = False
 _TEST_USERS_CREATED = 0
 
 
+def _write_initial_password(password):
+    """把一次性初始密码写入仅当前用户可读的文件，避免明文进日志。"""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    instance_dir = os.path.join(root, 'instance')
+    os.makedirs(instance_dir, exist_ok=True)
+    path = os.path.join(instance_dir, 'initial_admin_password.txt')
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w', encoding='utf-8') as handle:
+        handle.write(password + '\n')
+    return path
+
+
 def _is_production():
     env = os.environ.get('FLASK_CONFIG') or os.environ.get('FLASK_ENV') or ''
     return env.lower() == 'production'
@@ -89,11 +101,12 @@ def create_admin_user():
         if configured:
             print("Admin user created with ADMIN_INITIAL_PASSWORD.")
         elif _ADMIN_PASSWORD_GENERATED:
+            _write_initial_password(admin_password)
             print("Admin user created with a generated random password.")
-            print(f"  Initial admin password: {admin_password}")
-            print("  请保存该密码，并在首次登录后立即修改。")
+            print("  初始密码已写入 backend/instance/initial_admin_password.txt")
+            print("  该文件权限为 600，请首次登录后立即修改密码并删除文件。")
         else:
-            print("Admin user created! Username: admin, Password: admin123 (change it before deployment)")
+            print("Admin user created (development demo password; see README/USER-GUIDE).")
     else:
         print("Admin user already exists.")
 
@@ -159,7 +172,7 @@ def create_test_users():
 
     db.session.commit()
     _TEST_USERS_CREATED = created
-    print(f"Created {created} test users! Password: 123456")
+    print(f"Created {created} test users (demo password documented in README).")
 
 
 def create_watermark_dir():
@@ -248,9 +261,11 @@ def init_database():
         print("="*50)
         print("\nAccounts:")
         if _ADMIN_PASSWORD:
-            print(f"  Admin: admin / {_ADMIN_PASSWORD}")
+            print("  Admin: admin")
             if _ADMIN_PASSWORD_GENERATED:
-                print("  （随机初始密码，请立即保存并在首次登录后修改）")
+                print("  初始密码文件：backend/instance/initial_admin_password.txt")
+            else:
+                print("  密码见初始化提示或 ADMIN_INITIAL_PASSWORD")
         else:
             print("  Admin: admin（已存在，密码保持不变）")
         if _TEST_USERS_CREATED:

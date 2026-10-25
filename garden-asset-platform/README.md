@@ -168,7 +168,7 @@ cd frontend && npm run build
 
 开发环境初始化后：管理员 `admin / admin123` · 审批员 `adm1, adm2 / 123456` · 用户 `user1, user2 / 123456`
 
-> 生产环境（`FLASK_ENV=production`）初始化时不再创建 `123456` 演示账号；未设置 `ADMIN_INITIAL_PASSWORD` 会生成一次性随机管理员密码并打印在初始化输出中。演示部署可显式设置 `SEED_DEMO_USERS=true`。正式部署前请立即修改管理员密码。
+> 生产环境（`FLASK_ENV=production`）初始化时不再创建 `123456` 演示账号；未设置 `ADMIN_INITIAL_PASSWORD` 会生成一次性随机管理员密码，并写入 `backend/instance/initial_admin_password.txt`（权限 600）。演示部署可显式设置 `SEED_DEMO_USERS=true`。正式部署前请立即修改管理员密码。
 
 ## 项目结构
 

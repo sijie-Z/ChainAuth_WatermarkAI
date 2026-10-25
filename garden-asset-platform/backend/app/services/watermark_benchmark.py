@@ -204,7 +204,13 @@ def run_benchmark(image_path, watermark_path=None, max_side=640):
     from algorithm.raster.extract import extract_raster_watermark
     from app.services.watermark_service import WatermarkService
 
-    if not os.path.exists(image_path):
+    upload_root = os.path.abspath(
+        os.path.join(current_app.config.get('UPLOAD_FOLDER', './uploads'), 'benchmark_tmp')
+    )
+    os.makedirs(upload_root, exist_ok=True)
+    image_name = os.path.basename(image_path or '')
+    image_path = os.path.join(upload_root, image_name) if image_name else ''
+    if not image_path or not os.path.isfile(image_path):
         raise ValueError('图片文件不存在')
 
     try:
@@ -212,10 +218,6 @@ def run_benchmark(image_path, watermark_path=None, max_side=640):
     except (TypeError, ValueError):
         max_side = 640
 
-    upload_root = os.path.abspath(
-        os.path.join(current_app.config.get('UPLOAD_FOLDER', './uploads'), 'benchmark_tmp')
-    )
-    os.makedirs(upload_root, exist_ok=True)
     workdir = tempfile.mkdtemp(prefix='bench_', dir=upload_root)
 
     started = time.perf_counter()

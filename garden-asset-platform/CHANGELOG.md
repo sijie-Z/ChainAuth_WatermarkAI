@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-10-25
+
+### Security
+- 前端 ESLint 工具链升级：`eslint-plugin-vue` 10 / `vue-eslint-parser` 10 / `postcss-selector-parser` 7.1.7，关闭 Dependabot 中危告警；规则集切换为 `plugin:vue/essential`
+- CodeQL 路径污点收口：水印实验、溯源、侵权线索、版本上传与缩略图的临时/落盘文件名统一为服务端 UUID，扩展名走白名单常量映射，不再拼接用户文件名；非法或缺失路径返回 404
+
+### Fixed
+- 初始化管理员密码不再打印到日志：生产随机密码写入 `backend/instance/initial_admin_password.txt`（权限 600），演示密码只在文档中说明
+
 ## [1.8.0] - 2026-10-24
 
 ### Added

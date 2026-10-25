@@ -26,6 +26,7 @@ from app.models.user import User
 from app.resources.asset import allowed_file, calculate_file_hash, validate_magic_bytes
 from app.services.blockchain_service import blockchain_service
 from app.services.notification_service import add_notification_event
+from app.utils.paths import VERSION_EXT_ALIASES, canonical_extension, uuid_filename
 
 VERSION_ADMIN_ROLES = ('admin', 'asset_admin')
 VERSION_DIRNAME = 'versions'
@@ -325,7 +326,10 @@ class AssetVersionListResource(Resource):
             return {'code': 400, 'message': '不支持的文件类型'}, 400
         if '.' not in original_name:
             return {'code': 400, 'message': '文件名缺少扩展名'}, 400
-        ext = original_name.rsplit('.', 1)[1].lower()
+        canonical_ext = canonical_extension(original_name, VERSION_EXT_ALIASES)
+        if not canonical_ext:
+            return {'code': 400, 'message': '不支持的文件类型'}, 400
+        ext = canonical_ext.lstrip('.')
         if not validate_magic_bytes(file, ext):
             return {'code': 400, 'message': '文件内容与扩展名不匹配'}, 400
 
@@ -346,7 +350,7 @@ class AssetVersionListResource(Resource):
         file_hash = calculate_file_hash(file)
 
         save_dir = _version_save_dir(asset.id)
-        file_path = os.path.join(save_dir, f'{uuid.uuid4().hex}.{ext}')
+        file_path = os.path.join(save_dir, uuid_filename(canonical_ext))
         file.save(file_path)
         file_size = os.path.getsize(file_path)
 
@@ -437,10 +441,12 @@ class AssetVersionRestoreResource(Resource):
             return {'code': 404, 'message': '版本文件不存在'}, 404
 
         # 复制为新文件，保留历史版本文件不动
-        ext = (source.file_format or os.path.splitext(source_path)[1].lstrip('.')).lower()
+        raw_ext = '.' + (
+            source.file_format or os.path.splitext(source_path)[1].lstrip('.')
+        ).lower().lstrip('.')
+        ext = VERSION_EXT_ALIASES.get(raw_ext)
         save_dir = _version_save_dir(asset.id)
-        file_name = f'{uuid.uuid4().hex}.{ext}' if ext else uuid.uuid4().hex
-        file_path = os.path.join(save_dir, file_name)
+        file_path = os.path.join(save_dir, uuid_filename(ext or ''))
         shutil.copy2(source_path, file_path)
 
         file_hash = _hash_file(file_path)
