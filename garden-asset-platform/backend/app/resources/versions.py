@@ -326,10 +326,11 @@ class AssetVersionListResource(Resource):
             return {'code': 400, 'message': '不支持的文件类型'}, 400
         if '.' not in original_name:
             return {'code': 400, 'message': '文件名缺少扩展名'}, 400
-        ext = canonical_extension(original_name, VERSION_EXT_ALIASES)
-        if not ext:
+        canonical_ext = canonical_extension(original_name, VERSION_EXT_ALIASES)
+        if not canonical_ext:
             return {'code': 400, 'message': '不支持的文件类型'}, 400
-        if not validate_magic_bytes(file, ext.lstrip('.')):
+        ext = canonical_ext.lstrip('.')
+        if not validate_magic_bytes(file, ext):
             return {'code': 400, 'message': '文件内容与扩展名不匹配'}, 400
 
         file.seek(0, os.SEEK_END)
@@ -349,7 +350,7 @@ class AssetVersionListResource(Resource):
         file_hash = calculate_file_hash(file)
 
         save_dir = _version_save_dir(asset.id)
-        file_path = os.path.join(save_dir, uuid_filename(ext))
+        file_path = os.path.join(save_dir, uuid_filename(canonical_ext))
         file.save(file_path)
         file_size = os.path.getsize(file_path)
 
