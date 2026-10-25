@@ -1,6 +1,5 @@
 """断点续传上传"""
 import io
-import uuid
 
 from PIL import Image
 
