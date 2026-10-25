@@ -9,7 +9,7 @@
 
 ## 最新发布
 
-[v1.9.0 · 账号找回、邮箱验证与上传并发](https://github.com/sijie-Z/ChainAuth_WatermarkAI/releases/tag/v1.9.0) · [主项目文档](garden-asset-platform/README.md) · [完整变更](garden-asset-platform/CHANGELOG.md)
+[v1.10.0 · 大文件分块断点续传](https://github.com/sijie-Z/ChainAuth_WatermarkAI/releases/tag/v1.10.0) · [主项目文档](garden-asset-platform/README.md) · [完整变更](garden-asset-platform/CHANGELOG.md)
 
 ## 演示
 
@@ -23,7 +23,7 @@
 | **证据链** | **证据包核验** |
 | ![证据链](garden-asset-platform/docs/assets/screenshots/04-evidence-chain.png) | ![证据包核验](garden-asset-platform/docs/assets/screenshots/13-evidence-verify.png) |
 
-> 视频、GIF、封面与全部 16 张截图也作为附件挂在 [v1.9.0 Release](https://github.com/sijie-Z/ChainAuth_WatermarkAI/releases/tag/v1.9.0) 上。
+> 视频、GIF、封面与全部 16 张截图也作为附件挂在 [v1.10.0 Release](https://github.com/sijie-Z/ChainAuth_WatermarkAI/releases/tag/v1.10.0) 上。
 
 本仓库包含苏州园林数字资产安全分发与溯源系统的完整实现：
 
