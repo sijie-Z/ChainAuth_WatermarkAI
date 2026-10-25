@@ -32,6 +32,7 @@
 | `screenshots/13-evidence-verify.png` | 证据包公开核验通过 |
 | `screenshots/15-forgot-password.png` | 找回密码：邮件链接/开发调试链接 |
 | `screenshots/16-email-verification.png` | 账号设置中的邮箱验证状态与发送入口 |
+| `screenshots/17-resume-upload.png` | 未完成的大文件上传：服务端保留 48 小时，可重新选择文件续传或放弃 |
 
 ## 重新生成
 
@@ -41,6 +42,7 @@
 cd frontend
 node scripts/capture-media.mjs screenshots
 node scripts/capture-media.mjs video
+node scripts/capture-resume-shot.mjs   # 单独生成 17-resume-upload.png
 ```
 
 可选环境变量：

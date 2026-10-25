@@ -12,6 +12,7 @@ from flask import request, send_file, current_app
 from flask_restful import Resource
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from werkzeug.security import generate_password_hash
+from sqlalchemy import or_, update
 
 from app.extensions import db
 from app.models import Asset, AssetShare, ShareDownload, User
@@ -347,8 +348,22 @@ class PublicShareDownloadResource(Resource):
         if not file_path or not os.path.isfile(file_path):
             return {'code': 404, 'message': '文件不存在'}, 404
 
-        share.download_count = (share.download_count or 0) + 1
-        asset.download_count = (asset.download_count or 0) + 1
+        # 原子占用一次下载配额：并发请求只有一个能把计数从上限前推进
+        quota = db.session.execute(
+            update(AssetShare)
+            .where(
+                AssetShare.id == share.id,
+                or_(
+                    AssetShare.max_downloads.is_(None),
+                    AssetShare.download_count < AssetShare.max_downloads,
+                ),
+            )
+            .values(download_count=AssetShare.download_count + 1)
+        )
+        if quota.rowcount != 1:
+            db.session.rollback()
+            return {'code': 410, 'message': '该分享的下载次数已用完'}, 410
+        asset.download_count = Asset.download_count + 1
         db.session.add(ShareDownload(
             share_id=share.id,
             asset_id=asset.id,

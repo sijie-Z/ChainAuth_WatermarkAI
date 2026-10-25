@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from flask import request
 from flask_restful import Resource
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from sqlalchemy import or_
+from sqlalchemy import or_, update
 from sqlalchemy.exc import IntegrityError
 from app.extensions import db
 from app.models.license import License, LicenseApplication, LicenseContract
@@ -49,6 +49,12 @@ class LicenseApplyResource(Resource):
         if scope_error:
             return {'code': 400, 'message': scope_error}, 400
 
+        duration_months, duration_error = self._parse_duration(
+            data.get('valid_period')
+        )
+        if duration_error:
+            return {'code': 400, 'message': duration_error}, 400
+
         application = LicenseApplication(
             application_code=f"APP-{datetime.now().strftime('%Y%m%d%H%M%S%f')}-{uuid.uuid4().hex[:4].upper()}",
             asset_id=asset_id,
@@ -61,7 +67,7 @@ class LicenseApplyResource(Resource):
             allowed_formats=scope_fields['allowed_formats'],
             max_downloads=scope_fields['max_downloads'],
             territory=scope_fields['territory'],
-            duration_months=self._parse_duration(data.get('valid_period')),
+            duration_months=duration_months,
             is_exclusive=data.get('is_exclusive', False),
             contact_person=data.get('contact', '')
         )
@@ -88,10 +94,15 @@ class LicenseApplyResource(Resource):
         }
 
     def _parse_duration(self, period):
-        if not period:
-            return None
+        """返回 (月数, 错误)。只有显式 permanent 才允许无到期时间。"""
         mapping = {'1m': 1, '3m': 3, '6m': 6, '1y': 12, 'permanent': None}
-        return mapping.get(period)
+        if period is None or str(period).strip() == '':
+            # 缺省按 3 个月，避免静默生成永久授权
+            return 3, None
+        period = str(period).strip()
+        if period not in mapping:
+            return None, '授权期限选项无效'
+        return mapping[period], None
 
 
 class LicensePendingResource(Resource):
@@ -346,12 +357,20 @@ class LicenseApproveResource(Resource):
                 return {'code': 403, 'message': '该申请已分配给其他审批人'}, 403
 
             if action == 'approve':
+                # 对资产行做一次空更新，取得写锁：并发二级审批串行化，
+                # 后续冲突查询才能看到对方已提交的独家授权。
+                db.session.execute(
+                    update(Asset)
+                    .where(Asset.id == application.asset_id)
+                    .values(updated_at=Asset.updated_at)
+                )
                 conflict = _exclusive_conflict(
                     application.asset_id,
                     bool(application.is_exclusive),
                     application.license_type
                 )
                 if conflict:
+                    db.session.rollback()
                     return {
                         'code': 409,
                         'message': (

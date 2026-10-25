@@ -126,10 +126,10 @@
                 @error="previewError = true"
               />
               <el-image
-                v-else-if="asset.asset_type === 'image' || asset.asset_type === 'vector'"
+                v-else-if="asset.asset_type === 'image'"
                 class="asset-photo"
                 :src="getAssetUrl(asset)"
-                :preview-src-list="asset.asset_type === 'image' ? [getAssetUrl(asset)] : []"
+                :preview-src-list="[getAssetUrl(asset)]"
                 :preview-teleported="true"
                 hide-on-click-modal
                 fit="contain"
@@ -342,8 +342,12 @@
                   :disabled="licenseStatusError"
                   @click="applyLicense"
                 >
-                  {{ rejectedApplication ? '重新申请授权' : '申请授权' }}
+                  {{ (rejectedApplication || staleLicense) ? '重新申请授权' : '申请授权' }}
                 </el-button>
+                <p v-if="staleLicense && !pendingApplication" class="side-hint">
+                  原授权对应 v{{ staleLicense.version_no || '历史版本' }}，资产已更新为
+                  v{{ staleLicense.current_version_no || '当前版本' }}，需重新申请授权。
+                </p>
               </template>
               <el-button class="side-action" @click="goBack">返回资产列表</el-button>
               <el-button v-if="canManage" text class="side-action" @click="openAssetLicenses">
@@ -929,7 +933,7 @@ import {
 import { assetApi, collectionApi, licenseApi, watermarkApi, blockchainApi, taskApi } from '@/api/modules'
 import { useUserStore } from '@/stores/user'
 import { copyToClipboard, parseBackendDate } from '@/utils'
-import { startAssetDownload, getAssetPreviewUrl } from '@/utils/download'
+import { startAssetDownload, startVersionDownload, getAssetPreviewUrl } from '@/utils/download'
 import EvidenceChain from '@/components/common/EvidenceChain.vue'
 import AnnotationBoard from '@/components/asset/AnnotationBoard.vue'
 import CommentSection from '@/components/asset/CommentSection.vue'
@@ -953,6 +957,8 @@ const editForm = ref({ title: '', description: '', tags: [] })
 const favorited = ref(false)
 const favoriteLoading = ref(false)
 const tags = ref([])
+const tagsLoaded = ref(false)
+const tagsError = ref(false)
 const related = ref([])
 const myLicenses = ref([])
 const extrasLoading = ref(true)
@@ -1050,11 +1056,17 @@ const canManage = computed(() => {
   const role = userStore.userRole
   return ['admin', 'asset_admin'].includes(role) || isOwner.value
 })
-const activeLicense = computed(() => myLicenses.value.find(license => {
+const licenseUsable = license => {
   if (license.status !== 'active') return false
-  if (!license.end_time) return true
-  return new Date(license.end_time).getTime() > Date.now()
-}) || null)
+  if (license.end_time && new Date(license.end_time).getTime() <= Date.now()) return false
+  return !license.version_stale
+}
+const activeLicense = computed(() => myLicenses.value.find(licenseUsable) || null)
+const staleLicense = computed(() => myLicenses.value.find(license => (
+  license.status === 'active'
+  && (!license.end_time || new Date(license.end_time).getTime() > Date.now())
+  && license.version_stale
+)) || null)
 const pendingApplication = computed(() => myApplications.value.find(application =>
   ['pending', 'adm1_approved'].includes(application.status)
 ) || null)
@@ -1095,6 +1107,9 @@ const previewPlaceholderText = computed(() => {
   if (asset.value.asset_type === 'document') {
     return '该文档格式暂不支持在线预览，可下载后查看'
   }
+  if (asset.value.asset_type === 'vector') {
+    return '矢量数据暂不提供在线预览，可下载后在地理信息软件中查看'
+  }
   return `${typeLabel(asset.value.asset_type)}预览暂不可用`
 })
 const canSubmitPublish = computed(() =>
@@ -1123,6 +1138,15 @@ const assetState = computed(() => {
       description: stage,
       action: '查看审批进度',
       link: '/license/my?tab=pending'
+    }
+  }
+  if (staleLicense.value) {
+    return {
+      tone: 'warning',
+      title: '原授权对应历史版本',
+      description: `资产已更新为 v${staleLicense.value.current_version_no || '新版本'}，请重新申请授权`,
+      action: '重新申请授权',
+      link: '/license/my'
     }
   }
   if (rejectedApplication.value) {
@@ -1164,6 +1188,8 @@ async function loadAsset() {
 async function loadExtras() {
   const id = route.params.id
   extrasLoading.value = true
+  tagsLoaded.value = false
+  tagsError.value = false
   const results = await Promise.allSettled([
     assetApi.getFavorite(id),
     assetApi.getTags(id),
@@ -1177,6 +1203,9 @@ async function loadExtras() {
   }
   if (results[1].status === 'fulfilled' && results[1].value.data?.code === 200) {
     tags.value = (results[1].value.data.data || []).map(tag => tag.name).filter(Boolean)
+    tagsLoaded.value = true
+  } else {
+    tagsError.value = true
   }
   if (results[2].status === 'fulfilled' && results[2].value.data?.code === 200) {
     related.value = results[2].value.data.data || []
@@ -1582,30 +1611,11 @@ async function downloadVersion(version) {
   if (versionDownloadingId.value) return
   versionDownloadingId.value = version.id
   try {
-    const response = await assetApi.downloadVersion(asset.value.id, version.id)
-    const url = URL.createObjectURL(response.data)
-    const link = document.createElement('a')
-    const ext = version.file_format ? `.${version.file_format.toLowerCase()}` : ''
-    link.href = url
-    link.download = `${asset.value.asset_code}-v${version.version_no}${ext}`
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    URL.revokeObjectURL(url)
+    await startVersionDownload(asset.value.id, version.id)
   } catch (error) {
-    let message = '版本下载失败'
-    const data = error.response?.data
-    if (data instanceof Blob) {
-      try {
-        const parsed = JSON.parse(await data.text())
-        message = parsed.message || message
-      } catch {
-        // 保留默认提示
-      }
-    } else if (data?.message) {
-      message = data.message
-    }
-    ElMessage.error(message)
+    ElMessage.error(
+      error.response?.data?.message || error.message || '版本下载失败'
+    )
   } finally {
     versionDownloadingId.value = null
   }
@@ -1731,6 +1741,14 @@ async function publishAsset() {
 }
 
 function openEditDialog() {
+  if (!tagsLoaded.value) {
+    ElMessage.warning(
+      tagsError.value
+        ? '标签加载失败，请刷新页面后重试，避免保存时覆盖已有标签'
+        : '标签仍在加载，请稍候再编辑'
+    )
+    return
+  }
   editForm.value = {
     title: asset.value.title || '',
     description: asset.value.description || '',
@@ -1747,13 +1765,16 @@ async function saveEdit() {
   const normalizedTags = [...new Set(
     editForm.value.tags.map(tag => String(tag).trim()).filter(Boolean)
   )].slice(0, 20)
+  const payload = {
+    title: editForm.value.title.trim(),
+    description: editForm.value.description
+  }
+  // 仅在用户实际改动标签时整体替换，避免加载异常时清空已有标签
+  const tagsChanged = JSON.stringify(normalizedTags) !== JSON.stringify(tags.value)
+  if (tagsChanged) payload.tags = normalizedTags
   editSaving.value = true
   try {
-    const response = await assetApi.update(asset.value.id, {
-      title: editForm.value.title.trim(),
-      description: editForm.value.description,
-      tags: normalizedTags
-    })
+    const response = await assetApi.update(asset.value.id, payload)
     if (response.data?.code === 200) {
       asset.value = { ...asset.value, ...response.data.data }
       tags.value = normalizedTags
@@ -1774,7 +1795,7 @@ function goToMyLicenses() {
 }
 
 function getCardUrl(item) {
-  return item.id ? `/api/assets/${item.id}/thumbnail?size=card&v=2` : placeholderImage(item.asset_type)
+  return item.id ? `/api/assets/${item.id}/thumbnail?size=card&v=${item.current_version_no || 1}` : placeholderImage(item.asset_type)
 }
 
 function onRelatedImageError(event) {
@@ -1962,9 +1983,7 @@ function typeLabel(type) {
 
 function getAssetUrl(asset) {
   if (asset.id) {
-    const current = versions.value.find(item => item.is_current)
-    const token = current?.file_hash || asset.watermark_id || ''
-    const suffix = token ? `?v=${String(token).slice(0, 10)}` : ''
+    const suffix = `?v=${asset.current_version_no || 1}`
     return `/api/assets/${asset.id}/thumbnail${suffix}`
   }
   return placeholderImage(asset.asset_type)

@@ -92,6 +92,24 @@ def test_preview_requires_license_for_published_asset(
     assert owner.status_code == 200
 
 
+def test_preview_allows_same_origin_iframe_only(
+    client, app, tmp_path, auth_header
+):
+    asset_id = upload(client, app, tmp_path, auth_header)
+
+    preview = client.get(
+        f'/api/assets/{asset_id}/preview', headers=auth_header
+    )
+    assert preview.status_code == 200
+    assert preview.headers['X-Frame-Options'] == 'SAMEORIGIN'
+    assert "frame-ancestors 'self'" in preview.headers['Content-Security-Policy']
+
+    detail = client.get(f'/api/assets/{asset_id}', headers=auth_header)
+    assert detail.status_code == 200
+    assert detail.headers['X-Frame-Options'] == 'DENY'
+    assert "frame-ancestors 'none'" in detail.headers['Content-Security-Policy']
+
+
 def test_preview_draft_limited_to_owner_and_admin(
     client, app, tmp_path, auth_header, admin_header
 ):

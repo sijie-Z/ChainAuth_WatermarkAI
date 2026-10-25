@@ -92,6 +92,8 @@ def validate_application_scope(data, asset):
             return None, '下载次数上限需在 1-10000 之间'
 
     territory = (data.get('territory') or '').strip() or '中国大陆'
+    if territory not in TERRITORY_OPTIONS:
+        return None, '授权地域选项无效'
     if len(territory) > 100:
         return None, '授权地域过长'
 
@@ -134,6 +136,8 @@ def scope_violation(license_row, *, source_format=None, purpose=None,
             )
 
     licensed_territory = (license_row.territory or '').strip()
+    # 新申请已在 validate_application_scope 中限定枚举值；历史授权的
+    # 自由文本地域保持“不限制”的兼容语义，避免旧合同突然无法下载。
     if licensed_territory in TERRITORY_OPTIONS:
         if not territory:
             return f'请声明使用地域（授权地域：{licensed_territory}）'

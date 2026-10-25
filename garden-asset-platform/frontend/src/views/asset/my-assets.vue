@@ -149,6 +149,7 @@ const status = ref('')
 const publishingId = ref('')
 const deletingId = ref('')
 const restoringId = ref('')
+let assetsRequestSeq = 0
 
 const emptyDescription = computed(() => {
   if (status.value === 'deleted') return '回收站是空的'
@@ -156,6 +157,7 @@ const emptyDescription = computed(() => {
 })
 
 async function loadAssets() {
+  const requestId = ++assetsRequestSeq
   loading.value = true
   loadError.value = false
   try {
@@ -164,6 +166,7 @@ async function loadAssets() {
       per_page: perPage.value,
       status: status.value || undefined
     })
+    if (requestId !== assetsRequestSeq) return
     if (response.data?.code === 200) {
       assets.value = response.data.data?.items || []
       total.value = response.data.data?.total || 0
@@ -171,9 +174,9 @@ async function loadAssets() {
       loadError.value = true
     }
   } catch {
-    loadError.value = true
+    if (requestId === assetsRequestSeq) loadError.value = true
   } finally {
-    loading.value = false
+    if (requestId === assetsRequestSeq) loading.value = false
   }
 }
 
@@ -189,7 +192,7 @@ function openAsset(item) {
 }
 
 function getThumbnail(item) {
-  return `/api/assets/${item.id}/thumbnail?size=card&v=2`
+  return `/api/assets/${item.id}/thumbnail?size=card&v=${item.current_version_no || 1}`
 }
 
 function onImageError(event) {

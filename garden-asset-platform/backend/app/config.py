@@ -206,6 +206,10 @@ class Config:
     RESUMABLE_CHUNK_SIZE = int(
         os.environ.get('RESUMABLE_CHUNK_SIZE', str(4 * 1024 * 1024))
     )
+    # 断点续传会话保留时长：超过该时长未更新即标记过期并清理临时文件
+    UPLOAD_SESSION_TTL_HOURS = int(
+        os.environ.get('UPLOAD_SESSION_TTL_HOURS', '48')
+    )
 
     # Webhook 默认禁止内网地址，避免 SSRF；内部自动化场景可显式开启
     WEBHOOK_ALLOW_PRIVATE = os.environ.get(

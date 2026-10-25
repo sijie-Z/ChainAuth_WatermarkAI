@@ -98,6 +98,14 @@ def enqueue_task(task_type, asset, user=None, payload=None):
     version_id = version.id if version else None
     dedupe_key = f'{task_type}:{asset.id}:{version_id or asset.file_hash or "none"}'
 
+    # 锁定资产行，串行化同一资产的任务入队；否则两个并发请求可能
+    # 同时查不到活跃任务而各建一条。
+    db.session.execute(
+        update(Asset)
+        .where(Asset.id == asset.id)
+        .values(updated_at=Asset.updated_at)
+    )
+
     existing = AsyncTask.query.filter(
         AsyncTask.dedupe_key == dedupe_key,
         AsyncTask.status.in_(ACTIVE_STATUSES),
@@ -322,31 +330,66 @@ def _mark_asset_failed(task, asset):
 
 
 def _finish(task, asset, error=None, retryable=False):
-    """写入任务终态或重试状态。"""
+    """写入任务终态或重试状态。
+
+    只有任务仍处于 running 时才落终态：对账线程可能已把超时任务重新
+    排队，迟到的工作线程不能把任务状态改回去。
+    """
     now = datetime.utcnow()
+    values = {'updated_at': now}
+    notify_success = notify_failure = False
     if error is None:
-        task.status = 'succeeded'
-        task.progress = 100
-        task.error_message = None
-        task.finished_at = now
-        task.next_attempt_at = None
-        _notify_task(task, asset, True)
+        values.update(
+            status='succeeded',
+            progress=100,
+            error_message=None,
+            finished_at=now,
+            next_attempt_at=None,
+        )
+        notify_success = True
     else:
-        task.error_message = error[:2000] if error else '任务失败'
+        values['error_message'] = error[:2000] if error else '任务失败'
         if retryable and (task.attempts or 0) < (task.max_attempts or 1):
             delay = min(5 * (task.attempts or 1), 60)
-            task.status = 'queued'
-            task.next_attempt_at = now + timedelta(seconds=delay)
-            task.finished_at = None
-            task.worker_id = None
+            values.update(
+                status='queued',
+                next_attempt_at=now + timedelta(seconds=delay),
+                finished_at=None,
+                worker_id=None,
+            )
         else:
-            task.status = 'failed'
-            task.finished_at = now
-            task.next_attempt_at = None
-            _mark_asset_failed(task, asset)
-            _notify_task(task, asset, False)
+            values.update(
+                status='failed',
+                finished_at=now,
+                next_attempt_at=None,
+            )
+            notify_failure = True
 
+    result = db.session.execute(
+        update(AsyncTask)
+        .where(
+            AsyncTask.id == task.id,
+            AsyncTask.status == 'running',
+            AsyncTask.worker_id == task.worker_id,
+            AsyncTask.attempts == task.attempts,
+        )
+        .values(**values)
+    )
+    if result.rowcount != 1:
+        db.session.rollback()
+        logger.warning(
+            '任务 %s 已被回收/重新领取，忽略迟到的执行结果', task.id
+        )
+        return
+    if notify_failure:
+        # 通知与资产失败状态和任务终态在同一事务提交
+        task.error_message = values.get('error_message')
+        _mark_asset_failed(task, asset)
+        _notify_task(task, asset, False)
+    elif notify_success:
+        _notify_task(task, asset, True)
     db.session.commit()
+    db.session.expire(task)
 
 
 def run_claimed_task(task):
@@ -487,22 +530,47 @@ def reconcile_stuck(timeout_minutes=None):
     ).all()
 
     requeued = failed = 0
+    now = datetime.utcnow()
     for task in stuck:
-        asset = Asset.query.get(task.asset_id) if task.asset_id else None
-        if (task.attempts or 0) < (task.max_attempts or 1):
-            task.status = 'queued'
-            task.error_message = '任务执行超时，已重新排队'
-            task.next_attempt_at = None
-            task.worker_id = None
+        retryable = (task.attempts or 0) < (task.max_attempts or 1)
+        values = (
+            {
+                'status': 'queued',
+                'error_message': '任务执行超时，已重新排队',
+                'next_attempt_at': None,
+                'worker_id': None,
+                'updated_at': now,
+            }
+            if retryable
+            else {
+                'status': 'failed',
+                'error_message': '任务执行超时且已超过最大重试次数',
+                'finished_at': now,
+                'updated_at': now,
+            }
+        )
+        # 条件更新：任务若在查询后已经完成/被取消，不再改动
+        result = db.session.execute(
+            update(AsyncTask)
+            .where(
+                AsyncTask.id == task.id,
+                AsyncTask.status == 'running',
+                AsyncTask.started_at.isnot(None),
+                AsyncTask.started_at < cutoff,
+            )
+            .values(**values)
+        )
+        db.session.commit()
+        if result.rowcount != 1:
+            continue
+        if retryable:
             requeued += 1
         else:
-            task.status = 'failed'
-            task.error_message = '任务执行超时且已超过最大重试次数'
-            task.finished_at = datetime.utcnow()
-            _mark_asset_failed(task, asset)
             failed += 1
-    if stuck:
-        db.session.commit()
+            asset = Asset.query.get(task.asset_id) if task.asset_id else None
+            _mark_asset_failed(task, asset)
+            db.session.commit()
+    if requeued or failed:
         logger.info('任务对账: 重新排队 %s，判失败 %s', requeued, failed)
     return {'requeued': requeued, 'failed': failed}
 

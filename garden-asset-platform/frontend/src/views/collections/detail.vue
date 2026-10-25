@@ -55,7 +55,7 @@
             <div class="asset-thumb">
               <img
                 v-if="!failedThumbs[asset.id]"
-                :src="`/api/assets/${asset.id}/thumbnail?size=card`"
+                :src="`/api/assets/${asset.id}/thumbnail?size=card&v=${asset.current_version_no || 1}`"
                 :alt="asset.title"
                 loading="lazy"
                 @error="markThumbFailed(asset.id)"

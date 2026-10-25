@@ -24,9 +24,7 @@
             multiple
             :auto-upload="false"
             :show-file-list="false"
-            :limit="50"
             :on-change="handleFileChange"
-            :on-exceed="handleExceed"
             accept="image/*,.shp,.geojson,.kml,.kmz,.zip,.pdf,.doc,.docx,.dwg,.dxf,.mp4,.mov,.avi,.mkv,.obj,.fbx,.gltf,.glb,.stl"
             class="asset-uploader"
           >
@@ -41,6 +39,71 @@
             </template>
           </el-upload>
         </el-form-item>
+
+        <section
+          v-if="pendingLoading || pendingSessions.length || pendingError"
+          class="resume-panel"
+          aria-label="未完成的上传"
+        >
+          <header class="resume-head">
+            <div>
+              <strong>未完成的上传</strong>
+              <span v-if="pendingSessions.length">
+                服务端已保留 {{ pendingTtlHours }} 小时；重新选择同一文件即可从断点继续
+              </span>
+            </div>
+            <el-button
+              v-if="pendingError"
+              link
+              type="primary"
+              size="small"
+              @click="loadPendingSessions"
+            >
+              重试
+            </el-button>
+          </header>
+          <p v-if="pendingError" class="resume-error">{{ pendingError }}</p>
+          <p v-else-if="pendingLoading && !pendingSessions.length" class="resume-hint">
+            正在检查未完成的大文件上传…
+          </p>
+          <article
+            v-for="session in visiblePendingSessions"
+            :key="session.upload_id"
+            class="resume-item"
+          >
+            <div class="resume-main">
+              <strong class="resume-name">{{ session.filename }}</strong>
+              <span class="resume-meta">
+                {{ formatFileSize(session.expected_size) }} ·
+                已上传 {{ formatFileSize(session.received_size) }}
+                （{{ sessionProgressText(session) }}%）
+              </span>
+              <el-progress
+                :percentage="sessionProgressText(session)"
+                :stroke-width="4"
+                :show-text="false"
+              />
+            </div>
+            <div class="resume-actions">
+              <el-button
+                size="small"
+                type="primary"
+                plain
+                @click="pickFileForResume(session)"
+              >
+                选择文件继续
+              </el-button>
+              <el-button
+                size="small"
+                link
+                type="danger"
+                @click="cancelPending(session)"
+              >
+                放弃
+              </el-button>
+            </div>
+          </article>
+        </section>
 
         <section v-if="queue.length" class="queue-panel" aria-label="待上传文件队列">
           <header class="queue-head">
@@ -83,6 +146,14 @@
                 <span>{{ formatFileSize(item.size) }}</span>
                 <span class="queue-file-name">{{ item.name }}</span>
                 <el-tag
+                  v-if="item.resumeSession"
+                  size="small"
+                  type="warning"
+                  effect="plain"
+                >
+                  续传 {{ sessionProgressText(item.resumeSession) }}%
+                </el-tag>
+                <el-tag
                   v-if="item.status !== 'ready'"
                   size="small"
                   :type="statusTagType(item)"
@@ -101,7 +172,7 @@
             </div>
             <div class="queue-actions">
               <el-button
-                v-if="item.assetId"
+                v-if="item.assetId && !uploading"
                 link
                 type="primary"
                 size="small"
@@ -238,11 +309,12 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { onBeforeRouteLeave, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Files, UploadFilled } from '@element-plus/icons-vue'
 import { assetApi, gardenApi, watermarkApi, blockchainApi, taskApi } from '@/api/modules'
 import { formatFileSize } from '@/utils'
+import { findResumableSession, sessionProgress } from '@/utils/resumable'
 
 const router = useRouter()
 
@@ -259,6 +331,11 @@ const overallStatus = ref('')
 const queue = ref([])
 let queueSeq = 0
 const RESUMABLE_THRESHOLD = 8 * 1024 * 1024
+const pendingSessions = ref([])
+const pendingLoading = ref(false)
+const pendingError = ref('')
+const pendingTtlHours = ref(48)
+const resumeTargetId = ref('')
 
 const TYPE_BY_EXT = {
   jpg: 'image', jpeg: 'image', png: 'image', gif: 'image', bmp: 'image', tiff: 'image', webp: 'image',
@@ -304,6 +381,12 @@ const totalSizeText = computed(() => formatFileSize(
 const hasWatermarkable = computed(() =>
   queue.value.some(item => ['image', 'vector'].includes(resolveType(item)))
 )
+const visiblePendingSessions = computed(() => {
+  const bound = new Set(
+    queue.value.map(item => item.resumeSession?.upload_id).filter(Boolean)
+  )
+  return pendingSessions.value.filter(session => !bound.has(session.upload_id))
+})
 
 watch(hasWatermarkable, supported => {
   if (supported) {
@@ -329,6 +412,80 @@ async function loadGardens() {
   } finally {
     gardenLoading.value = false
   }
+}
+
+function sessionProgressText(session) {
+  return sessionProgress(session)
+}
+
+async function loadPendingSessions() {
+  pendingLoading.value = true
+  pendingError.value = ''
+  try {
+    const response = await assetApi.listUploadSessions()
+    if (response.data?.code === 200) {
+      pendingSessions.value = response.data.data?.items || []
+      pendingTtlHours.value = response.data.data?.ttl_hours || 48
+    } else {
+      pendingError.value = response.data?.message || '读取未完成上传失败'
+    }
+  } catch (error) {
+    pendingError.value = errorText(error, '读取未完成上传失败')
+  } finally {
+    pendingLoading.value = false
+  }
+}
+
+function pickFileForResume(session) {
+  resumeTargetId.value = session?.upload_id || ''
+  // 清空 el-upload 内部文件列表，确保再次选择同一个文件仍触发 change
+  uploadRef.value?.clearFiles()
+  const input = uploadRef.value?.$el?.querySelector('input[type=file]')
+  if (input) {
+    input.click()
+  } else {
+    ElMessage.info('请点击上方选择区域，选择同名文件继续上传')
+  }
+}
+
+async function cancelPending(session) {
+  try {
+    await ElMessageBox.confirm(
+      `放弃《${session.filename}》的未完成上传？已上传的分块会被删除，无法恢复。`,
+      '放弃上传',
+      {
+        type: 'warning',
+        confirmButtonText: '放弃',
+        cancelButtonText: '保留'
+      }
+    )
+  } catch {
+    return
+  }
+  try {
+    const response = await assetApi.cancelUploadSession(session.upload_id)
+    if (response.data?.code === 200) {
+      pendingSessions.value = pendingSessions.value.filter(
+        row => row.upload_id !== session.upload_id
+      )
+      ElMessage.success('已放弃未完成的上传')
+    } else {
+      ElMessage.error(response.data?.message || '放弃上传失败')
+    }
+  } catch (error) {
+    ElMessage.error(errorText(error, '放弃上传失败'))
+  }
+}
+
+function releaseResumeSession(item) {
+  const session = item.resumeSession
+  if (
+    session
+    && !pendingSessions.value.some(row => row.upload_id === session.upload_id)
+  ) {
+    pendingSessions.value.unshift(session)
+  }
+  item.resumeSession = null
 }
 
 const MAX_UPLOAD_SIZE = 500 * 1024 * 1024
@@ -409,28 +566,79 @@ function handleFileChange(uploadFile) {
     assetId: '',
     watermarkReady: false,
     published: false,
-    publishing: false
+    publishing: false,
+    resumeSession: null
+  }
+
+  // 已被队列项绑定的会话不能再次匹配，避免两个文件交错写入同一临时文件
+  const boundIds = new Set(
+    queue.value.map(row => row.resumeSession?.upload_id).filter(Boolean)
+  )
+  const availableSessions = pendingSessions.value.filter(
+    session => !boundIds.has(session.upload_id)
+  )
+  const targeted = availableSessions.find(
+    session => session.upload_id === resumeTargetId.value
+  )
+  const matched = (
+    targeted
+    && targeted.filename === raw.name
+    && Number(targeted.expected_size) === raw.size
+  )
+    ? targeted
+    : findResumableSession(availableSessions, raw)
+  resumeTargetId.value = ''
+  if (matched) {
+    item.resumeSession = matched
+    item.progress = Math.max(
+      1,
+      Math.round(sessionProgress(matched) * 0.55)
+    )
+    if (matched.title) item.title = matched.title
+    if (matched.asset_type) item.detectedType = matched.asset_type
+    // 会话里保存了上次填写的信息；表单为空时自动带出，避免重新填写
+    if (!form.value.garden_id && matched.garden_id) {
+      form.value.garden_id = matched.garden_id
+    }
+    if (!form.value.description && matched.description) {
+      form.value.description = matched.description
+    }
+    if (
+      (!form.value.tags || !form.value.tags.length)
+      && Array.isArray(matched.tags)
+      && matched.tags.length
+    ) {
+      form.value.tags = matched.tags.slice(0, 20)
+    }
+    pendingSessions.value = pendingSessions.value.filter(
+      session => session.upload_id !== matched.upload_id
+    )
+    ElMessage.info(
+      `${raw.name} 检测到未完成上传，将从 ${sessionProgress(matched)}% 处继续`
+    )
   }
   queue.value.push(item)
 }
 
-function handleExceed() {
-  ElMessage.warning(`一次最多上传 ${MAX_QUEUE_SIZE} 个文件`)
-}
-
 function removeItem(item) {
   if (uploading.value) return
+  releaseResumeSession(item)
   if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
   queue.value = queue.value.filter(row => row.uid !== item.uid)
+  // el-upload 内部也会保留 File 引用；清掉以免多次增删后占用内存
+  uploadRef.value?.clearFiles()
+  loadPendingSessions()
 }
 
 function clearQueue() {
   if (uploading.value) return
   queue.value.forEach(item => {
+    releaseResumeSession(item)
     if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
   })
   queue.value = []
   uploadRef.value?.clearFiles()
+  loadPendingSessions()
 }
 
 function recalcOverall() {
@@ -466,8 +674,43 @@ async function waitForTask(taskId, onProgress) {
   throw new Error('任务处理超时，请稍后在资产详情页查看')
 }
 
-async function uploadResumable(item) {
-  const title = item.title.trim() || item.name.replace(/\.[^/.]+$/, '')
+async function resolveUploadSession(item, title) {
+  const candidate = item.resumeSession
+  if (candidate) {
+    try {
+      const response = await assetApi.getUploadSession(candidate.upload_id)
+      const session = response.data?.data
+      if (
+        response.data?.code === 200
+        && session?.status === 'uploading'
+        && Number(session.expected_size) === item.raw.size
+      ) {
+        // 用户在断点恢复后可能修改了标题/园林/标签，续传前同步到会话
+        try {
+          const synced = await assetApi.updateUploadSession(
+            candidate.upload_id,
+            {
+              title,
+              description: form.value.description,
+              garden_id: form.value.garden_id,
+              tags: form.value.tags,
+              asset_type: resolveType(item)
+            }
+          )
+          if (synced.data?.code === 200 && synced.data.data) {
+            return synced.data.data
+          }
+        } catch {
+          // 元数据同步失败不阻塞续传，继续使用会话原有信息
+        }
+        return session
+      }
+    } catch {
+      // 会话已在服务端过期或被取消，退回新建流程
+    }
+    item.resumeSession = null
+  }
+
   const sessionResponse = await assetApi.createUploadSession({
     filename: item.raw.name,
     size: item.raw.size,
@@ -480,11 +723,21 @@ async function uploadResumable(item) {
   if (sessionResponse.data?.code !== 200) {
     throw new Error(sessionResponse.data?.message || '创建上传会话失败')
   }
+  return sessionResponse.data.data
+}
 
-  const session = sessionResponse.data.data
+async function uploadResumable(item) {
+  const title = item.title.trim() || item.name.replace(/\.[^/.]+$/, '')
+  const session = await resolveUploadSession(item, title)
   const chunkSize = session.chunk_size || 4 * 1024 * 1024
   let received = Number(session.received_size || 0)
   let attempts = 0
+
+  item.progress = Math.max(
+    item.progress,
+    Math.min(55, Math.round((received / item.raw.size) * 55))
+  )
+  recalcOverall()
 
   while (received < item.raw.size) {
     const chunk = item.raw.slice(received, received + chunkSize)
@@ -530,6 +783,7 @@ async function uploadResumable(item) {
   if (completed.data?.code !== 200) {
     throw new Error(completed.data?.message || '合并文件失败')
   }
+  item.resumeSession = null
   return completed
 }
 
@@ -700,6 +954,7 @@ async function submitUpload() {
   ElMessage[failed ? 'warning' : 'success'](
     failed ? `上传完成，${failed} 个文件失败，可在队列中查看原因` : '全部文件处理完成，资产已保存为草稿'
   )
+  loadPendingSessions()
 }
 
 async function submitPublish(item) {
@@ -745,12 +1000,28 @@ function resetForm() {
 
 onMounted(() => {
   loadGardens()
+  loadPendingSessions()
+  window.addEventListener('beforeunload', handleBeforeUnload)
 })
 
 onUnmounted(() => {
+  window.removeEventListener('beforeunload', handleBeforeUnload)
   queue.value.forEach(item => {
     if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
   })
+})
+
+function handleBeforeUnload(event) {
+  if (!uploading.value) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+
+onBeforeRouteLeave(() => {
+  if (!uploading.value) return true
+  return window.confirm(
+    '上传仍在进行，离开页面会中断当前批次。8MB 以上文件可在重新打开后从“未完成的上传”恢复；小文件需要重新选择。确定离开？'
+  )
 })
 </script>
 
@@ -860,6 +1131,88 @@ onUnmounted(() => {
     color: $primary-light;
     margin-bottom: 8px;
   }
+}
+
+.resume-panel {
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  border: 1px solid rgba(230, 162, 60, 0.45);
+  border-radius: $radius-md;
+  background: rgba(230, 162, 60, 0.08);
+}
+
+.resume-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid rgba(230, 162, 60, 0.25);
+
+  strong {
+    font-size: 13px;
+    color: $text-primary;
+  }
+
+  span {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    color: $text-secondary;
+  }
+}
+
+.resume-hint,
+.resume-error {
+  margin: 0;
+  font-size: 12px;
+  color: $text-secondary;
+}
+
+.resume-error {
+  color: $error-color;
+}
+
+.resume-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px dashed rgba(230, 162, 60, 0.3);
+
+  &:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+}
+
+.resume-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.resume-name {
+  font-size: 13px;
+  color: $text-primary;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resume-meta {
+  font-size: 12px;
+  color: $text-placeholder;
+}
+
+.resume-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
 }
 
 .queue-panel {
@@ -1031,5 +1384,7 @@ onUnmounted(() => {
   .queue-title { max-width: none; }
   .queue-item { flex-wrap: wrap; }
   .queue-actions { width: 100%; justify-content: flex-end; }
+  .resume-item { flex-wrap: wrap; }
+  .resume-actions { width: 100%; justify-content: flex-end; }
 }
 </style>

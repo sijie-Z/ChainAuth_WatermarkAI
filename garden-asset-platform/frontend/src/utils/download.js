@@ -24,6 +24,29 @@ export async function startAssetDownload(assetId, params = {}) {
 }
 
 /**
+ * 历史版本下载：同样先签票，再由浏览器流式落盘，
+ * 避免把大版本整包读进 JS 内存。
+ */
+export async function startVersionDownload(assetId, versionId) {
+  const response = await assetApi.createVersionDownloadTicket(assetId, versionId)
+  const data = response.data?.data
+  if (!data?.ticket) {
+    throw new Error(response.data?.message || '下载凭证签发失败')
+  }
+
+  const baseURL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
+  const link = document.createElement('a')
+  link.href = `${baseURL}/assets/${assetId}/versions/${versionId}/download?ticket=${encodeURIComponent(data.ticket)}`
+  link.rel = 'noopener'
+  link.style.display = 'none'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+
+  return data
+}
+
+/**
  * 预览票据直接作为 video/iframe/三维加载器的 URL，让浏览器按 Range 读取，
  * 避免把整段视频或 PDF 读进 JS 内存。
  */

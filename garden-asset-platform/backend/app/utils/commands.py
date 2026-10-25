@@ -397,6 +397,90 @@ def storage_report(min_age_hours, limit):
         click.echo('\n注意：本命令只报告，不删除任何文件；请人工核对后再走部署清理流程。')
 
 
+@click.group('uploads')
+def uploads_group():
+    """断点续传会话巡检与过期清理"""
+
+
+@uploads_group.command('list')
+@click.option(
+    '--status', default='uploading',
+    help='uploading/completed/failed/cancelled/expired'
+)
+@click.option('--limit', default=20, type=int)
+@with_appcontext
+def uploads_list(status, limit):
+    """查看断点续传会话与已接收进度"""
+    from app.models.extra import UploadSession
+
+    query = UploadSession.query
+    if status:
+        query = query.filter_by(status=status)
+    sessions = query.order_by(
+        UploadSession.updated_at.desc()
+    ).limit(max(1, min(limit, 200))).all()
+    if not sessions:
+        click.echo(f'没有状态为 {status or "全部"} 的上传会话')
+        return
+    for session in sessions:
+        percent = (
+            session.received_size / session.expected_size * 100
+            if session.expected_size else 0
+        )
+        click.echo(
+            f'{session.id}  {session.status:<10} '
+            f'{percent:5.1f}%  {session.filename}  '
+            f'({session.received_size}/{session.expected_size} B)  '
+            f'{session.updated_at}'
+        )
+
+
+@uploads_group.command('cleanup')
+@click.option('--hours', default=None, type=int, help='未更新超过该小时数视为过期')
+@click.option('--yes', is_flag=True, help='确认执行：标记过期并删除临时文件')
+@with_appcontext
+def uploads_cleanup(hours, yes):
+    """过期会话预览；加 --yes 才会真正清理"""
+    from datetime import datetime, timedelta
+
+    from app.models.extra import UploadSession
+    from app.services.upload_session_service import (
+        purge_stale_upload_sessions,
+    )
+
+    ttl = max(1, int(
+        hours
+        if hours is not None
+        else current_app.config.get('UPLOAD_SESSION_TTL_HOURS', 48)
+    ))
+    cutoff = datetime.utcnow() - timedelta(hours=ttl)
+    stale = UploadSession.query.filter(
+        UploadSession.status == 'uploading',
+        UploadSession.updated_at.isnot(None),
+        UploadSession.updated_at < cutoff,
+    ).all()
+    total_bytes = sum(
+        session.received_size or 0 for session in stale
+    )
+    click.echo(
+        f'超过 {ttl} 小时未更新：{len(stale)} 个会话，'
+        f'{total_bytes / 1024 / 1024:.2f} MB'
+    )
+    for session in stale[:20]:
+        click.echo(f'  {session.id}  {session.filename}  {session.updated_at}')
+    if len(stale) > 20:
+        click.echo(f'  …仅显示前 20 个')
+    if not stale:
+        return
+    if not yes:
+        click.echo('未执行清理；确认后加 --yes 重新运行。')
+        return
+    result = purge_stale_upload_sessions(ttl_hours=ttl)
+    click.echo(
+        f"已标记过期 {result['expired']} 个，清理临时目录 {result['cleaned']} 个"
+    )
+
+
 @click.group('audit')
 def audit_group():
     """审计日志完整性签名"""
@@ -439,4 +523,5 @@ def register_commands(app):
     app.cli.add_command(notifications_group)
     app.cli.add_command(backup_group)
     app.cli.add_command(storage_group)
+    app.cli.add_command(uploads_group)
     app.cli.add_command(audit_group)

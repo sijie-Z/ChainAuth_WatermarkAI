@@ -20,6 +20,7 @@
           :type="annotateMode ? 'danger' : 'primary'"
           plain
           size="small"
+          :disabled="imageError"
           @click="toggleAnnotate"
         >
           {{ annotateMode ? '退出标注' : '开始标注' }}
@@ -43,7 +44,16 @@
             :alt="`${assetType === 'vector' ? '矢量预览' : '资产影像'}，可添加区域标注`"
             draggable="false"
             @dragstart.prevent
+            @error="imageError = true"
+            @load="imageError = false"
           />
+          <div v-if="imageError" class="annotation-image-error">
+            <el-icon><Picture /></el-icon>
+            <span v-if="assetType === 'vector'">
+              矢量数据暂无栅格底图，仍可查看和处理右侧已有标注
+            </span>
+            <span v-else>预览加载失败，暂时无法框选标注</span>
+          </div>
           <div
             v-if="draftBox"
             class="annotation-box draft"
@@ -190,7 +200,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { EditPen } from '@element-plus/icons-vue'
+import { EditPen, Picture } from '@element-plus/icons-vue'
 import { assetApi } from '@/api/modules'
 import { formatDate } from '@/utils'
 
@@ -208,6 +218,11 @@ const loadError = ref(false)
 const includeHistory = ref(false)
 const statusFilter = ref('')
 const annotateMode = ref(false)
+const imageError = ref(false)
+
+watch(() => props.imageUrl, () => {
+  imageError.value = false
+})
 const stageRef = ref()
 const drawing = ref(false)
 const draftBox = ref(null)
@@ -516,6 +531,20 @@ onMounted(loadAnnotations)
 
 .stage-column {
   min-width: 0;
+}
+
+.annotation-image-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: $ink-band;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 13px;
+  pointer-events: none;
 }
 
 .annotation-stage {

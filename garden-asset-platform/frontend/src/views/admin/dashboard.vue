@@ -576,7 +576,7 @@ function getGreeting() {
 }
 
 function getThumbnail(row) {
-  return row.id ? `/api/assets/${row.id}/thumbnail?size=card&v=2` : getDefaultThumb(row.type)
+  return row.id ? `/api/assets/${row.id}/thumbnail?size=card&v=${row.current_version_no || 1}` : getDefaultThumb(row.type)
 }
 
 function onThumbnailError(event, row) {
