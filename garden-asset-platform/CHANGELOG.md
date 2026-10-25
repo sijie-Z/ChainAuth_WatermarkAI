@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-10-25
+
+### Security
+- 前端 ESLint 工具链升级：`eslint-plugin-vue` 10 / `vue-eslint-parser` 10 / `postcss-selector-parser` 7.1.7，关闭 Dependabot 中危告警；规则集切换为 `plugin:vue/essential`
+- CodeQL 路径污点收口：水印实验、溯源、侵权线索、版本上传与缩略图的临时/落盘文件名统一为服务端 UUID，扩展名走白名单常量映射，不再拼接用户文件名；非法或缺失路径返回 404
+
+### Fixed
+- 初始化管理员密码不再打印到日志：生产随机密码写入 `backend/instance/initial_admin_password.txt`（权限 600），演示密码只在文档中说明
+
 ## [1.8.0] - 2026-10-24
 
 ### Added
@@ -78,14 +87,11 @@
 - 新增演示媒体：[14 张真实界面截图](docs/assets/screenshots/)、约 1 分钟带字幕操作视频（MP4/GIF/封面）与 [素材说明](docs/assets/README.md)；README 增加视频与截图入口，`frontend/scripts/capture-media.mjs` 可一键复现
 
 ### Security
-- 前端 ESLint 工具链升级：`eslint-plugin-vue` 10 / `vue-eslint-parser` 10 / `postcss-selector-parser` 7.1.7，关闭 Dependabot 中危告警；规则集切换为 `plugin:vue/essential`
 - 生产环境启动校验 `SECRET_KEY`/`JWT_SECRET_KEY`：拒绝 `change-me` 等示例占位文本与不足 32 位的密钥，附 `scripts/generate_secrets.py` 生成随机值
 - 生产初始化改用 production 配置：不再创建 `123456` 演示账号（`SEED_DEMO_USERS=true` 可显式开启），未设置 `ADMIN_INITIAL_PASSWORD` 时生成一次性随机管理员密码并打印；`flask create-admin` 在非调试环境未给密码时同样随机生成
 - `AI_ENABLED` 默认改为 `false`，与 README 和能力状态一致，避免未配置模型时拖慢启动
 
 ### Fixed
-- CodeQL 路径污点收口：水印实验、溯源、侵权线索、版本上传与缩略图的临时/落盘文件名统一为服务端 UUID，扩展名走白名单常量映射，不再拼接用户文件名；非法或缺失路径返回 404
-- 初始化管理员密码不再打印到日志：生产随机密码写入 `backend/instance/initial_admin_password.txt`（权限 600），演示密码只在文档中说明
 - 缺失文件不再被当成当前工作目录：资产下载、预览与分享下载统一检查 `isfile`，空路径返回 404，避免 `send_file` 抛 `IsADirectoryError`
 - 溯源结果补齐水印 ID、创建时间、资产类型与园林名称；区块链存证明细改为单列展示，长交易哈希不再挤压标签列
 - 对象级可见性：草稿/已删除资产的证书、存证历史、标签与收藏统一做可见性检查；全平台证书列表仅管理员可读，公开链状态不再返回可能含凭据的 RPC 地址；草稿证书公开请求返回 404
