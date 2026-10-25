@@ -7,6 +7,24 @@
 [![Secret Scan](https://github.com/sijie-Z/ChainAuth_WatermarkAI/actions/workflows/secret-scan.yml/badge.svg)](https://github.com/sijie-Z/ChainAuth_WatermarkAI/actions/workflows/secret-scan.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](garden-asset-platform/README.md)
 
+## 最新发布
+
+[v1.8.0 · 苏州园林数字资产平台完整交付](https://github.com/sijie-Z/ChainAuth_WatermarkAI/releases/tag/v1.8.0) · [主项目文档](garden-asset-platform/README.md) · [完整变更](garden-asset-platform/CHANGELOG.md)
+
+## 演示
+
+[观看完整演示视频（约 1 分钟，带中文字幕）](garden-asset-platform/docs/assets/video/suzhou-garden-demo.mp4)
+
+[![演示视频封面](garden-asset-platform/docs/assets/video/demo-poster.jpg)](garden-asset-platform/docs/assets/video/suzhou-garden-demo.mp4)
+
+| 资产档案 | 水印实验室 |
+|----------|------------|
+| ![资产档案](garden-asset-platform/docs/assets/screenshots/02-asset-archive.png) | ![水印实验室](garden-asset-platform/docs/assets/screenshots/06-watermark-lab.png) |
+| **证据链** | **证据包核验** |
+| ![证据链](garden-asset-platform/docs/assets/screenshots/04-evidence-chain.png) | ![证据包核验](garden-asset-platform/docs/assets/screenshots/13-evidence-verify.png) |
+
+> 视频、GIF、封面与全部 14 张截图也作为附件挂在 [v1.8.0 Release](https://github.com/sijie-Z/ChainAuth_WatermarkAI/releases/tag/v1.8.0) 上。
+
 本仓库包含苏州园林数字资产安全分发与溯源系统的完整实现：
 
 **水印嵌入 → 区块链存证 → AI 侵权检测 → 授权分发 → 溯源追踪**
@@ -52,13 +70,13 @@ python -m venv venv && source venv/bin/activate
 pip install -r requirements-dev.txt
 python scripts/init_db.py
 python run.py                     # :5000
-python -m pytest                  # 194 个用例（内存 SQLite）
+python -m pytest                  # 374 个用例（内存 SQLite）
 
 # 前端
 cd garden-asset-platform/frontend
 npm ci
 npm run dev                       # :5173
-npm run lint:check && npm run build
+npm run test:ci && npm run lint:check && npm run build   # 52 个前端单测
 ```
 
 ## 工程化
@@ -73,7 +91,7 @@ npm run lint:check && npm run build
 | 发布 | 发布分支 → `main` → 标签 `vX.Y.Z` → GitHub Release + GHCR 镜像 |
 | 自动回合并 | `main` 更新后自动创建同步提醒 issue，本地执行 `scripts/gitflow.sh sync` 走正常 PR 流程 |
 | 视觉体系 | 青绿山水 · 档案册（黛青/宣纸/宋体/朱砂），详见 [docs/UI-DESIGN.md](docs/UI-DESIGN.md) |
-| 端到端验证 | `garden-asset-platform/backend/scripts/e2e_flow.py`：完整 API 流程；Playwright 5 个前端点击流用例（`npm run test:e2e`） |
+| 端到端验证 | `garden-asset-platform/backend/scripts/e2e_flow.py`：完整 API 流程；Playwright 24 个前端点击流用例（`npm run test:e2e`）；后端 374、前端 52 个单测 |
 
 - 贡献流程：[CONTRIBUTING.md](CONTRIBUTING.md)
 - Git Flow 详解：[docs/GIT-FLOW.md](docs/GIT-FLOW.md)
@@ -90,8 +108,8 @@ bash scripts/setup-git-hooks.sh
 
 | 层级 | 技术 |
 |------|------|
-| 前端 | Vue 3.4、Vite 5、Pinia、Element Plus、ECharts |
-| 后端 | Flask 3.0、Flask-RESTful、SQLAlchemy 2、JWT；Celery 预留（定时任务由 APScheduler 承担） |
+| 前端 | Vue 3.5、Vite 8、Pinia、Element Plus（按需加载）、ECharts（按需注册） |
+| 后端 | Flask 3.1、Flask-RESTful、SQLAlchemy 2、JWT、itsdangerous 短时票据；定时任务由 APScheduler 承担 |
 | 存储 | PostgreSQL、Redis、Milvus；MinIO 为 docker-compose 可选服务（当前文件默认存本地磁盘） |
 | 区块链 | FISCO BCOS 3.x |
 | AI | 智谱 GLM-4V、CLIP、DINOv2、百度 OCR |
