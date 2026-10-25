@@ -12,12 +12,11 @@ import os
 import re
 import shutil
 import threading
-import time
-import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 
 from flask import current_app
+from sqlalchemy import update
 
 from app.extensions import db
 from app.models.extra import UploadSession
@@ -122,60 +121,19 @@ def _thread_lock(upload_id):
 def upload_session_lock(upload_id, timeout=10.0):
     """同一会话的分块/完成操作串行执行。
 
-    gunicorn 多 worker 场景下线程锁不够，额外用 O_EXCL 锁文件做跨进程
-    互斥；持锁进程崩溃时锁文件超过 60 秒会被视为过期。
+    进程内用线程锁；跨进程通过更新会话行取得数据库行锁，事务结束前
+    其他 worker 的 UPDATE 会阻塞。整个持锁期间只做本地文件写入与提交，
+    不涉及用户输入拼接路径。
     """
     lock = _thread_lock(upload_id)
     if not lock.acquire(timeout=timeout):
         raise TimeoutError('上传会话正忙，请稍后重试')
-    fd = None
-    lock_path = None
-    token = uuid.uuid4().hex
     try:
-        directory = session_dir(upload_id)
-        if directory and os.path.isdir(directory):
-            lock_path = os.path.join(directory, '.chunk.lock')
-            deadline = time.time() + timeout
-            while True:
-                try:
-                    fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                    os.write(fd, token.encode('ascii'))
-                    break
-                except FileNotFoundError:
-                    # 目录可能在等待期间被清理；退化为仅线程锁
-                    break
-                except FileExistsError:
-                    try:
-                        age = time.time() - os.path.getmtime(lock_path)
-                    except OSError:
-                        age = 0
-                    if age > 300:
-                        # 持锁期间只做本地文件写入/哈希，5 分钟仍未释放
-                        # 视为进程崩溃遗留；正常请求不会持有这么久。
-                        try:
-                            os.unlink(lock_path)
-                        except OSError:
-                            pass
-                        continue
-                    if time.time() >= deadline:
-                        raise TimeoutError('上传会话正忙，请稍后重试')
-                    time.sleep(0.05)
+        db.session.execute(
+            update(UploadSession)
+            .where(UploadSession.id == upload_id)
+            .values(updated_at=UploadSession.updated_at)
+        )
         yield
     finally:
-        if fd is not None:
-            try:
-                os.close(fd)
-            except OSError:
-                pass
-            # 只删除自己创建的锁文件；若已被判过期并抢占，不能误删新锁
-            try:
-                with open(lock_path, 'r', encoding='ascii') as handle:
-                    owner = handle.read().strip()
-            except OSError:
-                owner = None
-            if owner == token:
-                try:
-                    os.unlink(lock_path)
-                except OSError:
-                    pass
         lock.release()

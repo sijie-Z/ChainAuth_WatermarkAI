@@ -221,12 +221,14 @@ def test_upload_session_cancel_removes_temp_files(client, app, auth_header):
     assert after.status_code == 409
 
     # 已完成/不存在/他人的会话取消时给出明确结果
-    assert client.delete(
+    second_cancel = client.delete(
         f'/api/assets/upload/session/{upload_id}', headers=auth_header
-    ).status_code == 200
-    assert client.delete(
+    )
+    assert second_cancel.status_code == 200
+    missing_cancel = client.delete(
         '/api/assets/upload/session/' + '0' * 32, headers=auth_header
-    ).status_code == 404
+    )
+    assert missing_cancel.status_code == 404
 
 
 def test_stale_upload_session_is_purged(client, app, auth_header):

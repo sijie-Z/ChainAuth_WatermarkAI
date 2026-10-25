@@ -1263,6 +1263,7 @@ class AssetUploadSessionCompleteResource(Resource):
             try:
                 os.unlink(file_path)
             except OSError:
+                # 清理失败不掩盖原始异常
                 pass
             raise
 

@@ -233,6 +233,7 @@ def _remove_file_quietly(path):
         if os.path.isfile(path):
             os.remove(path)
     except OSError:
+        # 清理是尽力而为，文件可能已被其他流程移走
         pass
 
 
