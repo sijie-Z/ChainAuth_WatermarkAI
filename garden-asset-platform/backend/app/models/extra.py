@@ -388,3 +388,45 @@ class SystemConfig(db.Model):
             'value': self.value,
             'description': self.description
         }
+
+class UploadSession(db.Model):
+    """分块上传会话（断点续传）"""
+    __tablename__ = 'upload_sessions'
+
+    id = db.Column(db.String(36), primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey('users.id'), nullable=False, index=True
+    )
+    filename = db.Column(db.String(255), nullable=False)
+    asset_type = db.Column(db.String(20), nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    garden_id = db.Column(db.Integer, nullable=True)
+    tags_json = db.Column(db.Text, nullable=True)
+    expected_size = db.Column(db.BigInteger, nullable=False)
+    received_size = db.Column(db.BigInteger, default=0, nullable=False)
+    chunk_size = db.Column(db.Integer, nullable=False)
+    temp_path = db.Column(db.String(500), nullable=False)
+    status = db.Column(db.String(20), default='uploading', nullable=False)
+    asset_id = db.Column(db.String(36), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    user = db.relationship('User', backref=db.backref('upload_sessions', lazy='dynamic'))
+
+    def to_dict(self):
+        return {
+            'upload_id': self.id,
+            'filename': self.filename,
+            'asset_type': self.asset_type,
+            'title': self.title,
+            'expected_size': self.expected_size,
+            'received_size': self.received_size,
+            'chunk_size': self.chunk_size,
+            'status': self.status,
+            'asset_id': self.asset_id,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }

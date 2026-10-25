@@ -70,13 +70,13 @@ python -m venv venv && source venv/bin/activate
 pip install -r requirements-dev.txt
 python scripts/init_db.py
 python run.py                     # :5000
-python -m pytest                  # 378 个用例（内存 SQLite）
+python -m pytest                  # 381 个用例（内存 SQLite）
 
 # 前端
 cd garden-asset-platform/frontend
 npm ci
 npm run dev                       # :5173
-npm run test:ci && npm run lint:check && npm run build   # 53 个前端单测
+npm run test:ci && npm run lint:check && npm run build   # 54 个前端单测
 ```
 
 ## 工程化
@@ -91,7 +91,7 @@ npm run test:ci && npm run lint:check && npm run build   # 53 个前端单测
 | 发布 | 发布分支 → `main` → 标签 `vX.Y.Z` → GitHub Release + GHCR 镜像 |
 | 自动回合并 | `main` 更新后自动创建同步提醒 issue，本地执行 `scripts/gitflow.sh sync` 走正常 PR 流程 |
 | 视觉体系 | 青绿山水 · 档案册（黛青/宣纸/宋体/朱砂），详见 [docs/UI-DESIGN.md](docs/UI-DESIGN.md) |
-| 端到端验证 | `garden-asset-platform/backend/scripts/e2e_flow.py`：完整 API 流程；Playwright 24 个前端点击流用例（`npm run test:e2e`）；后端 378、前端 53 个单测 |
+| 端到端验证 | `garden-asset-platform/backend/scripts/e2e_flow.py`：完整 API 流程；Playwright 24 个前端点击流用例（`npm run test:e2e`）；后端 381、前端 54 个单测 |
 
 - 贡献流程：[CONTRIBUTING.md](CONTRIBUTING.md)
 - Git Flow 详解：[docs/GIT-FLOW.md](docs/GIT-FLOW.md)

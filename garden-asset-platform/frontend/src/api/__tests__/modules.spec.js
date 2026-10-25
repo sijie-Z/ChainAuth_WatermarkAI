@@ -83,6 +83,30 @@ describe('api modules', () => {
     expect(api.post).toHaveBeenCalledWith('/tasks/task-1/cancel')
   })
 
+  it('assetApi supports resumable upload sessions', () => {
+    assetApi.createUploadSession({ filename: 'a.jpg', size: 10 })
+    assetApi.getUploadSession('u-1')
+    assetApi.uploadChunk('u-1', Buffer.from('x'), 4, { timeout: 0 })
+    assetApi.completeUploadSession('u-1')
+
+    expect(api.post).toHaveBeenCalledWith('/assets/upload/session', {
+      filename: 'a.jpg', size: 10
+    })
+    expect(api.get).toHaveBeenCalledWith('/assets/upload/session/u-1')
+    expect(api.put).toHaveBeenCalledWith(
+      '/assets/upload/session/u-1',
+      Buffer.from('x'),
+      {
+        timeout: 0,
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'X-Upload-Offset': '4'
+        }
+      }
+    )
+    expect(api.post).toHaveBeenCalledWith('/assets/upload/session/u-1/complete')
+  })
+
   it('assetApi.download forwards declared usage scope', () => {
     assetApi.download('asset-1', { purpose: 'teaching_research', territory: '中国大陆' })
 

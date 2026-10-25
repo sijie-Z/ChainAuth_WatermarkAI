@@ -8,7 +8,7 @@ from app.models.log import OperationLog
 from app.models.extra import (
     Favorite, DownloadRecord, AssetShare, ShareDownload, NotificationRead,
     NotificationEvent, NotificationPreference, NotificationDelivery,
-    Collection, CollectionAsset, SystemConfig
+    Collection, CollectionAsset, SystemConfig, UploadSession
 )
 from app.models.comment import AssetComment
 from app.models.annotation import AssetAnnotation
@@ -26,7 +26,7 @@ __all__ = [
     'Favorite', 'DownloadRecord', 'AssetShare', 'ShareDownload',
     'NotificationRead', 'NotificationEvent',
     'NotificationPreference', 'NotificationDelivery',
-    'Collection', 'CollectionAsset', 'SystemConfig',
+    'Collection', 'CollectionAsset', 'SystemConfig', 'UploadSession',
     'AssetComment', 'AssetAnnotation', 'AsyncTask', 'WorkerHeartbeat',
     'InfringementReport',
     'DownloadFingerprint'

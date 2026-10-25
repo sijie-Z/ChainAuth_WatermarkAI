@@ -41,6 +41,22 @@ export const assetApi = {
   create: (formData, config) => config
     ? api.post('/assets/upload', formData, config)
     : api.post('/assets/upload', formData),
+  createUploadSession: (data) => api.post('/assets/upload/session', data),
+  getUploadSession: (uploadId) => api.get(`/assets/upload/session/${uploadId}`),
+  uploadChunk: (uploadId, chunk, offset, config) => api.put(
+    `/assets/upload/session/${uploadId}`,
+    chunk,
+    {
+      ...config,
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'X-Upload-Offset': String(offset)
+      }
+    }
+  ),
+  completeUploadSession: (uploadId) => api.post(
+    `/assets/upload/session/${uploadId}/complete`
+  ),
   update: (id, data) => api.put(`/assets/${id}`, data),
   delete: (id) => api.delete(`/assets/${id}`),
   download: (id, params) => api.get(`/assets/${id}/download`, {
