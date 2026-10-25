@@ -23,7 +23,6 @@ BASELINE_REVISION = 'be3bcbd6313e'
 # 本次初始化实际使用的管理员密码（仅用于一次性提示，历史密码不回显）
 _ADMIN_PASSWORD = None
 _ADMIN_PASSWORD_GENERATED = False
-_ADMIN_PASSWORD_FILE = None
 _TEST_USERS_CREATED = 0
 
 
@@ -72,7 +71,7 @@ def create_admin_user():
     生产环境未提供 ADMIN_INITIAL_PASSWORD 时生成一次性随机密码，
     不再回落到演示密码 admin123。
     """
-    global _ADMIN_PASSWORD, _ADMIN_PASSWORD_GENERATED, _ADMIN_PASSWORD_FILE
+    global _ADMIN_PASSWORD, _ADMIN_PASSWORD_GENERATED
 
     print("Creating admin user...")
 
@@ -102,9 +101,9 @@ def create_admin_user():
         if configured:
             print("Admin user created with ADMIN_INITIAL_PASSWORD.")
         elif _ADMIN_PASSWORD_GENERATED:
-            _ADMIN_PASSWORD_FILE = _write_initial_password(admin_password)
+            _write_initial_password(admin_password)
             print("Admin user created with a generated random password.")
-            print(f"  初始密码已写入 {_ADMIN_PASSWORD_FILE}")
+            print("  初始密码已写入 backend/instance/initial_admin_password.txt")
             print("  该文件权限为 600，请首次登录后立即修改密码并删除文件。")
         else:
             print("Admin user created (development demo password; see README/USER-GUIDE).")
@@ -263,9 +262,9 @@ def init_database():
         print("\nAccounts:")
         if _ADMIN_PASSWORD:
             print("  Admin: admin")
-            if _ADMIN_PASSWORD_GENERATED and _ADMIN_PASSWORD_FILE:
-                print(f"  初始密码文件：{_ADMIN_PASSWORD_FILE}")
-            elif not _ADMIN_PASSWORD_GENERATED:
+            if _ADMIN_PASSWORD_GENERATED:
+                print("  初始密码文件：backend/instance/initial_admin_password.txt")
+            else:
                 print("  密码见初始化提示或 ADMIN_INITIAL_PASSWORD")
         else:
             print("  Admin: admin（已存在，密码保持不变）")
