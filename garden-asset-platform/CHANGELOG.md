@@ -78,6 +78,7 @@
 - 新增演示媒体：[14 张真实界面截图](docs/assets/screenshots/)、约 1 分钟带字幕操作视频（MP4/GIF/封面）与 [素材说明](docs/assets/README.md)；README 增加视频与截图入口，`frontend/scripts/capture-media.mjs` 可一键复现
 
 ### Security
+- 前端 ESLint 工具链升级：`eslint-plugin-vue` 10 / `vue-eslint-parser` 10 / `postcss-selector-parser` 7.1.7，关闭 Dependabot 中危告警；规则集切换为 `plugin:vue/essential`
 - 生产环境启动校验 `SECRET_KEY`/`JWT_SECRET_KEY`：拒绝 `change-me` 等示例占位文本与不足 32 位的密钥，附 `scripts/generate_secrets.py` 生成随机值
 - 生产初始化改用 production 配置：不再创建 `123456` 演示账号（`SEED_DEMO_USERS=true` 可显式开启），未设置 `ADMIN_INITIAL_PASSWORD` 时生成一次性随机管理员密码并打印；`flask create-admin` 在非调试环境未给密码时同样随机生成
 - `AI_ENABLED` 默认改为 `false`，与 README 和能力状态一致，避免未配置模型时拖慢启动
