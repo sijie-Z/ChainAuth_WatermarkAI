@@ -9,6 +9,10 @@ from app.models.asset import Asset
 from app.models.log import OperationLog
 from app.services.watermark_service import WatermarkService
 from app.utils.middleware import rate_limit
+from app.utils.paths import (
+    IMAGE_EXT_ALIASES, REPORT_EXT_ALIASES,
+    canonical_extension, uuid_filename,
+)
 
 
 class WatermarkEmbedResource(Resource):
@@ -174,11 +178,9 @@ class WatermarkTraceResource(Resource):
             return {'code': 400, 'message': '未选择文件'}, 400
 
         import os
-        import uuid
 
-        ext = os.path.splitext(file.filename or '')[1].lower()
-        allowed_exts = {'.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff', '.webp', '.zip'}
-        if ext not in allowed_exts:
+        ext = canonical_extension(file.filename, REPORT_EXT_ALIASES)
+        if not ext:
             return {'code': 400, 'message': '不支持的文件类型'}, 400
 
         # 公开接口：限制单次溯源文件大小，避免匿名用户用大文件打满磁盘/CPU
@@ -193,7 +195,7 @@ class WatermarkTraceResource(Resource):
         upload_root = current_app.config.get('UPLOAD_FOLDER', './uploads')
         temp_dir = os.path.join(upload_root, 'trace_tmp')
         os.makedirs(temp_dir, exist_ok=True)
-        temp_path = os.path.join(temp_dir, f"trace_{uuid.uuid4().hex}{ext}")
+        temp_path = os.path.join(temp_dir, f'trace_{uuid_filename(ext)}')
         file.save(temp_path)
 
         try:
@@ -255,7 +257,7 @@ class WatermarkTraceResource(Resource):
                 }, 200
         finally:
             # 清理临时文件
-            if os.path.exists(temp_path):
+            if os.path.isfile(temp_path):
                 os.remove(temp_path)
 
 
@@ -277,12 +279,9 @@ class WatermarkBenchmarkResource(Resource):
             return {'code': 400, 'message': '未选择图片'}, 400
 
         import os
-        import uuid
 
-        from app.services.watermark_benchmark import ALLOWED_IMAGE_EXTS
-
-        ext = os.path.splitext(file.filename)[1].lower()
-        if ext not in ALLOWED_IMAGE_EXTS:
+        ext = canonical_extension(file.filename, IMAGE_EXT_ALIASES)
+        if not ext:
             return {'code': 400, 'message': '仅支持 PNG/JPG/BMP/TIFF/WebP 图片'}, 400
 
         max_bytes = current_app.config.get(
@@ -301,7 +300,7 @@ class WatermarkBenchmarkResource(Resource):
             current_app.config.get('UPLOAD_FOLDER', './uploads'), 'benchmark_tmp'
         )
         os.makedirs(upload_root, exist_ok=True)
-        temp_path = os.path.join(upload_root, f'upload_{uuid.uuid4().hex}{ext}')
+        temp_path = os.path.join(upload_root, f'upload_{uuid_filename(ext)}')
         file.save(temp_path)
 
         try:
@@ -325,7 +324,7 @@ class WatermarkBenchmarkResource(Resource):
                 'message': '实验执行失败，请更换图片后重试'
             }, 500
         finally:
-            if os.path.exists(temp_path):
+            if os.path.isfile(temp_path):
                 os.remove(temp_path)
 
 
