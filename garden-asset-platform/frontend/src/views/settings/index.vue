@@ -28,6 +28,28 @@
             <el-form-item label="邮箱">
               <el-input v-model="profileForm.email" placeholder="未设置" />
             </el-form-item>
+            <el-form-item label="邮箱状态">
+              <el-tag :type="emailVerified ? 'success' : 'info'">
+                {{ emailVerified ? '已验证' : '未验证' }}
+              </el-tag>
+              <el-button
+                v-if="profileForm.email && !emailVerified"
+                link
+                type="primary"
+                :loading="sendingVerify"
+                @click="sendVerifyEmail"
+              >发送验证邮件</el-button>
+            </el-form-item>
+            <el-alert
+              v-if="devVerifyToken"
+              type="info"
+              :closable="false"
+              show-icon
+              class="verify-alert"
+            >
+              开发环境未配置 SMTP，可直接
+              <router-link :to="{ path: '/verify-email', query: { token: devVerifyToken } }">打开验证链接</router-link>
+            </el-alert>
             <el-form-item label="手机号">
               <el-input v-model="profileForm.phone" placeholder="未设置" />
             </el-form-item>
@@ -186,7 +208,7 @@
 import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { notificationApi, userApi } from '@/api/modules'
+import { authApi, notificationApi, userApi } from '@/api/modules'
 import { ElMessage } from 'element-plus'
 import { User, Lock, Bell, ArrowLeft } from '@element-plus/icons-vue'
 
@@ -207,6 +229,9 @@ const roleLabel = computed(() => {
 
 const saving = ref(false)
 const changingPassword = ref(false)
+const sendingVerify = ref(false)
+const devVerifyToken = ref('')
+const emailVerified = ref(Boolean(userStore.user?.email_verified))
 
 const profileForm = reactive({
   username: userStore.username || '',
@@ -317,8 +342,39 @@ async function sendTestEmail() {
   }
 }
 
+async function sendVerifyEmail() {
+  if (!profileForm.email) {
+    ElMessage.warning('请先填写并保存邮箱')
+    return
+  }
+  sendingVerify.value = true
+  try {
+    const response = await authApi.sendEmailVerification()
+    if (response.data?.code === 200) {
+      const data = response.data.data || {}
+      ElMessage.success(
+        data.sent ? '验证邮件已发送，请查收' : '验证链接已生成'
+      )
+      if (data.dev_verify_url) {
+        try {
+          devVerifyToken.value = new URL(data.dev_verify_url).searchParams.get('token') || ''
+        } catch {
+          devVerifyToken.value = ''
+        }
+      }
+    } else {
+      ElMessage.error(response.data?.message || '发送失败')
+    }
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '发送验证邮件失败')
+  } finally {
+    sendingVerify.value = false
+  }
+}
+
 async function saveProfile() {
   saving.value = true
+  const previousEmail = userStore.user?.email || ''
   try {
     const data = {
       email: profileForm.email || '',
@@ -328,6 +384,10 @@ async function saveProfile() {
     if (res.data?.code === 200) {
       userStore.setUser({ ...userStore.user, ...data })
       notificationPrefs.email = data.email || ''
+      if (data.email !== previousEmail) {
+        emailVerified.value = false
+        devVerifyToken.value = ''
+      }
       ElMessage.success('个人信息已更新')
     } else {
       ElMessage.error(res.data?.message || '更新失败')

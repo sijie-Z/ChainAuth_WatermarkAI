@@ -35,6 +35,24 @@ const routes = [
     meta: { title: '注册' }
   },
   {
+    path: '/forgot-password',
+    name: 'ForgotPassword',
+    component: page(() => import('@/views/home/forgot-password.vue')),
+    meta: { title: '找回密码' }
+  },
+  {
+    path: '/reset-password',
+    name: 'ResetPassword',
+    component: page(() => import('@/views/home/reset-password.vue')),
+    meta: { title: '重置密码' }
+  },
+  {
+    path: '/verify-email',
+    name: 'VerifyEmail',
+    component: page(() => import('@/views/home/verify-email.vue')),
+    meta: { title: '验证邮箱' }
+  },
+  {
     path: '/assets',
     name: 'Assets',
     component: page(() => import('@/views/asset/list.vue')),

@@ -30,6 +30,7 @@ class User(db.Model):
     status = db.Column(db.String(20), default='active')  # active/inactive/banned
     is_active = db.Column(db.Boolean, default=True)  # 是否激活
     is_verified = db.Column(db.Boolean, default=False)  # 是否已实名认证
+    email_verified_at = db.Column(db.DateTime, nullable=True)  # 邮箱验证时间
 
     # 时间
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -56,6 +57,10 @@ class User(db.Model):
             'role': self.role,
             'status': self.status,
             'is_verified': self.is_verified,
+            'email_verified': bool(self.email_verified_at),
+            'email_verified_at': (
+                self.email_verified_at.isoformat() if self.email_verified_at else None
+            ),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'last_login_at': self.last_login_at.isoformat() if self.last_login_at else None
         }

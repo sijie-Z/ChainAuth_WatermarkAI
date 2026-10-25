@@ -30,6 +30,8 @@
 | `screenshots/11-audit-integrity.png` | 操作日志 HMAC 完整性校验 |
 | `screenshots/12-public-share.png` | 公开分享核验页（访问码通过后） |
 | `screenshots/13-evidence-verify.png` | 证据包公开核验通过 |
+| `screenshots/15-forgot-password.png` | 找回密码：邮件链接/开发调试链接 |
+| `screenshots/16-email-verification.png` | 账号设置中的邮箱验证状态与发送入口 |
 
 ## 重新生成
 

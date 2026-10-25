@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-10-25
+
+### Added
+- 自助找回密码：登录页“忘记密码” → 邮件一次性链接（30 分钟、仅一次、密码变更后失效）→ 重置后撤销旧 Token；开发环境未配置 SMTP 时返回调试链接，生产环境不返回
+- 邮箱验证：账号设置可发送 24 小时验证链接，验证状态写入用户信息；变更邮箱后自动重置验证状态
+- 批量上传并发度提升为 2，多文件上传/水印排队等待时间缩短，同时限制后端 CPU 峰值
+
+### Tests
+- 后端 378 个用例：新增忘记密码、重置链接单次/失效、邮箱验证与变更重置、认证限流 4 个用例
+- 前端 53 个 Vitest：新增认证找回 API 契约测试；Playwright 24 个点击流保持通过
+
 ## [1.8.1] - 2026-10-25
 
 ### Security
@@ -84,7 +95,7 @@
 
 ### Documentation
 - 新增 [演示脚本](docs/DEMO-SCRIPT.md)：十分钟现场流程、验收对照、真实能力边界与常见故障处理
-- 新增演示媒体：[14 张真实界面截图](docs/assets/screenshots/)、约 1 分钟带字幕操作视频（MP4/GIF/封面）与 [素材说明](docs/assets/README.md)；README 增加视频与截图入口，`frontend/scripts/capture-media.mjs` 可一键复现
+- 新增演示媒体：[16 张真实界面截图](docs/assets/screenshots/)、约 1 分钟带字幕操作视频（MP4/GIF/封面）与 [素材说明](docs/assets/README.md)；README 增加视频与截图入口，`frontend/scripts/capture-media.mjs` 可一键复现
 
 ### Security
 - 生产环境启动校验 `SECRET_KEY`/`JWT_SECRET_KEY`：拒绝 `change-me` 等示例占位文本与不足 32 位的密钥，附 `scripts/generate_secrets.py` 生成随机值

@@ -136,4 +136,14 @@ def has_html_tags(text):
     """
     if not text:
         return False
-    return bool(re.search(r'<[^>]+>', str(text)))
+    value = str(text)
+    if '<' not in value or '>' not in value:
+        return False
+    # 单次线性扫描，避免正则回溯；只判断是否存在成对尖括号。
+    start = value.find('<')
+    while start != -1:
+        end = value.find('>', start + 1)
+        if end > start + 1:
+            return True
+        start = value.find('<', start + 1)
+    return False
