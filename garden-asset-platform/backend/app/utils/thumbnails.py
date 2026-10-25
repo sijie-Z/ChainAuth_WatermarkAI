@@ -8,6 +8,9 @@ import uuid
 
 from flask import current_app
 from PIL import Image, ImageOps
+from werkzeug.utils import secure_filename
+
+from app.utils.paths import path_inside
 
 THUMBNAIL_DIRNAME = 'thumbnails'
 DEFAULT_MAX_SIZE = (1600, 1600)
@@ -33,14 +36,15 @@ def generate_thumbnail(source_path, asset_id, max_size=DEFAULT_MAX_SIZE, suffix=
     except (ValueError, TypeError, AttributeError) as exc:
         raise ValueError('invalid asset id for thumbnail') from exc
 
-    out_path = os.path.join(thumbnail_dir(), f'{safe_id}{suffix}.jpg')
+    out_name = secure_filename(f'{safe_id}{suffix}.jpg')
+    out_path = path_inside(thumbnail_dir(), out_name)
     with Image.open(source_path) as image:
         image = ImageOps.exif_transpose(image)
         image = image.convert('RGB')
         image.thumbnail(max_size, Image.Resampling.LANCZOS)
         image.save(out_path, 'JPEG', quality=84, optimize=True)
 
-    return f'{THUMBNAIL_DIRNAME}/{safe_id}{suffix}.jpg'
+    return f'{THUMBNAIL_DIRNAME}/{out_name}'
 
 
 def generate_thumbnail_set(source_path, asset_id):
