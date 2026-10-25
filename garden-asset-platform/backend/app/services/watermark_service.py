@@ -405,18 +405,19 @@ class WatermarkService:
             }
 
     @staticmethod
-    def trace_from_file(file_path, original_watermark_path=None):
+    def trace_from_file(file_path, original_watermark_path=None, file_ext=None):
         """
         从文件中提取水印并溯源
 
         Args:
             file_path: 待溯源文件路径
             original_watermark_path: 原始水印路径（用于比对）
+            file_ext: 已知的规范扩展名；未提供时从文件名推断
 
         Returns:
             溯源结果字典
         """
-        if not os.path.exists(file_path):
+        if not file_path or not os.path.isfile(file_path):
             return {
                 'success': False,
                 'message': '文件不存在'
@@ -432,7 +433,7 @@ class WatermarkService:
 
         try:
             # 判断文件类型
-            ext = os.path.splitext(file_path)[1].lower()
+            ext = (file_ext or os.path.splitext(file_path)[1]).lower()
 
             if ext in ['.shp', '.zip']:
                 # 矢量数据水印提取（临时解压目录用完立即清理）

@@ -194,6 +194,15 @@ class Config:
     MAIL_USE_SSL = os.environ.get('MAIL_USE_SSL', 'false').lower() == 'true'
     MAIL_TIMEOUT = int(os.environ.get('MAIL_TIMEOUT', '10'))
     PUBLIC_BASE_URL = os.environ.get('PUBLIC_BASE_URL', 'http://localhost:5173')
+    AUTH_LINK_RETURN_TOKEN = os.environ.get(
+        'AUTH_LINK_RETURN_TOKEN', 'false'
+    ).lower() == 'true'
+    PASSWORD_RESET_MAX_AGE = int(
+        os.environ.get('PASSWORD_RESET_MAX_AGE', '1800')
+    )
+    EMAIL_VERIFY_MAX_AGE = int(
+        os.environ.get('EMAIL_VERIFY_MAX_AGE', '86400')
+    )
 
     # Webhook 默认禁止内网地址，避免 SSRF；内部自动化场景可显式开启
     WEBHOOK_ALLOW_PRIVATE = os.environ.get(
@@ -204,6 +213,7 @@ class Config:
 class DevelopmentConfig(Config):
     """开发环境配置"""
     DEBUG = True
+    AUTH_LINK_RETURN_TOKEN = True
     TASK_WORKER_ENABLED = os.environ.get(
         'TASK_WORKER_ENABLED', 'true'
     ).lower() == 'true'
@@ -231,6 +241,7 @@ class TestingConfig(Config):
     BLOCKCHAIN_ENABLED = False
     SCHEDULER_ENABLED = False
     TASK_WORKER_ENABLED = False
+    AUTH_LINK_RETURN_TOKEN = True
     SSE_MAX_SECONDS = 1
     SSE_POLL_INTERVAL = 0.2
     MAIL_ENABLED = False

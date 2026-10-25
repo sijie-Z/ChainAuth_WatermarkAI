@@ -1,9 +1,11 @@
 """
 认证相关API资源
 """
+import hashlib
 import logging
 from datetime import datetime
-from flask import request
+from urllib.parse import quote
+from flask import current_app, request
 from flask_restful import Resource
 from flask_jwt_extended import (
     create_access_token,
@@ -13,15 +15,58 @@ from flask_jwt_extended import (
     get_jwt_identity,
     get_jwt
 )
+from itsdangerous import URLSafeTimedSerializer
+from sqlalchemy import func
 from app.extensions import db
 from app.models.user import User, UserToken
 from app.models.log import OperationLog
+from app.services.email_service import mail_configured, send_email
 from app.utils.middleware import rate_limit
 from app.utils.tokens import invalidate_user_tokens
 from app.utils.validators import has_html_tags
 
 
 logger = logging.getLogger(__name__)
+
+
+def _link_serializer(salt):
+    return URLSafeTimedSerializer(
+        current_app.config['SECRET_KEY'], salt=salt
+    )
+
+
+def _fingerprint(value):
+    return hashlib.sha256((value or '').encode('utf-8')).hexdigest()[:16]
+
+
+def _password_fingerprint(user):
+    return _fingerprint(user.password_hash)
+
+
+def _email_fingerprint(user):
+    return _fingerprint((user.email or '').lower())
+
+
+def _public_link(path, token):
+    base = (current_app.config.get('PUBLIC_BASE_URL')
+            or 'http://localhost:5173').rstrip('/')
+    return f'{base}{path}?token={quote(token)}'
+
+
+def _send_or_reveal(user, subject, body, link, link_key):
+    """发送邮件；开发/测试环境在未发送时返回可点击链接。"""
+    sent = False
+    if mail_configured():
+        try:
+            send_email(user.email, subject, body)
+            sent = True
+        except Exception:
+            logger.warning('认证邮件发送失败: %s', user.id, exc_info=True)
+    data = {'sent': sent}
+    if not sent and current_app.config.get('AUTH_LINK_RETURN_TOKEN'):
+        data[link_key] = link
+    return data
+
 
 
 class RegisterResource(Resource):
@@ -254,6 +299,8 @@ class CurrentUserResource(Resource):
             existing = User.query.filter(User.email == email, User.id != user_id).first() if email else None
             if existing:
                 return {'code': 400, 'message': '邮箱已被使用'}, 400
+            if email != user.email:
+                user.email_verified_at = None
             user.email = email
         if 'phone' in data:
             phone = (data.get('phone') or '').strip() or None
@@ -299,6 +346,176 @@ class ChangePasswordResource(Resource):
         db.session.commit()
 
         return {'code': 200, 'message': '密码修改成功，请重新登录'}
+
+
+class ForgotPasswordResource(Resource):
+    """请求密码重置邮件（不泄露邮箱是否注册）"""
+
+    @rate_limit(limit=5, window=3600)
+    def post(self):
+        data = request.get_json(silent=True) or {}
+        email = (data.get('email') or '').strip()
+        if not email:
+            return {'code': 400, 'message': '请输入邮箱'}, 400
+
+        user = User.query.filter(
+            func.lower(User.email) == email.lower(),
+            User.status == 'active',
+        ).first()
+        generic = {
+            'code': 200,
+            'message': '如果该邮箱已注册，重置链接已发送',
+            'data': {'sent': False},
+        }
+        if not user:
+            return generic
+
+        token = _link_serializer('password-reset').dumps({
+            'uid': user.id,
+            'pwd': _password_fingerprint(user),
+        })
+        link = _public_link('/reset-password', token)
+        body = (
+            f'{user.nickname or user.username}，你好：\n\n'
+            '请打开以下链接重置密码（30 分钟内有效）：\n'
+            f'{link}\n\n'
+            '如果不是你本人操作，请忽略这封邮件。\n\n'
+            '—— 苏州园林数字资产平台'
+        )
+        result = _send_or_reveal(
+            user,
+            '[苏州园林数字资产平台] 重置密码',
+            body,
+            link,
+            'dev_reset_url',
+        )
+        result['expires_in'] = current_app.config.get(
+            'PASSWORD_RESET_MAX_AGE', 1800
+        )
+        return {
+            'code': 200,
+            'message': '如果该邮箱已注册，重置链接已发送',
+            'data': result,
+        }, 200
+
+
+class ResetPasswordResource(Resource):
+    """使用一次性链接重置密码"""
+
+    @rate_limit(limit=10, window=3600)
+    def post(self):
+        data = request.get_json(silent=True) or {}
+        token = (data.get('token') or '').strip()
+        new_password = data.get('new_password') or ''
+        if not token or not new_password:
+            return {'code': 400, 'message': '请填写完整'}, 400
+        if len(new_password) < 6:
+            return {'code': 400, 'message': '新密码长度不能少于6位'}, 400
+
+        try:
+            payload = _link_serializer('password-reset').loads(
+                token,
+                max_age=current_app.config.get('PASSWORD_RESET_MAX_AGE', 1800),
+            )
+        except Exception:
+            return {'code': 400, 'message': '重置链接已过期或无效'}, 400
+
+        user = User.query.get(payload.get('uid')) if isinstance(payload, dict) else None
+        if not user or user.status != 'active':
+            return {'code': 400, 'message': '重置链接已过期或无效'}, 400
+        if payload.get('pwd') != _password_fingerprint(user):
+            return {'code': 400, 'message': '重置链接已过期或无效'}, 400
+
+        user.set_password(new_password)
+        invalidate_user_tokens(user.id)
+        db.session.commit()
+        OperationLog.log(
+            user=user,
+            action='password_reset',
+            module='auth',
+            description=f'通过邮件链接重置密码: {user.username}',
+            request=request,
+        )
+        return {
+            'code': 200,
+            'message': '密码已重置，请使用新密码登录',
+        }, 200
+
+
+class SendEmailVerificationResource(Resource):
+    """发送邮箱验证链接"""
+
+    @rate_limit(limit=5, window=3600)
+    @jwt_required()
+    def post(self):
+        user = User.query.get(get_jwt_identity())
+        if not user:
+            return {'code': 404, 'message': '用户不存在'}, 404
+        if not user.email:
+            return {'code': 400, 'message': '请先设置邮箱'}, 400
+        if user.email_verified_at:
+            return {'code': 200, 'message': '邮箱已验证'}, 200
+
+        token = _link_serializer('email-verify').dumps({
+            'uid': user.id,
+            'email': _email_fingerprint(user),
+        })
+        link = _public_link('/verify-email', token)
+        body = (
+            f'{user.nickname or user.username}，你好：\n\n'
+            '请打开以下链接验证邮箱：\n'
+            f'{link}\n\n'
+            '链接 24 小时内有效。\n\n'
+            '—— 苏州园林数字资产平台'
+        )
+        result = _send_or_reveal(
+            user,
+            '[苏州园林数字资产平台] 验证邮箱',
+            body,
+            link,
+            'dev_verify_url',
+        )
+        result['expires_in'] = current_app.config.get(
+            'EMAIL_VERIFY_MAX_AGE', 86400
+        )
+        return {'code': 200, 'message': '验证邮件已处理', 'data': result}, 200
+
+
+class VerifyEmailResource(Resource):
+    """通过邮件链接验证邮箱"""
+
+    @rate_limit(limit=20, window=3600)
+    def post(self):
+        data = request.get_json(silent=True) or {}
+        token = (data.get('token') or '').strip()
+        if not token:
+            return {'code': 400, 'message': '缺少验证凭证'}, 400
+        try:
+            payload = _link_serializer('email-verify').loads(
+                token,
+                max_age=current_app.config.get('EMAIL_VERIFY_MAX_AGE', 86400),
+            )
+        except Exception:
+            return {'code': 400, 'message': '验证链接已过期或无效'}, 400
+
+        user = User.query.get(payload.get('uid')) if isinstance(payload, dict) else None
+        if not user or user.status != 'active':
+            return {'code': 400, 'message': '验证链接已过期或无效'}, 400
+        if payload.get('email') != _email_fingerprint(user):
+            return {'code': 400, 'message': '邮箱已变更，请重新发送验证邮件'}, 400
+        if user.email_verified_at:
+            return {'code': 200, 'message': '邮箱已验证'}, 200
+
+        user.email_verified_at = datetime.utcnow()
+        db.session.commit()
+        OperationLog.log(
+            user=user,
+            action='email_verify',
+            module='auth',
+            description=f'验证邮箱: {user.email}',
+            request=request,
+        )
+        return {'code': 200, 'message': '邮箱验证成功'}, 200
 
 
 class UserListResource(Resource):

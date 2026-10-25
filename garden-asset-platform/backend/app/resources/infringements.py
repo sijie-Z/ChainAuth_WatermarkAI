@@ -19,20 +19,12 @@ from app.resources.asset import validate_magic_bytes
 from app.services.notification_service import add_notification_event
 from app.services.watermark_service import WatermarkService
 from app.utils.middleware import rate_limit
+from app.utils.paths import REPORT_EXT_ALIASES, canonical_extension, uuid_filename
 
 ADMIN_ROLES = ('admin', 'asset_admin', 'license_admin', 'adm1', 'adm2')
 REVIEW_ROLES = ('admin', 'asset_admin', 'license_admin')
 REPORT_STATUSES = ('pending', 'reviewing', 'confirmed', 'rejected')
-REPORT_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff', '.webp', '.zip'}
 MAX_REPORT_FILE = 20 * 1024 * 1024
-
-
-def _hash_file(path):
-    digest = hashlib.sha256()
-    with open(path, 'rb') as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b''):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _published_asset_by_watermark(watermark_id):
@@ -126,8 +118,8 @@ class InfringementReportResource(Resource):
 
         if file and file.filename:
             original_name = file.filename
-            ext = os.path.splitext(original_name)[1].lower()
-            if ext not in REPORT_EXTENSIONS:
+            ext = canonical_extension(original_name, REPORT_EXT_ALIASES)
+            if not ext:
                 return {'code': 400, 'message': '仅支持图片或 ZIP 文件'}, 400
             if not validate_magic_bytes(file, ext.lstrip('.')):
                 return {'code': 400, 'message': '文件内容与扩展名不匹配'}, 400
@@ -142,11 +134,14 @@ class InfringementReportResource(Resource):
                 }, 400
 
             suspect_filename = original_name[:255]
-            suspect_path = os.path.join(
-                _report_dir(), f'{uuid.uuid4().hex}{ext}'
-            )
+            suspect_path = os.path.join(_report_dir(), uuid_filename(ext))
+            file.seek(0)
+            digest = hashlib.sha256()
+            for chunk in iter(lambda: file.read(1024 * 1024), b''):
+                digest.update(chunk)
+            suspect_hash = digest.hexdigest()
+            file.seek(0)
             file.save(suspect_path)
-            suspect_hash = _hash_file(suspect_path)
 
             try:
                 trace = WatermarkService.trace_from_file(suspect_path)
@@ -248,8 +243,8 @@ class InfringementPatrolResource(Resource):
 
         validated = []
         for upload in uploads:
-            ext = os.path.splitext(upload.filename)[1].lower()
-            if ext not in REPORT_EXTENSIONS:
+            ext = canonical_extension(upload.filename, REPORT_EXT_ALIASES)
+            if not ext:
                 return {
                     'code': 400,
                     'message': f'{upload.filename}: 仅支持图片或 ZIP 文件'
@@ -275,7 +270,7 @@ class InfringementPatrolResource(Resource):
         files = []
         try:
             for upload, ext in validated:
-                filename = f'{uuid.uuid4().hex}{ext}'
+                filename = uuid_filename(ext)
                 path = os.path.join(batch_dir, filename)
                 upload.save(path)
                 files.append({

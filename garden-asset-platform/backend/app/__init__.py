@@ -211,7 +211,9 @@ def register_api_resources(app):
     from app.resources.auth import (
         RegisterResource, LoginResource, LogoutResource,
         RefreshTokenResource, CurrentUserResource,
-        UserListResource, UserResource, ChangePasswordResource
+        UserListResource, UserResource, ChangePasswordResource,
+        ForgotPasswordResource, ResetPasswordResource,
+        SendEmailVerificationResource, VerifyEmailResource
     )
     api.add_resource(RegisterResource, '/register')
     api.add_resource(LoginResource, '/login')
@@ -219,6 +221,10 @@ def register_api_resources(app):
     api.add_resource(RefreshTokenResource, '/refresh')
     api.add_resource(CurrentUserResource, '/user/current')
     api.add_resource(ChangePasswordResource, '/user/change-password')
+    api.add_resource(ForgotPasswordResource, '/forgot-password')
+    api.add_resource(ResetPasswordResource, '/reset-password')
+    api.add_resource(SendEmailVerificationResource, '/verify-email/send')
+    api.add_resource(VerifyEmailResource, '/verify-email')
     api.add_resource(UserListResource, '/users')
     api.add_resource(UserResource, '/users/<int:user_id>')
 
