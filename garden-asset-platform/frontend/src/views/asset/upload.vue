@@ -258,6 +258,7 @@ const uploadMessage = ref('')
 const overallStatus = ref('')
 const queue = ref([])
 let queueSeq = 0
+const RESUMABLE_THRESHOLD = 8 * 1024 * 1024
 
 const TYPE_BY_EXT = {
   jpg: 'image', jpeg: 'image', png: 'image', gif: 'image', bmp: 'image', tiff: 'image', webp: 'image',
@@ -465,6 +466,73 @@ async function waitForTask(taskId, onProgress) {
   throw new Error('任务处理超时，请稍后在资产详情页查看')
 }
 
+async function uploadResumable(item) {
+  const title = item.title.trim() || item.name.replace(/\.[^/.]+$/, '')
+  const sessionResponse = await assetApi.createUploadSession({
+    filename: item.raw.name,
+    size: item.raw.size,
+    asset_type: resolveType(item),
+    title,
+    description: form.value.description,
+    garden_id: form.value.garden_id,
+    tags: form.value.tags
+  })
+  if (sessionResponse.data?.code !== 200) {
+    throw new Error(sessionResponse.data?.message || '创建上传会话失败')
+  }
+
+  const session = sessionResponse.data.data
+  const chunkSize = session.chunk_size || 4 * 1024 * 1024
+  let received = Number(session.received_size || 0)
+  let attempts = 0
+
+  while (received < item.raw.size) {
+    const chunk = item.raw.slice(received, received + chunkSize)
+    try {
+      const chunkResponse = await assetApi.uploadChunk(
+        session.upload_id,
+        chunk,
+        received,
+        {
+          timeout: 0,
+          onUploadProgress: (event) => {
+            if (!event.total) return
+            const uploaded = received + event.loaded
+            item.progress = Math.min(
+              55,
+              Math.max(1, Math.round((uploaded / item.raw.size) * 55))
+            )
+            recalcOverall()
+          }
+        }
+      )
+      received = Number(chunkResponse.data?.data?.received_size ?? received + chunk.size)
+      item.progress = Math.min(
+        55,
+        Math.max(1, Math.round((received / item.raw.size) * 55))
+      )
+      recalcOverall()
+    } catch (error) {
+      attempts += 1
+      if (attempts >= 3) throw error
+      // 网络中断后查询服务端已接收位置，从断点继续
+      const statusResponse = await assetApi.getUploadSession(session.upload_id).catch(() => null)
+      const serverOffset = Number(statusResponse?.data?.data?.received_size)
+      if (Number.isFinite(serverOffset) && serverOffset > received) {
+        received = serverOffset
+      }
+      if (received >= item.raw.size) break
+      await new Promise(resolve => setTimeout(resolve, 600 * attempts))
+    }
+  }
+
+  const completed = await assetApi.completeUploadSession(session.upload_id)
+  if (completed.data?.code !== 200) {
+    throw new Error(completed.data?.message || '合并文件失败')
+  }
+  return completed
+}
+
 async function processItem(item) {
   item.status = 'uploading'
   item.progress = 1
@@ -481,15 +549,17 @@ async function processItem(item) {
     formData.append('description', form.value.description)
     formData.append('tags', JSON.stringify(form.value.tags))
 
-    const response = await assetApi.create(formData, {
-      // 大文件可能远超全局 30 秒超时
-      timeout: 0,
-      onUploadProgress: (event) => {
-        if (!event.total) return
-        item.progress = Math.min(55, Math.max(1, Math.round((event.loaded / event.total) * 55)))
-        recalcOverall()
-      }
-    })
+    const response = item.raw.size >= RESUMABLE_THRESHOLD
+      ? await uploadResumable(item)
+      : await assetApi.create(formData, {
+        // 大文件可能远超全局 30 秒超时
+        timeout: 0,
+        onUploadProgress: (event) => {
+          if (!event.total) return
+          item.progress = Math.min(55, Math.max(1, Math.round((event.loaded / event.total) * 55)))
+          recalcOverall()
+        }
+      })
     if (response.data.code !== 200) {
       throw new Error(response.data.message || '创建资产失败')
     }

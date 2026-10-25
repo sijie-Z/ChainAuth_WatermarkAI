@@ -203,6 +203,9 @@ class Config:
     EMAIL_VERIFY_MAX_AGE = int(
         os.environ.get('EMAIL_VERIFY_MAX_AGE', '86400')
     )
+    RESUMABLE_CHUNK_SIZE = int(
+        os.environ.get('RESUMABLE_CHUNK_SIZE', str(4 * 1024 * 1024))
+    )
 
     # Webhook 默认禁止内网地址，避免 SSRF；内部自动化场景可显式开启
     WEBHOOK_ALLOW_PRIVATE = os.environ.get(
