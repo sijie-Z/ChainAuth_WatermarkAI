@@ -15,6 +15,7 @@ from flask import current_app, request, send_file
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restful import Resource
 from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
 from app.models.asset import Asset, AssetVersion
@@ -192,6 +193,7 @@ def _create_version(asset, user_id, file_path, file_name, file_format,
     )
     db.session.add(version)
     db.session.flush()
+    asset.current_version_no = version.version_no
     _apply_version_file(
         asset, file_path, file_hash, file_size, file_format, thumbnail_path
     )
@@ -206,6 +208,41 @@ def _create_version(asset, user_id, file_path, file_name, file_format,
         asset.reject_reason = None
 
     return version
+
+
+def _commit_new_version(asset, user_id, **kwargs):
+    """并发上传同一资产时，版本号可能撞唯一键；冲突后重新取号重试。"""
+    asset_id = asset.id
+    last_error = None
+    for _ in range(3):
+        current = db.session.get(Asset, asset_id)
+        try:
+            version = _create_version(current, user_id, **kwargs)
+            db.session.commit()
+            return current, version
+        except IntegrityError as exc:
+            db.session.rollback()
+            last_error = exc
+    raise last_error
+
+
+def _remove_file_quietly(path):
+    if not path:
+        return
+    try:
+        if os.path.isfile(path):
+            os.remove(path)
+    except OSError:
+        pass
+
+
+def _remove_version_files(file_path, thumbnail_path):
+    """唯一键冲突或创建失败时，清理刚写入的文件与缩略图。"""
+    _remove_file_quietly(file_path)
+    _remove_file_quietly(thumbnail_path)
+    if thumbnail_path:
+        base, ext = os.path.splitext(thumbnail_path)
+        _remove_file_quietly(f'{base}-card{ext}')
 
 
 def _version_response(asset, version, message):
@@ -356,17 +393,23 @@ class AssetVersionListResource(Resource):
 
         thumbnail_path = _generate_thumbnails(asset, file_path)
 
-        version = _create_version(
-            asset, user_id,
-            file_path=file_path,
-            file_name=original_name,
-            file_format=ext.upper(),
-            file_size=file_size,
-            file_hash=file_hash,
-            thumbnail_path=thumbnail_path,
-            change_note=change_note
-        )
-        db.session.commit()
+        try:
+            asset, version = _commit_new_version(
+                asset, user_id,
+                file_path=file_path,
+                file_name=original_name,
+                file_format=ext.upper(),
+                file_size=file_size,
+                file_hash=file_hash,
+                thumbnail_path=thumbnail_path,
+                change_note=change_note
+            )
+        except IntegrityError:
+            _remove_version_files(file_path, thumbnail_path)
+            return {
+                'code': 409,
+                'message': '版本号冲突，请刷新后重试'
+            }, 409
 
         OperationLog.log(
             user=user,
@@ -381,15 +424,59 @@ class AssetVersionListResource(Resource):
         return _version_response(asset, version, '新版本上传成功')
 
 
+def _version_ticket_serializer():
+    from itsdangerous import URLSafeTimedSerializer
+    return URLSafeTimedSerializer(
+        current_app.config['SECRET_KEY'],
+        salt='asset-version-download-ticket'
+    )
+
+
+def _version_ticket_max_age():
+    return int(current_app.config.get('DOWNLOAD_TICKET_MAX_AGE', 120))
+
+
+def _verify_version_ticket(ticket, asset_id, version_id):
+    try:
+        payload = _version_ticket_serializer().loads(
+            ticket, max_age=_version_ticket_max_age()
+        )
+    except Exception:
+        return None
+    if (
+        payload.get('asset_id') != asset_id
+        or payload.get('version_id') != version_id
+    ):
+        return None
+    return payload
+
+
 class AssetVersionDownloadResource(Resource):
-    """下载指定历史版本文件"""
+    """下载指定历史版本文件（支持 JWT 或短时票据流式下载）"""
 
-    @jwt_required()
+    @jwt_required(optional=True)
     def get(self, asset_id, version_id):
-        user_id = get_jwt_identity()
-        user = User.query.get(user_id)
-        asset = Asset.query.get(asset_id)
+        ticket = (request.args.get('ticket') or '').strip()
+        if ticket:
+            payload = _verify_version_ticket(ticket, asset_id, version_id)
+            if not payload:
+                return {
+                    'code': 401,
+                    'message': '下载凭证无效或已过期，请重新发起下载'
+                }, 401
+            user_id = payload.get('user_id')
+            user = User.query.get(user_id)
+            if not user or user.status != 'active':
+                return {'code': 401, 'message': '账号不可用'}, 401
+        else:
+            user_id = get_jwt_identity()
+            if not user_id:
+                return {'code': 401, 'message': '未授权访问'}, 401
+            user = User.query.get(user_id)
+            if not user:
+                return {'code': 401, 'message': '账号不存在或已被禁用'}, 401
 
+        asset = Asset.query.get(asset_id)
         if not asset:
             return {'code': 404, 'message': '资产不存在'}, 404
         if not _can_manage(user, user_id, asset):
@@ -409,6 +496,41 @@ class AssetVersionDownloadResource(Resource):
             download_name = f'{download_name}.{ext}'
 
         return send_file(file_path, as_attachment=True, download_name=download_name)
+
+
+class AssetVersionDownloadTicketResource(Resource):
+    """签发历史版本短时下载票据，供浏览器直接流式落盘"""
+
+    @jwt_required()
+    def post(self, asset_id, version_id):
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        asset = Asset.query.get(asset_id)
+        if not asset:
+            return {'code': 404, 'message': '资产不存在'}, 404
+        if not _can_manage(user, user_id, asset):
+            return {'code': 403, 'message': '无下载权限'}, 403
+
+        version = AssetVersion.query.get(version_id)
+        if not version or version.asset_id != asset.id:
+            return {'code': 404, 'message': '版本不存在'}, 404
+        file_path = os.path.abspath(version.file_path or '')
+        if not file_path or not os.path.isfile(file_path):
+            return {'code': 404, 'message': '版本文件不存在'}, 404
+
+        ticket = _version_ticket_serializer().dumps({
+            'asset_id': asset_id,
+            'version_id': version.id,
+            'user_id': user_id,
+            'nonce': uuid.uuid4().hex,
+        })
+        return {
+            'code': 200,
+            'data': {
+                'ticket': ticket,
+                'expires_in': _version_ticket_max_age(),
+            },
+        }, 200
 
 
 class AssetVersionRestoreResource(Resource):
@@ -453,17 +575,23 @@ class AssetVersionRestoreResource(Resource):
         file_size = os.path.getsize(file_path)
         thumbnail_path = _generate_thumbnails(asset, file_path)
 
-        version = _create_version(
-            asset, user_id,
-            file_path=file_path,
-            file_name=source.file_name,
-            file_format=source.file_format or ext.upper() or None,
-            file_size=file_size,
-            file_hash=file_hash,
-            thumbnail_path=thumbnail_path,
-            change_note=f'恢复自 v{source.version_no}'
-        )
-        db.session.commit()
+        try:
+            asset, version = _commit_new_version(
+                asset, user_id,
+                file_path=file_path,
+                file_name=source.file_name,
+                file_format=source.file_format or ext.upper() or None,
+                file_size=file_size,
+                file_hash=file_hash,
+                thumbnail_path=thumbnail_path,
+                change_note=f'恢复自 v{source.version_no}'
+            )
+        except IntegrityError:
+            _remove_version_files(file_path, thumbnail_path)
+            return {
+                'code': 409,
+                'message': '版本号冲突，请刷新后重试'
+            }, 409
 
         OperationLog.log(
             user=user,

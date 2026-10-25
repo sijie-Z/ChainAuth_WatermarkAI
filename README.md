@@ -9,7 +9,7 @@
 
 ## 最新发布
 
-[v1.10.0 · 大文件分块断点续传](https://github.com/sijie-Z/ChainAuth_WatermarkAI/releases/tag/v1.10.0) · [主项目文档](garden-asset-platform/README.md) · [完整变更](garden-asset-platform/CHANGELOG.md)
+[v1.11.0 · 跨页面断点续传与一致性加固](https://github.com/sijie-Z/ChainAuth_WatermarkAI/releases/tag/v1.11.0) · [主项目文档](garden-asset-platform/README.md) · [完整变更](garden-asset-platform/CHANGELOG.md)
 
 ## 演示
 
@@ -22,8 +22,10 @@
 | ![资产档案](garden-asset-platform/docs/assets/screenshots/02-asset-archive.png) | ![水印实验室](garden-asset-platform/docs/assets/screenshots/06-watermark-lab.png) |
 | **证据链** | **证据包核验** |
 | ![证据链](garden-asset-platform/docs/assets/screenshots/04-evidence-chain.png) | ![证据包核验](garden-asset-platform/docs/assets/screenshots/13-evidence-verify.png) |
+| **跨页面断点续传** | **任务队列健康度** |
+| ![断点续传](garden-asset-platform/docs/assets/screenshots/17-resume-upload.png) | ![任务队列](garden-asset-platform/docs/assets/screenshots/10-task-health.png) |
 
-> 视频、GIF、封面与全部 16 张截图也作为附件挂在 [v1.10.0 Release](https://github.com/sijie-Z/ChainAuth_WatermarkAI/releases/tag/v1.10.0) 上。
+> 视频、GIF、封面与全部 17 张截图也作为附件挂在 [v1.11.0 Release](https://github.com/sijie-Z/ChainAuth_WatermarkAI/releases/tag/v1.11.0) 上。
 
 本仓库包含苏州园林数字资产安全分发与溯源系统的完整实现：
 
@@ -70,7 +72,7 @@ python -m venv venv && source venv/bin/activate
 pip install -r requirements-dev.txt
 python scripts/init_db.py
 python run.py                     # :5000
-python -m pytest                  # 381 个用例（内存 SQLite）
+python -m pytest                  # 395 个用例（内存 SQLite）
 
 # 前端
 cd garden-asset-platform/frontend
@@ -91,7 +93,7 @@ npm run test:ci && npm run lint:check && npm run build   # 54 个前端单测
 | 发布 | 发布分支 → `main` → 标签 `vX.Y.Z` → GitHub Release + GHCR 镜像 |
 | 自动回合并 | `main` 更新后自动创建同步提醒 issue，本地执行 `scripts/gitflow.sh sync` 走正常 PR 流程 |
 | 视觉体系 | 青绿山水 · 档案册（黛青/宣纸/宋体/朱砂），详见 [docs/UI-DESIGN.md](docs/UI-DESIGN.md) |
-| 端到端验证 | `garden-asset-platform/backend/scripts/e2e_flow.py`：完整 API 流程；Playwright 24 个前端点击流用例（`npm run test:e2e`）；后端 381、前端 54 个单测 |
+| 端到端验证 | `garden-asset-platform/backend/scripts/e2e_flow.py`：完整 API 流程；Playwright 25 个前端点击流用例（`npm run test:e2e`）；后端 395、前端 60 个单测 |
 
 - 贡献流程：[CONTRIBUTING.md](CONTRIBUTING.md)
 - Git Flow 详解：[docs/GIT-FLOW.md](docs/GIT-FLOW.md)

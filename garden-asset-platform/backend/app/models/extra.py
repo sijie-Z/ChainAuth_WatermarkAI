@@ -1,6 +1,7 @@
 """
 用户收藏、下载记录、分享链接与通知已读模型
 """
+import json
 from datetime import datetime
 from app.extensions import db
 
@@ -417,11 +418,18 @@ class UploadSession(db.Model):
     user = db.relationship('User', backref=db.backref('upload_sessions', lazy='dynamic'))
 
     def to_dict(self):
+        try:
+            tags = json.loads(self.tags_json or '[]')
+        except (TypeError, ValueError):
+            tags = []
         return {
             'upload_id': self.id,
             'filename': self.filename,
             'asset_type': self.asset_type,
             'title': self.title,
+            'description': self.description or '',
+            'garden_id': self.garden_id,
+            'tags': tags if isinstance(tags, list) else [],
             'expected_size': self.expected_size,
             'received_size': self.received_size,
             'chunk_size': self.chunk_size,

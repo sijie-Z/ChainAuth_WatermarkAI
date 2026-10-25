@@ -44,7 +44,7 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="审批操作" width="190">
+        <el-table-column label="审批操作" width="190" fixed="right">
           <template #default="{ row }">
             <template v-if="canAct(row)">
               <el-button size="small" type="success" @click="openApproveDialog(row, 'approve')">
@@ -103,14 +103,17 @@
           />
         </el-form-item>
 
-        <el-form-item v-if="approveDialog.action === 'approve'" label="有效期">
+        <el-form-item
+          v-if="approveDialog.action === 'approve' && approveDialog.applicationStatus === 'adm1_approved'"
+          label="有效期"
+        >
           <el-date-picker
             v-model="approveDialog.form.valid_until"
             type="date"
             placeholder="留空则按申请时长计算"
             :disabled-date="disabledApproveDate"
           />
-          <span class="field-hint">留空时按申请时长自动计算；可选日期必须晚于今天。</span>
+          <span class="field-hint">二级审批通过时生效；留空按申请时长自动计算，可选日期必须晚于今天。</span>
         </el-form-item>
       </el-form>
 
@@ -230,6 +233,7 @@ function openApproveDialog(row, action) {
     action,
     applicationId: row.id,
     applicationCode: row.application_code || `#${row.id}`,
+    applicationStatus: row.status,
     assetTitle: row.asset_title || '-',
     applicantName: row.applicant_name || '-',
     licenseType: row.license_type,
@@ -238,7 +242,9 @@ function openApproveDialog(row, action) {
     createdAt: formatDate(row.created_at),
     form: {
       comment: '',
-      valid_until: action === 'approve' ? defaultValidUntil(row.duration_months) : null
+      valid_until: (
+        action === 'approve' && row.status === 'adm1_approved'
+      ) ? defaultValidUntil(row.duration_months) : null
     }
   }
 }
@@ -253,8 +259,14 @@ async function doApprove() {
     approveDialog.value.loading = true
     const data = {
       action: approveDialog.value.action,
-      comment: approveDialog.value.form.comment,
-      valid_until: approveDialog.value.form.valid_until
+      comment: approveDialog.value.form.comment
+    }
+    // 一级审批阶段不处理有效期，避免让审批人误以为日期已生效
+    if (
+      approveDialog.value.action === 'approve'
+      && approveDialog.value.applicationStatus === 'adm1_approved'
+    ) {
+      data.valid_until = approveDialog.value.form.valid_until
     }
 
     const response = await licenseApi.approve(approveDialog.value.applicationId, data)

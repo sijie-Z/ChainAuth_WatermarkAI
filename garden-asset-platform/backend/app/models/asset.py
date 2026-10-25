@@ -25,6 +25,8 @@ class Asset(db.Model):
     file_format = db.Column(db.String(20), nullable=True)  # JPG/PNG/SHP/OBJ/PDF/MP4
     file_size = db.Column(db.BigInteger, nullable=True)  # 文件大小(字节)
     file_hash = db.Column(db.String(64), nullable=True)  # SHA256哈希
+    # 当前版本号缓存：列表/授权序列化时避免逐条查询 asset_versions
+    current_version_no = db.Column(db.Integer, default=1, nullable=True)
 
     # 存储信息
     storage_path = db.Column(db.String(500), nullable=True)  # MinIO存储路径
@@ -109,6 +111,7 @@ class Asset(db.Model):
             'file_format': self.file_format,
             'file_size': self.file_size,
             'thumbnail_path': self.thumbnail_path,
+            'current_version_no': self.current_version_no or 1,
             'watermark_status': self.watermark_status,
             'watermark_id': self.watermark_id,
             'watermark_embedded_at': self.watermark_embedded_at.isoformat() if self.watermark_embedded_at else None,

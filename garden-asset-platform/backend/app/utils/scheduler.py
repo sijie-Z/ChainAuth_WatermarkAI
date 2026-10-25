@@ -51,6 +51,23 @@ def init_scheduler(app):
                             os.remove(path)
                             app.logger.info(f'已删除临时文件: {path}')
 
+    @scheduler.scheduled_job(CronTrigger(hour=3, minute=30))
+    def purge_stale_upload_sessions_job():
+        """每日凌晨3:30回收超时的断点续传会话与临时文件"""
+        with app.app_context():
+            try:
+                from app.services.upload_session_service import (
+                    purge_stale_upload_sessions,
+                )
+                result = purge_stale_upload_sessions()
+                if result['expired']:
+                    app.logger.info(
+                        f"断点续传会话回收: 过期 {result['expired']} 个, "
+                        f"清理临时目录 {result['cleaned']} 个"
+                    )
+            except Exception as exc:
+                app.logger.error(f'断点续传会话回收失败: {exc}')
+
     @scheduler.scheduled_job(CronTrigger(hour=4, minute=0))
     def check_expired_licenses():
         """每日凌晨4点检查过期授权"""

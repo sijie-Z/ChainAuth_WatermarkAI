@@ -1,4 +1,5 @@
 """下载指纹副本测试"""
+import os
 import uuid
 from datetime import datetime, timedelta
 from io import BytesIO
@@ -147,6 +148,15 @@ def test_download_ticket_streams_with_fingerprint(
     assert data['expires_in'] > 0
     code = data['fingerprint_code']
     assert code and code.startswith('FP-')
+
+    # 签票接口必须显式提交指纹记录：新 session 读回仍然是同一指纹码
+    with app.app_context():
+        db.session.remove()
+        fingerprint = DownloadFingerprint.query.filter_by(
+            license_id=license_id, asset_id=asset_id
+        ).one()
+        assert fingerprint.fingerprint_code == code
+        assert os.path.isfile(fingerprint.file_path)
 
     # 票据方式无需 Authorization 头，浏览器可直接流式下载
     download = client.get(

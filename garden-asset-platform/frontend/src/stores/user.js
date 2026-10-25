@@ -37,9 +37,16 @@ export const useUserStore = defineStore('user', () => {
   }
 
   function logout() {
-    // 先让后端撤销当前 access/refresh token，再清空本地状态；失败也不阻断退出
-    if (token.value) {
-      api.post('/logout', { refresh_token: refreshToken.value || undefined }, { silent: true }).catch(() => {})
+    // 先捕获 token：clearAuth() 后 localStorage 为空，
+    // axios 拦截器无法再补 Authorization，导致注销请求 401 并误报“登录已过期”。
+    const accessToken = token.value
+    const refresh = refreshToken.value
+    if (accessToken) {
+      api.post('/logout', { refresh_token: refresh || undefined }, {
+        silent: true,
+        skipAuthRefresh: true,
+        headers: { Authorization: `Bearer ${accessToken}` }
+      }).catch(() => {})
     }
     clearAuth()
   }

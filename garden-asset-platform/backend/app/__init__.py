@@ -232,7 +232,7 @@ def register_api_resources(app):
     from app.resources.asset import (
         AssetListResource, AssetResource, AssetUploadResource,
         AssetUploadSessionResource, AssetUploadSessionDetailResource,
-        AssetUploadSessionCompleteResource,
+        AssetUploadSessionCompleteResource, AssetUploadSessionListResource,
         AssetDownloadResource, AssetDownloadTicketResource,
         AssetFavoriteResource, AssetStatsResource,
         MyAssetsResource, AssetTagsResource, AssetPublishResource, AssetApproveResource,
@@ -255,6 +255,7 @@ def register_api_resources(app):
     api.add_resource(FavoriteListResource, '/favorites')
     api.add_resource(AssetUploadResource, '/assets/upload')
     api.add_resource(AssetUploadSessionResource, '/assets/upload/session')
+    api.add_resource(AssetUploadSessionListResource, '/assets/upload/sessions')
     api.add_resource(
         AssetUploadSessionDetailResource,
         '/assets/upload/session/<string:upload_id>'
@@ -278,12 +279,16 @@ def register_api_resources(app):
     # 资产版本历史
     from app.resources.versions import (
         AssetVersionListResource, AssetVersionDownloadResource,
-        AssetVersionRestoreResource
+        AssetVersionDownloadTicketResource, AssetVersionRestoreResource
     )
     api.add_resource(AssetVersionListResource, '/assets/<string:asset_id>/versions')
     api.add_resource(
         AssetVersionDownloadResource,
         '/assets/<string:asset_id>/versions/<int:version_id>/download'
+    )
+    api.add_resource(
+        AssetVersionDownloadTicketResource,
+        '/assets/<string:asset_id>/versions/<int:version_id>/download-ticket'
     )
     api.add_resource(
         AssetVersionRestoreResource,

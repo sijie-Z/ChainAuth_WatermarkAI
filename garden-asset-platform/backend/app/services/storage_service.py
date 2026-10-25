@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from flask import current_app
 
 from app.models.asset import Asset, AssetVersion
+from app.models.extra import UploadSession
 from app.models.fingerprint import DownloadFingerprint
 from app.models.report import InfringementReport
 
@@ -63,6 +64,10 @@ def _referenced_paths():
         InfringementReport.suspect_file_path
     ):
         referenced.add(_norm(report.suspect_file_path))
+
+    # 进行中的断点续传临时文件由 UploadSession 引用，不能当作孤儿
+    for session in UploadSession.query.with_entities(UploadSession.temp_path):
+        referenced.add(_norm(session.temp_path))
 
     referenced.discard(None)
     return referenced
