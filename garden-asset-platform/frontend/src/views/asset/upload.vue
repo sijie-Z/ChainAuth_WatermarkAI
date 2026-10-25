@@ -603,15 +603,24 @@ async function submitUpload() {
   uploadMessage.value = `开始处理 ${targets.length} 个文件…`
   overallProgress.value = 0
 
-  for (const item of targets) {
-    if (item.status === 'failed') {
-      item.status = 'ready'
-      item.error = ''
-      item.progress = 0
+  // 上传与任务轮询彼此独立；并发 2 个可显著缩短多文件等待，
+  // 同时避免一次性占满后端缩略图/水印 CPU。
+  let cursor = 0
+  const worker = async () => {
+    while (cursor < targets.length) {
+      const item = targets[cursor]
+      cursor += 1
+      if (item.status === 'failed') {
+        item.status = 'ready'
+        item.error = ''
+        item.progress = 0
+      }
+      uploadMessage.value = `正在处理：${item.name}`
+      await processItem(item)
     }
-    uploadMessage.value = `正在处理：${item.name}`
-    await processItem(item)
   }
+  const workerCount = Math.min(2, targets.length)
+  await Promise.all(Array.from({ length: workerCount }, worker))
 
   uploading.value = false
   recalcOverall()

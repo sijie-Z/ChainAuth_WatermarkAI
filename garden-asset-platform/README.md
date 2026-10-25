@@ -148,13 +148,13 @@ FLASK_APP=run.py flask db upgrade
 ### 运行测试
 
 ```bash
-# 后端测试（374个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/授权视图/资产回收站/侵权线索/批量巡检/备份恢复/存储巡检/水印鲁棒性实验/证据包导出与核验/审计日志完整性/HTTP错误处理/对象级可见性）
+# 后端测试（378个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/授权视图/资产回收站/侵权线索/批量巡检/备份恢复/存储巡检/水印鲁棒性实验/证据包导出与核验/审计日志完整性/HTTP错误处理/对象级可见性）
 cd backend && python -m pytest tests/ -v
 
 # Windows 内存受限时：逐文件隔离子进程运行（推荐）
 cd backend && python scripts/run_tests.py
 
-# 前端单元测试（52 个用例）
+# 前端单元测试（53 个用例）
 cd frontend && npm run test:ci
 
 # Windows 内存受限时：逐文件运行前端测试
@@ -189,7 +189,7 @@ garden-asset-platform/
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
 │   ├── migrations/                # Alembic 迁移（baseline + versions）
-│   ├── tests/                     # pytest测试（374个用例）
+│   ├── tests/                     # pytest测试（378个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -227,6 +227,10 @@ garden-asset-platform/
 | POST | `/api/register` | 用户注册 |
 | POST | `/api/login` | 用户登录 |
 | POST | `/api/refresh` | 刷新Access Token |
+| POST | `/api/forgot-password` | 请求密码重置邮件（不泄露邮箱是否注册；开发环境可返回调试链接） |
+| POST | `/api/reset-password` | 使用一次性链接重置密码（30 分钟有效，重置后旧 Token 失效） |
+| POST | `/api/verify-email` | 使用邮件链接验证邮箱 |
+| POST | `/api/verify-email/send` | 发送邮箱验证邮件（需登录，限流） |
 
 ### 资产模块（需认证）
 

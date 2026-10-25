@@ -88,7 +88,7 @@
 
           <div class="form-row">
             <el-checkbox v-model="rememberMe">记住用户名</el-checkbox>
-            <span class="form-hint">忘记密码请联系管理员</span>
+            <router-link to="/forgot-password" class="form-hint">忘记密码？</router-link>
           </div>
 
           <el-button

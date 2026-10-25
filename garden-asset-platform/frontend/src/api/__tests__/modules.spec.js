@@ -11,7 +11,7 @@ vi.mock('@/api/index', () => ({
 
 import api from '@/api/index'
 import {
-  assetApi, blockchainApi, infringementApi, licenseApi, notificationApi,
+  assetApi, authApi, blockchainApi, infringementApi, licenseApi, notificationApi,
   shareApi, systemApi, taskApi, userApi
 } from '@/api/modules'
 
@@ -109,6 +109,30 @@ describe('api modules', () => {
     assetApi.createPreviewTicket('asset-1')
 
     expect(api.post).toHaveBeenCalledWith('/assets/asset-1/preview-ticket')
+  })
+
+  it('authApi exposes password reset and email verification', () => {
+    authApi.forgotPassword({ email: 'user@example.com' })
+    authApi.resetPassword({ token: 't', new_password: 'newpass123' })
+    authApi.sendEmailVerification()
+    authApi.verifyEmail({ token: 't' })
+
+    expect(api.post).toHaveBeenCalledWith(
+      '/forgot-password',
+      { email: 'user@example.com' },
+      { skipAuth: true, silent: true }
+    )
+    expect(api.post).toHaveBeenCalledWith(
+      '/reset-password',
+      { token: 't', new_password: 'newpass123' },
+      { skipAuth: true, silent: true }
+    )
+    expect(api.post).toHaveBeenCalledWith('/verify-email/send')
+    expect(api.post).toHaveBeenCalledWith(
+      '/verify-email',
+      { token: 't' },
+      { skipAuth: true, silent: true }
+    )
   })
 
   it('shareApi.createDownloadTicket forwards the access code', () => {

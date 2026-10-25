@@ -16,6 +16,16 @@ export const authApi = {
   register: (data) => api.post('/register', data),
   logout: () => api.post('/logout'),
   refresh: () => api.post('/refresh'),
+  forgotPassword: (data) => api.post('/forgot-password', data, {
+    skipAuth: true, silent: true
+  }),
+  resetPassword: (data) => api.post('/reset-password', data, {
+    skipAuth: true, silent: true
+  }),
+  sendEmailVerification: () => api.post('/verify-email/send'),
+  verifyEmail: (data) => api.post('/verify-email', data, {
+    skipAuth: true, silent: true
+  }),
   getUsers: () => api.get('/users'),
   updateUser: (userId, data) => api.put(`/users/${userId}`, data)
 }
