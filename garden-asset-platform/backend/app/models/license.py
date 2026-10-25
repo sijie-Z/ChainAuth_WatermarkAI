@@ -77,12 +77,24 @@ class License(db.Model):
         )
         if is_expired:
             status = 'expired'
+
+        # 使用资产主表的版本号缓存；历史授权没有 version_no 时按不限制处理
+        current_version_no = (
+            self.asset.current_version_no if self.asset else None
+        )
+        version_stale = bool(
+            self.version_no
+            and current_version_no
+            and self.version_no != current_version_no
+        )
         return {
             'id': self.id,
             'license_code': self.license_code,
             'asset_id': self.asset_id,
             'version_id': self.version_id,
             'version_no': self.version_no,
+            'current_version_no': current_version_no,
+            'version_stale': version_stale,
             'license_type': self.license_type,
             'usage_scope': self.usage_scope,
             'territory': self.territory,

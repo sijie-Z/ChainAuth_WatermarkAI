@@ -104,8 +104,8 @@
                   link
                   type="primary"
                   :loading="downloadingId === row.id"
-                  @click.stop="downloadAsset(row)"                  :disabled="row.status !== 'active' || !row.asset_id"
-                  :title="row.status !== 'active' ? '授权未生效或已过期，无法下载' : '下载资产'"
+                  @click.stop="downloadAsset(row)"                  :disabled="row.status !== 'active' || !row.asset_id || row.version_stale"
+                  :title="row.version_stale ? '授权对应历史版本，请重新申请' : (row.status !== 'active' ? '授权未生效或已过期，无法下载' : '下载资产')"
                 >
                   下载
                 </el-button>
@@ -135,6 +135,13 @@
                 <el-tag :type="getStatusMeta(row.status).type" size="small">
                   {{ getStatusMeta(row.status).label }}
                 </el-tag>
+                <el-tag
+                  v-if="!isApplicationView && row.version_stale"
+                  type="warning"
+                  size="small"
+                >
+                  需重新申请
+                </el-tag>
               </header>
               <h3>{{ row.asset_title || '未知资产' }}</h3>
               <p class="mono mobile-asset-code">{{ row.asset_code || '-' }}</p>
@@ -151,7 +158,7 @@
                   type="primary"
                   size="small"
                   :loading="downloadingId === row.id"
-                  :disabled="row.status !== 'active' || !row.asset_id"
+                  :disabled="row.status !== 'active' || !row.asset_id || row.version_stale"
                   @click.stop="downloadAsset(row)"
                 >
                   下载
@@ -277,6 +284,7 @@ const loading = ref(false)
 const loadError = ref(false)
 const downloadingId = ref(null)
 const licenses = ref([])
+let licensesRequestSeq = 0
 const page = ref(1)
 const perPage = ref(20)
 const total = ref(0)
@@ -335,6 +343,7 @@ function handleFilterChange() {
 }
 
 async function loadLicenses() {
+  const requestId = ++licensesRequestSeq
   loading.value = true
   loadError.value = false
   try {
@@ -353,6 +362,7 @@ async function loadLicenses() {
       ? await licenseApi.myApplications(params)
       : await licenseApi.getMyLicenses(params)
 
+    if (requestId !== licensesRequestSeq) return
     if (response.data?.code === 200) {
       const data = response.data.data
       const items = Array.isArray(data) ? data : (data?.items || [])
@@ -362,10 +372,12 @@ async function loadLicenses() {
       loadError.value = true
     }
   } catch (error) {
-    console.error('加载授权记录失败:', error)
-    loadError.value = true
+    if (requestId === licensesRequestSeq) {
+      console.error('加载授权记录失败:', error)
+      loadError.value = true
+    }
   } finally {
-    loading.value = false
+    if (requestId === licensesRequestSeq) loading.value = false
   }
 }
 

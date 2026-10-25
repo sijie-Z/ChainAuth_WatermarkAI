@@ -1,6 +1,6 @@
 # 项目完整文件清单
 
-## 后端文件 (50+ Python文件)
+## 后端文件 (85 个 Python 文件)
 
 ### 核心模块
 ```
@@ -12,9 +12,9 @@ backend/
 │   ├── config_features.py       # 功能开关
 │   ├── config_test.py           # 测试配置
 │   ├── extensions.py            # Flask扩展
-│   ├── tasks.py                 # Celery异步任务
+│   ├── tasks.py                 # 持久化任务队列兼容入口（非 Celery）
 │   │
-│   ├── models/                  # 数据模型 (8个)
+│   ├── models/                  # 数据模型 (31 张表)
 │   │   ├── __init__.py
 │   │   ├── user.py              # 用户模型
 │   │   ├── garden.py            # 园林模型
@@ -24,7 +24,7 @@ backend/
 │   │   ├── log.py               # 日志模型
 │   │   └── extra.py             # 扩展模型
 │   │
-│   ├── resources/               # API资源 (8个模块)
+│   ├── resources/               # API资源 (21 个模块)
 │   │   ├── __init__.py
 │   │   ├── auth.py              # 认证API (7个端点)
 │   │   ├── asset.py             # 资产API
@@ -34,13 +34,13 @@ backend/
 │   │   ├── license.py           # 授权API (5个端点)
 │   │   └── ai.py                # AI API (4个端点)
 │   │
-│   ├── services/                # 业务服务 (3个)
+│   ├── services/                # 业务服务 (17 个)
 │   │   ├── __init__.py
 │   │   ├── watermark_service.py
 │   │   ├── blockchain_service.py
 │   │   └── ai_service.py
 │   │
-│   └── utils/                   # 工具模块 (14个)
+│   └── utils/                   # 工具模块 (26 个)
 │       ├── __init__.py
 │       ├── response.py          # 响应工具
 │       ├── file_utils.py        # 文件工具

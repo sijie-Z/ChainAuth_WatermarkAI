@@ -91,9 +91,9 @@
           <el-button
             type="primary"
             size="large"
+            native-type="submit"
             :loading="loading"
             class="register-btn"
-            @click="handleRegister"
           >
             {{ loading ? '创建中…' : '创建账号' }}
           </el-button>

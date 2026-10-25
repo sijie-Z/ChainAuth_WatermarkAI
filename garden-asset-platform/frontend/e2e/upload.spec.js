@@ -49,4 +49,55 @@ test.describe('批量上传', () => {
       }
     })
   })
+
+  test('刷新页面后显示未完成的大文件上传并可放弃', async ({ page }) => {
+    await page.goto('/login')
+    await page.getByPlaceholder('请输入用户名').fill('user1')
+    await page.getByPlaceholder('请输入密码').fill('123456')
+    await page.locator('.login-btn').click()
+    await page.waitForURL('**/assets', { timeout: 15000 })
+
+    // 直接创建会话，模拟“上传中断后关闭页面”
+    const created = await page.evaluate(async () => {
+      const token = localStorage.getItem('token')
+      const response = await fetch('/api/assets/upload/session', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          filename: 'resume-e2e.png',
+          size: 9 * 1024 * 1024,
+          asset_type: 'image',
+          title: '断点续传恢复测试',
+          tags: []
+        })
+      })
+      return response.json()
+    })
+    expect(created.code).toBe(200)
+
+    await page.goto('/assets/upload')
+    const panel = page.locator('.resume-panel')
+    await expect(panel).toBeVisible({ timeout: 15000 })
+    await expect(panel.getByText('resume-e2e.png')).toBeVisible()
+    await expect(panel.getByRole('button', { name: '选择文件继续' })).toBeVisible()
+
+    await panel.getByRole('button', { name: '放弃' }).click()
+    await page.locator('.el-message-box')
+      .getByRole('button', { name: '放弃' })
+      .click()
+    await expect(panel).toBeHidden({ timeout: 15000 })
+
+    // 服务端会话已取消
+    const status = await page.evaluate(async (uploadId) => {
+      const token = localStorage.getItem('token')
+      const response = await fetch(`/api/assets/upload/session/${uploadId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      return response.json()
+    }, created.data.upload_id)
+    expect(status.data.status).toBe('cancelled')
+  })
 })

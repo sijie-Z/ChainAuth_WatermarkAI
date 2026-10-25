@@ -18,7 +18,12 @@ from app.models.log import OperationLog
 from app.utils.middleware import rate_limit
 from app.utils.paths import VERSION_EXT_ALIASES, canonical_extension, uuid_filename
 from app.services.notification_service import add_notification_event
-from sqlalchemy import case, func, or_
+from app.services.upload_session_service import (
+    purge_stale_upload_sessions,
+    remove_session_files,
+    upload_session_lock,
+)
+from sqlalchemy import case, func, or_, update
 
 
 ADMIN_ROLES = ('admin', 'asset_admin', 'license_admin', 'adm1', 'adm2')
@@ -82,49 +87,103 @@ def allowed_file(filename, asset_type):
     return ext in allowed
 
 
-# 常见文件类型的魔术字节 (magic bytes)
-MAGIC_BYTES = {
+# 常见文件类型的魔术字节：每个格式可由多组规则匹配，每组规则是
+# (偏移, 签名) 的列表，列表内全部命中才算匹配。
+ZIP_SIGNATURES = [
+    [(0, b'PK\x03\x04')],
+    [(0, b'PK\x05\x06')],
+    [(0, b'PK\x07\x08')],
+]
+OLE_SIGNATURE = [[(0, b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1')]]
+
+MAGIC_RULES = {
     # 图片
-    'jpg': [b'\xff\xd8\xff'],
-    'jpeg': [b'\xff\xd8\xff'],
-    'png': [b'\x89PNG\r\n\x1a\n'],
-    'gif': [b'GIF87a', b'GIF89a'],
-    'bmp': [b'BM'],
-    'webp': [b'RIFF'],
-    'tiff': [b'II*\x00', b'MM\x00*'],
+    'jpg': [[(0, b'\xff\xd8\xff')]],
+    'jpeg': [[(0, b'\xff\xd8\xff')]],
+    'png': [[(0, b'\x89PNG\r\n\x1a\n')]],
+    'gif': [[(0, b'GIF87a')], [(0, b'GIF89a')]],
+    'bmp': [[(0, b'BM')]],
+    'webp': [[(0, b'RIFF'), (8, b'WEBP')]],
+    'tiff': [[(0, b'II*\x00')], [(0, b'MM\x00*')]],
     # 文档
-    'pdf': [b'%PDF'],
+    'pdf': [[(0, b'%PDF')]],
+    'doc': OLE_SIGNATURE,
+    'xls': OLE_SIGNATURE,
+    'ppt': OLE_SIGNATURE,
+    'docx': ZIP_SIGNATURES,
+    'xlsx': ZIP_SIGNATURES,
+    'pptx': ZIP_SIGNATURES,
+    'dwg': [[(0, b'AC10')]],
     # 视频
-    'mp4': [b'\x00\x00\x00\x18ftypmp42', b'\x00\x00\x00\x1cftypmp42', b'\x00\x00\x00\x20ftypmp42'],
-    'mov': [b'\x00\x00\x00\x14ftypqt'],
-    'avi': [b'RIFF'],
+    'mp4': [[(4, b'ftyp')]],
+    'mov': [[(4, b'ftyp'), (8, b'qt  ')]],
+    'avi': [[(0, b'RIFF'), (8, b'AVI ')]],
+    'mkv': [[(0, b'\x1a\x45\xdf\xa3')]],
     # 矢量
-    'shp': [b'\x00\x00\x27\x0a'],  # SHP 文件头 (ESRI)
-    'geojson': [b'{'],
-    'kml': [b'<?xml', b'<kml'],
-    'kmz': [b'PK\x03\x04'],
-    'zip': [b'PK\x03\x04'],
+    'shp': [[(0, b'\x00\x00\x27\x0a')]],
+    'kmz': ZIP_SIGNATURES,
+    'zip': ZIP_SIGNATURES,
     # 3D模型
-    'obj': [b'# ', b'v ', b'f '],
-    'stl': [b'solid'],
-    'glb': [b'glTF'],
-    'fbx': [b'Kaydara'],
+    'glb': [[(0, b'glTF')]],
+    'fbx': [[(0, b'Kaydara FBX Binary')]],
 }
+
+# 文本类格式不能只看扩展名，至少要求头部没有 NUL 字节
+TEXT_EXTENSIONS = {'obj', 'geojson', 'gltf', 'kml', 'dxf', 'txt', 'md'}
+
+_MAGIC_HEADER_SIZE = 64
+
+
+def _text_header(header):
+    return header.lstrip(b'\xef\xbb\xbf \t\r\n')
+
+
+def _magic_matches(header, ext, size):
+    """判断文件头是否匹配扩展名对应的白名单签名。"""
+    if size <= 0:
+        return False
+    if ext == 'stl':
+        # ASCII STL 以 solid 开头；二进制 STL 没有稳定魔数，
+        # 至少要求满足 80 字节头 + 4 字节面片数的结构。
+        return header.startswith(b'solid') or size >= 84
+    if ext == 'obj':
+        return _text_header(header).startswith((
+            b'#', b'v ', b'f ', b'o ', b'g ', b's ', b'l ',
+            b'mtllib', b'usemtl',
+        ))
+    if ext in ('geojson', 'gltf'):
+        return _text_header(header).startswith(b'{')
+    if ext == 'kml':
+        return _text_header(header).startswith((b'<?xml', b'<kml'))
+    if ext == 'dxf':
+        return (
+            _text_header(header).startswith(b'0')
+            or header.startswith(b'AutoCAD Binary DXF')
+        )
+    if ext == 'fbx':
+        return _text_header(header).startswith(b'; FBX') or header.startswith(
+            b'Kaydara FBX Binary'
+        )
+    if ext in ('txt', 'md'):
+        return b'\x00' not in header
+    rules = MAGIC_RULES.get(ext)
+    if not rules:
+        return False
+    return any(
+        all(header[offset:offset + len(signature)] == signature
+            for offset, signature in rule)
+        for rule in rules
+    )
 
 
 def validate_magic_bytes(file, ext):
     """通过魔术字节验证文件类型"""
-    if ext not in MAGIC_BYTES:
-        return True  # 未收录的格式仅依赖扩展名检查
-
-    expected = MAGIC_BYTES[ext]
-    header = file.read(32)
+    file.seek(0, os.SEEK_END)
+    size = file.tell()
     file.seek(0)
-
-    for magic in expected:
-        if header.startswith(magic):
-            return True
-    return False
+    header = file.read(_MAGIC_HEADER_SIZE)
+    file.seek(0)
+    return _magic_matches(header, ext, size)
 
 
 def calculate_file_hash(file):
@@ -138,11 +197,13 @@ def calculate_file_hash(file):
 
 def validate_magic_bytes_path(path, ext):
     """对已落盘文件做魔术字节校验。"""
-    if ext not in MAGIC_BYTES:
-        return True
-    with open(path, 'rb') as handle:
-        header = handle.read(32)
-    return any(header.startswith(magic) for magic in MAGIC_BYTES[ext])
+    try:
+        size = os.path.getsize(path)
+        with open(path, 'rb') as handle:
+            header = handle.read(_MAGIC_HEADER_SIZE)
+    except OSError:
+        return False
+    return _magic_matches(header, ext, size)
 
 
 def calculate_file_hash_path(path):
@@ -531,7 +592,7 @@ class AssetUploadResource(Resource):
     """资产上传"""
 
     @jwt_required()
-    @rate_limit(limit=10, window=60)
+    @rate_limit(limit=120, window=60)
     def post(self):
         """上传资产"""
         user_id = get_jwt_identity()
@@ -639,6 +700,7 @@ class AssetUploadResource(Resource):
             creator_id=user_id,
             uploader_id=user_id,
             owner_id=user_id,
+            current_version_no=1,
             status='draft'
         )
 
@@ -707,9 +769,12 @@ class AssetUploadResource(Resource):
 
 def _create_asset_from_saved_file(
     user_id, title, description, asset_type, garden_id, original_name,
-    ext, file_path, file_hash, file_size, tag_names
+    ext, file_path, file_hash, file_size, tag_names, commit=True
 ):
-    """把已落盘文件登记为资产（含 v1 与缩略图），由上传/断点续传共用。"""
+    """把已落盘文件登记为资产（含 v1 与缩略图），由上传/断点续传共用。
+
+    commit=False 时只 flush，由调用方把资产、v1 与会话状态放在同一事务提交。
+    """
     from app.models.garden import Garden
 
     garden = Garden.query.get(garden_id) if garden_id else None
@@ -729,6 +794,7 @@ def _create_asset_from_saved_file(
         creator_id=user_id,
         uploader_id=user_id,
         owner_id=user_id,
+        current_version_no=1,
         status='draft',
     )
     db.session.add(asset)
@@ -763,7 +829,10 @@ def _create_asset_from_saved_file(
         change_note='初始版本',
         created_by=user_id,
     ))
-    db.session.commit()
+    if commit:
+        db.session.commit()
+    else:
+        db.session.flush()
     return asset
 
 
@@ -771,15 +840,15 @@ class AssetUploadSessionResource(Resource):
     """创建/查询断点续传会话"""
 
     @jwt_required()
-    @rate_limit(limit=10, window=60)
+    @rate_limit(limit=120, window=60)
     def post(self):
         from app.models.extra import UploadSession
 
         user_id = get_jwt_identity()
         data = request.get_json(silent=True) or {}
-        filename = (data.get('filename') or '').strip()
-        title = (data.get('title') or '').strip()
-        asset_type = (data.get('asset_type') or 'image').strip()
+        filename = str(data.get('filename') or '').strip()
+        title = str(data.get('title') or '').strip()
+        asset_type = str(data.get('asset_type') or 'image').strip()
         expected_size = data.get('size')
         garden_id = data.get('garden_id')
         tags = data.get('tags') or []
@@ -798,15 +867,23 @@ class AssetUploadSessionResource(Resource):
             }, 400
         if not isinstance(tags, list):
             return {'code': 400, 'message': '标签格式错误'}, 400
+        tags = [
+            str(tag).strip()[:50] for tag in tags[:20] if str(tag).strip()
+        ]
         if garden_id is not None:
             try:
                 garden_id = int(garden_id)
             except (TypeError, ValueError):
                 return {'code': 400, 'message': '园林参数无效'}, 400
+            if not db.session.get(Garden, garden_id):
+                return {'code': 400, 'message': '园林不存在'}, 400
 
         canonical_ext = canonical_extension(filename, VERSION_EXT_ALIASES)
         if not canonical_ext:
             return {'code': 400, 'message': '不支持的文件类型'}, 400
+
+        # 先回收该用户长期未更新的会话，避免临时目录无限累积
+        purge_stale_upload_sessions(user_id=user_id)
 
         upload_id = uuid.uuid4().hex
         upload_root = os.path.join(
@@ -845,13 +922,36 @@ class AssetUploadSessionResource(Resource):
         }, 200
 
 
+class AssetUploadSessionListResource(Resource):
+    """列出当前用户未完成的上传会话（页面刷新/换设备后恢复）"""
+
+    @jwt_required()
+    def get(self):
+        from app.models.extra import UploadSession
+
+        user_id = get_jwt_identity()
+        purge_stale_upload_sessions(user_id=user_id)
+        sessions = UploadSession.query.filter_by(
+            user_id=user_id, status='uploading'
+        ).order_by(UploadSession.updated_at.desc()).limit(20).all()
+        return {
+            'code': 200,
+            'data': {
+                'items': [session.to_dict() for session in sessions],
+                'ttl_hours': current_app.config.get(
+                    'UPLOAD_SESSION_TTL_HOURS', 48
+                ),
+            },
+        }, 200
+
+
 class AssetUploadSessionDetailResource(Resource):
-    """查询状态或追加分块"""
+    """查询状态、追加分块或取消会话"""
 
     @jwt_required()
     def get(self, upload_id):
         from app.models.extra import UploadSession
-        session = UploadSession.query.get(upload_id)
+        session = db.session.get(UploadSession, upload_id)
         if not session or session.user_id != get_jwt_identity():
             return {'code': 404, 'message': '上传会话不存在'}, 404
         return {'code': 200, 'data': session.to_dict()}, 200
@@ -859,8 +959,73 @@ class AssetUploadSessionDetailResource(Resource):
     @jwt_required()
     @rate_limit(limit=240, window=60)
     def put(self, upload_id):
+        # 先读完请求体再拿会话锁：慢速网络中传输分块可能耗时很久，
+        # 持锁期间只做文件写入与数据库提交。
+        chunk = request.get_data(cache=False)
+        if not chunk:
+            return {'code': 400, 'message': '分块内容为空'}, 400
+        try:
+            with upload_session_lock(upload_id):
+                return self._append_chunk(upload_id, chunk)
+        except TimeoutError as exc:
+            return {'code': 409, 'message': str(exc)}, 409
+
+    @jwt_required()
+    @rate_limit(limit=60, window=60)
+    def patch(self, upload_id):
+        """续传前同步用户当前填写的标题、园林、描述与标签。"""
         from app.models.extra import UploadSession
-        session = UploadSession.query.get(upload_id)
+        session = db.session.get(UploadSession, upload_id)
+        if not session or session.user_id != get_jwt_identity():
+            return {'code': 404, 'message': '上传会话不存在'}, 404
+        if session.status != 'uploading':
+            return {'code': 409, 'message': '上传会话已结束'}, 409
+
+        data = request.get_json(silent=True) or {}
+        if 'title' in data:
+            title = str(data.get('title') or '').strip()
+            if not title:
+                return {'code': 400, 'message': '标题不能为空'}, 400
+            session.title = title[:255]
+        if 'description' in data:
+            session.description = str(data.get('description') or '')[:2000]
+        if 'tags' in data:
+            tags = data.get('tags') or []
+            if not isinstance(tags, list):
+                return {'code': 400, 'message': '标签格式错误'}, 400
+            tags = [
+                str(tag).strip()[:50]
+                for tag in tags[:20]
+                if str(tag).strip()
+            ]
+            session.tags_json = json.dumps(tags, ensure_ascii=False)
+        if 'garden_id' in data:
+            garden_id = data.get('garden_id')
+            if garden_id in (None, ''):
+                session.garden_id = None
+            else:
+                try:
+                    garden_id = int(garden_id)
+                except (TypeError, ValueError):
+                    return {'code': 400, 'message': '园林参数无效'}, 400
+                if not db.session.get(Garden, garden_id):
+                    return {'code': 400, 'message': '园林不存在'}, 400
+                session.garden_id = garden_id
+        if 'asset_type' in data:
+            asset_type = str(data.get('asset_type') or '').strip()
+            if asset_type not in ALLOWED_EXTENSIONS:
+                return {'code': 400, 'message': '资产类型无效'}, 400
+            if not allowed_file(session.filename, asset_type):
+                return {'code': 400, 'message': '文件类型与资产类型不匹配'}, 400
+            session.asset_type = asset_type
+
+        session.updated_at = datetime.utcnow()
+        db.session.commit()
+        return {'code': 200, 'data': session.to_dict()}, 200
+
+    def _append_chunk(self, upload_id, chunk):
+        from app.models.extra import UploadSession
+        session = db.session.get(UploadSession, upload_id)
         if not session or session.user_id != get_jwt_identity():
             return {'code': 404, 'message': '上传会话不存在'}, 404
         if session.status != 'uploading':
@@ -881,18 +1046,50 @@ class AssetUploadSessionDetailResource(Resource):
                 'data': {'received_size': session.received_size},
             }, 409
 
-        chunk = request.get_data(cache=False)
-        if not chunk:
-            return {'code': 400, 'message': '分块内容为空'}, 400
         if len(chunk) > session.chunk_size * 2:
             return {'code': 400, 'message': '单个分块过大'}, 400
         if session.received_size + len(chunk) > session.expected_size:
             return {'code': 400, 'message': '分块超过声明的文件大小'}, 400
 
-        with open(session.temp_path, 'ab') as handle:
-            handle.write(chunk)
-        session.received_size += len(chunk)
+        # 从偏移处重写并截断：即便上一次写入只完成了一半，也不会把
+        # 重复字节追加到文件尾部。
+        try:
+            with open(session.temp_path, 'r+b') as handle:
+                handle.seek(offset)
+                handle.write(chunk)
+                handle.truncate(offset + len(chunk))
+                handle.flush()
+                os.fsync(handle.fileno())
+        except OSError:
+            current_app.logger.warning(
+                '分块写入失败: %s', upload_id, exc_info=True
+            )
+            return {
+                'code': 409,
+                'message': '临时文件不可写，请取消后重新上传',
+            }, 409
+
+        updated = UploadSession.query.filter_by(
+            id=upload_id, status='uploading', received_size=offset
+        ).update(
+            {
+                UploadSession.received_size: offset + len(chunk),
+                UploadSession.updated_at: datetime.utcnow(),
+            },
+            synchronize_session=False,
+        )
+        if updated != 1:
+            db.session.rollback()
+            current = db.session.get(UploadSession, upload_id)
+            return {
+                'code': 409,
+                'message': '分块偏移不匹配，请从已接收位置继续',
+                'data': {
+                    'received_size': current.received_size if current else 0,
+                },
+            }, 409
         db.session.commit()
+        db.session.expire(session)
         return {
             'code': 200,
             'data': {
@@ -901,17 +1098,50 @@ class AssetUploadSessionDetailResource(Resource):
             },
         }, 200
 
+    @jwt_required()
+    def delete(self, upload_id):
+        from app.models.extra import UploadSession
+        try:
+            with upload_session_lock(upload_id):
+                session = db.session.get(UploadSession, upload_id)
+                if not session or session.user_id != get_jwt_identity():
+                    return {'code': 404, 'message': '上传会话不存在'}, 404
+                if session.status == 'completed':
+                    return {'code': 409, 'message': '已完成的上传不能取消'}, 409
+                if session.status == 'uploading':
+                    session.status = 'cancelled'
+                    db.session.commit()
+        except TimeoutError as exc:
+            return {'code': 409, 'message': str(exc)}, 409
+        remove_session_files(session)
+        return {'code': 200, 'message': '已取消未完成的上传'}, 200
+
 
 class AssetUploadSessionCompleteResource(Resource):
     """合并分块并创建资产"""
 
     @jwt_required()
-    @rate_limit(limit=10, window=60)
+    @rate_limit(limit=120, window=60)
     def post(self, upload_id):
+        from app.models.extra import UploadSession
+        try:
+            with upload_session_lock(upload_id):
+                response, status = self._complete_locked(upload_id)
+        except TimeoutError as exc:
+            return {'code': 409, 'message': str(exc)}, 409
+
+        session = db.session.get(UploadSession, upload_id)
+        if session and session.status in (
+            'completed', 'failed', 'expired', 'cancelled'
+        ):
+            remove_session_files(session)
+        return response, status
+
+    def _complete_locked(self, upload_id):
         from app.models.extra import UploadSession
 
         user_id = get_jwt_identity()
-        session = UploadSession.query.get(upload_id)
+        session = db.session.get(UploadSession, upload_id)
         if not session or session.user_id != user_id:
             return {'code': 404, 'message': '上传会话不存在'}, 404
         if session.status == 'completed' and session.asset_id:
@@ -931,14 +1161,37 @@ class AssetUploadSessionCompleteResource(Resource):
                     'expected_size': session.expected_size,
                 },
             }, 400
+        if not os.path.isfile(session.temp_path):
+            session.status = 'expired'
+            db.session.commit()
+            return {
+                'code': 409,
+                'message': '临时文件已丢失，请重新上传',
+            }, 409
+        if os.path.getsize(session.temp_path) != session.expected_size:
+            actual_size = os.path.getsize(session.temp_path)
+            session.status = 'failed'
+            db.session.commit()
+            return {
+                'code': 400,
+                'message': '临时文件大小与声明不一致，请重新上传',
+                'data': {
+                    'received_size': actual_size,
+                    'expected_size': session.expected_size,
+                },
+            }, 400
 
         canonical_ext = canonical_extension(
             session.filename, VERSION_EXT_ALIASES
         )
         if not canonical_ext:
+            session.status = 'failed'
+            db.session.commit()
             return {'code': 400, 'message': '不支持的文件类型'}, 400
         ext = canonical_ext.lstrip('.')
         if not validate_magic_bytes_path(session.temp_path, ext):
+            session.status = 'failed'
+            db.session.commit()
             return {'code': 400, 'message': '文件内容与扩展名不匹配'}, 400
 
         file_hash = calculate_file_hash_path(session.temp_path)
@@ -949,14 +1202,28 @@ class AssetUploadSessionCompleteResource(Resource):
         if existing:
             session.status = 'failed'
             db.session.commit()
-            return {
-                'code': 400,
-                'message': '该文件已上传过，请勿重复上传',
-                'data': {
+            # 与普通上传保持一致：只向能查看该资产的人返回 ID/编码，
+            # 避免用哈希探测他人草稿/待审资产。
+            user = User.query.get(user_id)
+            visible = user and (
+                user.role in ADMIN_ROLES
+                or user_id in (
+                    existing.creator_id,
+                    existing.owner_id,
+                    existing.uploader_id,
+                )
+            )
+            data = None
+            if visible:
+                data = {
                     'existing_asset_id': existing.id,
                     'asset_code': existing.asset_code,
                     'status': existing.status,
-                },
+                }
+            return {
+                'code': 400,
+                'message': '该文件已上传过，请勿重复上传',
+                'data': data,
             }, 400
 
         upload_folder = current_app.config.get('UPLOAD_FOLDER', './uploads')
@@ -971,22 +1238,34 @@ class AssetUploadSessionCompleteResource(Resource):
             tag_names = json.loads(session.tags_json or '[]')
         except (TypeError, ValueError):
             tag_names = []
-        asset = _create_asset_from_saved_file(
-            user_id=user_id,
-            title=session.title,
-            description=session.description or '',
-            asset_type=session.asset_type,
-            garden_id=session.garden_id,
-            original_name=session.filename,
-            ext=ext,
-            file_path=file_path,
-            file_hash=file_hash,
-            file_size=file_size,
-            tag_names=tag_names,
-        )
-        session.status = 'completed'
-        session.asset_id = asset.id
-        db.session.commit()
+        try:
+            asset = _create_asset_from_saved_file(
+                user_id=user_id,
+                title=session.title,
+                description=session.description or '',
+                asset_type=session.asset_type,
+                garden_id=session.garden_id,
+                original_name=session.filename,
+                ext=ext,
+                file_path=file_path,
+                file_hash=file_hash,
+                file_size=file_size,
+                tag_names=tag_names,
+                commit=False,
+            )
+            # 资产、v1 与会话状态同一事务提交，避免重试时误判重复文件
+            session.status = 'completed'
+            session.asset_id = asset.id
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception('断点续传创建资产失败')
+            try:
+                os.unlink(file_path)
+            except OSError:
+                # 清理失败不掩盖原始异常
+                pass
+            raise
 
         user = User.query.get(user_id)
         OperationLog.log(
@@ -1262,7 +1541,36 @@ class AssetDownloadResource(Resource):
             )
             return {'code': 403, 'message': denial_reason}, 403
 
-        # 先确认文件存在，避免“下载失败但下载量已经增加”
+        # 先确认原始文件存在，避免“下载失败但配额已经占用”
+        base_path = _asset_file_path(asset)
+        if not base_path or not os.path.isfile(base_path):
+            return {'code': 404, 'message': '文件不存在'}, 404
+
+        # 原子占用一次授权下载配额，防止并发请求同时越过上限
+        if selected_license:
+            quota = db.session.execute(
+                update(License)
+                .where(
+                    License.id == selected_license.id,
+                    or_(
+                        License.max_downloads.is_(None),
+                        License.download_count < License.max_downloads,
+                    ),
+                )
+                .values(download_count=License.download_count + 1)
+            )
+            if quota.rowcount != 1:
+                db.session.rollback()
+                reason = (
+                    '该授权下载次数已用完'
+                    f'（上限 {selected_license.max_downloads} 次）'
+                )
+                _record_denied_download(
+                    asset, user, user_id, purpose, territory,
+                    reason, selected_license.id
+                )
+                return {'code': 403, 'message': reason}, 403
+
         file_path, fingerprint = _download_file_path(
             asset, selected_license, user
         )
@@ -1282,11 +1590,8 @@ class AssetDownloadResource(Resource):
             user_agent=request.headers.get('User-Agent', '')[:500]
         )
         db.session.add(record)
-        if selected_license:
-            selected_license.download_count = (
-                selected_license.download_count or 0
-            ) + 1
-        asset.download_count += 1
+        # 使用 SQL 表达式自增，避免并发下载互相覆盖计数
+        asset.download_count = Asset.download_count + 1
         db.session.commit()
 
         OperationLog.log(
@@ -1360,6 +1665,9 @@ class AssetDownloadTicketResource(Resource):
                 fingerprint, _ = get_or_create_fingerprint(
                     asset, selected_license, user
                 )
+                # 签票请求结束后 session 会被回收；必须显式提交，
+                # 否则指纹记录回滚而副本文件保留，指纹码与文件不一致。
+                db.session.commit()
                 fingerprint_code = fingerprint.fingerprint_code
             except Exception:
                 current_app.logger.warning(
@@ -1914,15 +2222,36 @@ class AssetApproveResource(Resource):
         reason = data.get('reason', '')
 
         if action == 'approve':
-            asset.status = 'published'
-            asset.approver_id = user_id
-            asset.approve_time = datetime.utcnow()
-            asset.publish_at = datetime.utcnow()
+            values = {
+                'status': 'published',
+                'approver_id': user_id,
+                'approve_time': datetime.utcnow(),
+                'publish_at': datetime.utcnow(),
+            }
         elif action == 'reject':
-            asset.status = 'rejected'
-            asset.reject_reason = reason
+            values = {
+                'status': 'rejected',
+                'reject_reason': reason,
+            }
         else:
             return {'code': 400, 'message': '无效操作'}, 400
+
+        # 条件更新：审批期间资产若被删除，不能再把它改回 published
+        updated = db.session.execute(
+            update(Asset)
+            .where(
+                Asset.id == asset_id,
+                Asset.status == 'pending',
+                Asset.deleted_at.is_(None),
+            )
+            .values(**values)
+        )
+        if updated.rowcount != 1:
+            db.session.rollback()
+            return {
+                'code': 409,
+                'message': '资产状态已变更，请刷新后重试',
+            }, 409
 
         recipient_id = asset.uploader_id or asset.creator_id or asset.owner_id
         if action == 'approve':

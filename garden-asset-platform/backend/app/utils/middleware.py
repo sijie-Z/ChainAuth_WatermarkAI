@@ -102,8 +102,12 @@ def security_headers(app):
     """安全头中间件"""
     @app.after_request
     def after_request(response):
+        # PDF 预览通过同源 iframe 加载 /preview；其余接口仍禁止被嵌套
+        is_preview = request.path.rstrip('/').endswith('/preview')
         response.headers['X-Content-Type-Options'] = 'nosniff'
-        response.headers['X-Frame-Options'] = 'DENY'
+        response.headers['X-Frame-Options'] = (
+            'SAMEORIGIN' if is_preview else 'DENY'
+        )
         response.headers['X-XSS-Protection'] = '1; mode=block'
         response.headers['X-Permitted-Cross-Domain-Policies'] = 'none'
         response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
@@ -114,6 +118,7 @@ def security_headers(app):
 
         # CSP: allow Element Plus inline styles, THREE.js, and blob images
         script_src = "'self' 'unsafe-eval'" if app.config.get('DEBUG', False) else "'self'"
+        frame_ancestors = "'self'" if is_preview else "'none'"
         csp = (
             f"default-src 'self'; "
             f"script-src {script_src}; "
@@ -124,7 +129,7 @@ def security_headers(app):
             f"media-src 'self' blob:; "
             f"frame-src 'self' blob:; "
             f"object-src 'none'; "
-            f"frame-ancestors 'none'; "
+            f"frame-ancestors {frame_ancestors}; "
             f"base-uri 'self'; "
             f"form-action 'self'"
         )

@@ -33,7 +33,7 @@
 
 | 模块 | 功能 | 技术实现 |
 |------|------|----------|
-| 资产管理 | 数字资产上传、浏览、分类、检索、下载 | Vue3 + Flask + MinIO |
+| 资产管理 | 数字资产上传、浏览、分类、检索、下载；8MB+ 文件分块断点续传，刷新/换设备后可恢复未完成上传 | Vue3 + Flask + SQLite/PostgreSQL |
 | 数字水印 | DCT + QIM 盲水印嵌入与提取，对 JPEG、噪声与 50%–150% 缩放具备恢复能力，具体以水印实验室实测为准；模型/文档/视频没有盲水印能力，按文件哈希与版本存证 | Python OpenCV + NumPy |
 | 水印实验室 | 上传图片后真实执行嵌入与 8 项攻击，返回 PSNR、NC、水印 ID 恢复情况与每项耗时，可下载 Markdown 报告 | DCT/QIM + Flask + Vue3 |
 | 区块链存证 | 按文件版本签发存证证书，支持历史版本证书追溯；默认本地模拟，可配置接入 FISCO BCOS | FISCO BCOS + Python SDK（可选） |
@@ -45,7 +45,7 @@
 | 证据包导出 | 所有者/资产管理员一键打包当前版本原件与水印副本、证据链、版本证书、SHA-256 清单与核验说明；超出 200MB 时仅导出清单与证书 | Flask + ZIP |
 | 证据包核验 | 公开上传 ZIP，独立核对结构、SHA-256、资产编码、水印、证书与当前/历史版本哈希，区分“完整性失败”与“登记不一致” | Flask + ZIP |
 | 审计日志完整性 | 操作日志写入时计算服务端 HMAC-SHA256，后台可一键校验；字段被修改会标记异常，支持历史日志补签 | Flask + HMAC |
-| 多格式预览 | 图片/矢量缩略图、视频在线播放、PDF 内嵌预览、三维模型（GLB/GLTF/STL/OBJ）旋转缩放；预览按授权控制且不计下载量 | Vue3 + Flask + three.js |
+| 多格式预览 | 图片缩略图、视频在线播放、PDF 内嵌预览、三维模型（GLB/GLTF/STL/OBJ）旋转缩放；矢量数据提示下载后用 GIS 软件查看；预览按授权控制且不计下载量 | Vue3 + Flask + three.js |
 | 侵权线索 | 公开提交疑似盗用文件/链接，水印匹配资产后进入后台研判，确认或驳回时通知举报人与权利人 | Vue3 + Flask |
 | 通知渠道 | 站内 SSE 实时推送 + 可选 SMTP 邮件 + 系统 Webhook（兼容企业微信群机器人，支持签名与重试） | SSE + SMTP + Webhook |
 | 协作与版本 | 评论/回复、影像区域标注、版本上传/恢复 | Vue3 + Flask |
@@ -148,7 +148,7 @@ FLASK_APP=run.py flask db upgrade
 ### 运行测试
 
 ```bash
-# 后端测试（381个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/授权视图/资产回收站/侵权线索/批量巡检/备份恢复/存储巡检/水印鲁棒性实验/证据包导出与核验/审计日志完整性/HTTP错误处理/对象级可见性）
+# 后端测试（395个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/授权视图/资产回收站/侵权线索/批量巡检/备份恢复/存储巡检/水印鲁棒性实验/证据包导出与核验/审计日志完整性/HTTP错误处理/对象级可见性/断点续传/魔数校验）
 cd backend && python -m pytest tests/ -v
 
 # Windows 内存受限时：逐文件隔离子进程运行（推荐）
@@ -189,7 +189,7 @@ garden-asset-platform/
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
 │   ├── migrations/                # Alembic 迁移（baseline + versions）
-│   ├── tests/                     # pytest测试（381个用例）
+│   ├── tests/                     # pytest测试（395个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -211,7 +211,7 @@ garden-asset-platform/
 │   ├── Dockerfile
 │   └── nginx.conf
 ├── docs/                           # 使用指南、演示脚本、能力审计与验收素材
-│   └── assets/                     # 16 张界面截图 + 演示视频/GIF/封面
+│   └── assets/                     # 17 张界面截图 + 演示视频/GIF/封面
 ├── docker-compose.yml              # 多服务编排
 ├── Dockerfile                      # 一体化构建
 └── .gitignore
@@ -239,7 +239,8 @@ garden-asset-platform/
 | GET | `/api/assets` | 资产列表（分页、筛选、搜索） |
 | POST | `/api/assets/upload` | 上传资产（含魔数校验） |
 | POST | `/api/assets/upload/session` | 创建断点续传会话（8MB+ 文件分块上传） |
-| GET/PUT | `/api/assets/upload/session/:upload_id` | 查询已接收偏移 / 追加分块（`X-Upload-Offset`） |
+| GET | `/api/assets/upload/sessions` | 列出当前用户未完成的上传会话（刷新页面/换设备后可恢复） |
+| GET/PUT/PATCH/DELETE | `/api/assets/upload/session/:upload_id` | 查询已接收偏移 / 追加分块（`X-Upload-Offset`）/ 续传前同步元数据 / 放弃并清理临时文件 |
 | POST | `/api/assets/upload/session/:upload_id/complete` | 合并分块、校验并创建资产 |
 | GET | `/api/assets/:id` | 资产详情 |
 | PUT | `/api/assets/:id` | 编辑标题、著录说明与标签（所有者/资产管理员，标签整体替换） |
@@ -374,10 +375,10 @@ garden-asset-platform/
 - 非 debug 模式下缺失/过期/撤销的 Token 统一返回 401，不会因 Flask-RESTful 异常接管变成 500
 - 对象级可见性：证书、存证历史、标签、收藏与公开接口统一检查资产状态；草稿证据仅所有者/管理员可见，全平台证书列表仅管理员可读，公开链状态不返回 RPC 地址
 - 请求频率限制（Redis计数器，可配置阈值；Redis异常不影响业务执行）
-- 文件上传魔数字节校验（17种文件类型）
+- 文件上传魔数字节校验（26 种允许扩展名，含 MP4/MOV/MKV、Office、CAD、GLTF/FBX；0 字节文件直接拒绝）
 - 文件大小限制（继承Flask MAX_CONTENT_LENGTH）
-- Content-Security-Policy响应头（生产模式）
-- X-Content-Type-Options / X-Frame-Options / X-XSS-Protection
+- Content-Security-Policy响应头（生产模式；PDF 预览接口单独放行同源 iframe）
+- X-Content-Type-Options / X-Frame-Options / X-XSS-Protection（预览外一律 DENY）
 - SQL注入防护（SQLAlchemy参数化查询）
 - 生产环境堆栈信息不泄露
 - 角色权限控制（admin / asset_admin / license_admin / adm1 / adm2 / user）
@@ -418,6 +419,8 @@ Docker 部署见 `garden-asset-platform/.env.example`；本地开发见 `backend
 | `EVIDENCE_PACKAGE_MAX_BYTES` | 证据包允许打包的二进制总大小，超出时仅导出清单与证书 | `209715200`（200MB） |
 | `EVIDENCE_VERIFY_MAX_BYTES` | 证据包核验上传大小上限 | `20971520`（20MB） |
 | `DOWNLOAD_TICKET_MAX_AGE` | 下载票据有效期（秒），过期需重新申请 | `120` |
+| `RESUMABLE_CHUNK_SIZE` | 断点续传分块大小（字节） | `4194304`（4MB） |
+| `UPLOAD_SESSION_TTL_HOURS` | 未完成上传会话保留小时数，超时自动标记过期并清理临时文件 | `48` |
 | `PREVIEW_TICKET_MAX_AGE` | 预览票据有效期（秒），需覆盖一次播放/阅读会话 | `3600` |
 | `SHARE_TICKET_MAX_AGE` | 公开分享下载票据有效期（秒） | `120` |
 | `AUDIT_HMAC_KEY` | 审计日志 HMAC 密钥；留空时回退到 `SECRET_KEY` | 空 |

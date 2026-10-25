@@ -84,13 +84,28 @@ class TestApplyBranches:
         ('6m', 6),
         ('1y', 12),
         ('permanent', None),
-        ('unknown-period', None),
     ])
     def test_valid_period_mapping(self, client, auth_header, sample_asset, period, expected):
         response = apply_license(client, auth_header, sample_asset, valid_period=period)
 
         assert response.status_code == 200
         assert response.get_json()['data']['duration_months'] == expected
+
+    def test_unknown_period_is_rejected(self, client, auth_header, sample_asset):
+        response = apply_license(
+            client, auth_header, sample_asset, valid_period='unknown-period'
+        )
+
+        assert response.status_code == 400
+        assert '期限' in response.get_json()['message']
+
+    def test_invalid_territory_is_rejected(self, client, auth_header, sample_asset):
+        response = apply_license(
+            client, auth_header, sample_asset, territory='全国'
+        )
+
+        assert response.status_code == 400
+        assert '地域' in response.get_json()['message']
 
 
 class TestPendingList:

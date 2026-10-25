@@ -348,6 +348,19 @@ def test_license_binds_version_and_blocks_new_version(
     )
     assert denied.status_code == 403
     assert 'v1' in denied.get_json()['message'] and 'v2' in denied.get_json()['message']
+
+    # 前端据此禁用下载并提示重新申请，而不是仍显示“已获得授权”
+    licenses = client.get(
+        f'/api/license/my?asset_id={asset_id}&per_page=20',
+        headers=applicant_header
+    ).get_json()['data']['items']
+    entry = next(item for item in licenses if item['id'] == license_id)
+    assert entry['version_stale'] is True
+    assert entry['current_version_no'] == 2
+    detail = client.get(
+        f'/api/assets/{asset_id}', headers=applicant_header
+    ).get_json()['data']
+    assert detail['current_version_no'] == 2
     with app.app_context():
         denied_record = DownloadRecord.query.filter_by(
             status='denied', license_id=license_id

@@ -222,6 +222,23 @@ def test_download_version_returns_original_content(
     assert f'{asset_code}-v1.jpg' in disposition
     download.close()
 
+    # 短时票据方式同样可流式下载，且不能篡改到其他版本
+    issued = client.post(
+        f'/api/assets/{asset_id}/versions/{v1["id"]}/download-ticket',
+        headers=auth_header
+    )
+    assert issued.status_code == 200, issued.get_json()
+    ticket = issued.get_json()['data']['ticket']
+    streamed = client.get(
+        f'/api/assets/{asset_id}/versions/{v1["id"]}/download?ticket={ticket}'
+    )
+    assert streamed.status_code == 200
+    assert streamed.get_data() == initial_bytes
+    streamed.close()
+    assert client.get(
+        f'/api/assets/{asset_id}/versions/{v1["id"]}/download?ticket={ticket}x'
+    ).status_code == 401
+
     # 版本属于其他资产时按不存在处理
     other_asset_id = upload_asset(
         client, app, tmp_path, auth_header, color=(1, 2, 3), title='另一资产'

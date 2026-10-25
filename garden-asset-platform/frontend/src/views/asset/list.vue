@@ -519,7 +519,7 @@ function applyLicense(id) {
 
 function getThumbnail(asset) {
   // 有资产 ID 时统一走后端缩略图端点；列表使用 640px 卡片图，避免解码大图卡顿
-  if (asset.id) return `/api/assets/${asset.id}/thumbnail?size=card&v=2`
+  if (asset.id) return `/api/assets/${asset.id}/thumbnail?size=card&v=${asset.current_version_no || 1}`
   return placeholderThumbnail(asset.asset_type)
 }
 

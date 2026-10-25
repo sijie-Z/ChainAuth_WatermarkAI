@@ -18,7 +18,7 @@ from app.utils.paths import (
 class WatermarkEmbedResource(Resource):
     """水印嵌入"""
 
-    @rate_limit(limit=10, window=60)
+    @rate_limit(limit=60, window=60)
     @jwt_required()
     def post(self):
         """嵌入水印"""

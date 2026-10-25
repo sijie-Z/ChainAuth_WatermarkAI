@@ -42,7 +42,10 @@ export const assetApi = {
     ? api.post('/assets/upload', formData, config)
     : api.post('/assets/upload', formData),
   createUploadSession: (data) => api.post('/assets/upload/session', data),
+  listUploadSessions: () => api.get('/assets/upload/sessions'),
   getUploadSession: (uploadId) => api.get(`/assets/upload/session/${uploadId}`),
+  updateUploadSession: (uploadId, data) => api.patch(`/assets/upload/session/${uploadId}`, data),
+  cancelUploadSession: (uploadId) => api.delete(`/assets/upload/session/${uploadId}`),
   uploadChunk: (uploadId, chunk, offset, config) => api.put(
     `/assets/upload/session/${uploadId}`,
     chunk,
@@ -104,6 +107,9 @@ export const assetApi = {
   downloadVersion: (id, versionId) => api.get(
     `/assets/${id}/versions/${versionId}/download`,
     { responseType: 'blob', timeout: 0 }
+  ),
+  createVersionDownloadTicket: (id, versionId) => api.post(
+    `/assets/${id}/versions/${versionId}/download-ticket`
   ),
   restoreVersion: (id, versionId) => api.post(`/assets/${id}/versions/${versionId}/restore`),
   getShares: (id) => api.get(`/assets/${id}/shares`),

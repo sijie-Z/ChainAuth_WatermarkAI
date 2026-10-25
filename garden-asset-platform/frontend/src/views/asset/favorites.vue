@@ -110,7 +110,7 @@ async function loadFavorites() {
 }
 
 function getThumbnail(item) {
-  return `/api/assets/${item.id}/thumbnail?size=card&v=2`
+  return `/api/assets/${item.id}/thumbnail?size=card&v=${item.current_version_no || 1}`
 }
 
 function onImageError(event) {

@@ -78,6 +78,15 @@ describe('user store', () => {
     await store.login({ username: 'alice', password: 'secret' })
     store.logout()
 
+    // 注销请求必须携带显式 Authorization，且失败时不触发 token 刷新提示
+    expect(api.post).toHaveBeenCalledWith(
+      '/logout',
+      { refresh_token: 'r' },
+      expect.objectContaining({
+        skipAuthRefresh: true,
+        headers: { Authorization: 'Bearer a' }
+      })
+    )
     expect(store.isLoggedIn).toBe(false)
     expect(store.user).toBeNull()
     expect(localStorage.getItem('token')).toBeNull()

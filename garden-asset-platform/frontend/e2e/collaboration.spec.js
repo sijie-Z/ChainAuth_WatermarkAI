@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 
-const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAE8AAAA9CAIAAACxEJA7AAAAZUlEQVR4nO3PAQ3AIADAMI4GhF3d9d4FJGVVsD3fu8YF5umATfq09Gnp09KnpU9Ln5Y+LX1a+rT0aenT0qelT0uflj4tfVr6tPRp6dPSp6VPS5+WPi19Wvq09Gnp09Kn5ZbPH8GeAXAAlnDWAAAAAElFTkSuQmCC'
+// 必须是 PIL 与浏览器都能解码的合法 PNG，否则缩略图生成失败，标注底图不可用
+const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAEAAAAAwCAIAAAAuKetIAAAARklEQVR42u3PAQkAMAgAMH0Yw5jB/jneQhC2BsuajsteHCcgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICCw5wPDwQEso23nSgAAAABJRU5ErkJggg=='
 
 function uniquePng(base64) {
   return Buffer.concat([
