@@ -127,7 +127,7 @@ services:
 
   # Redis缓存
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     container_name: garden-redis
     restart: unless-stopped
     volumes:
