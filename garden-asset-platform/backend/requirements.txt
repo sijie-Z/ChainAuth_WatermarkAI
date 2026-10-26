@@ -10,7 +10,7 @@ Flask-CORS==6.0.5
 
 # Database
 SQLAlchemy==2.0.23
-psycopg2-binary==2.9.9
+psycopg2-binary==2.9.13
 alembic==1.12.1
 
 # Data processing
@@ -32,6 +32,9 @@ redis==5.0.1
 
 # Security
 cryptography==50.0.2
+
+# Optional MinIO/S3-compatible original storage
+minio==7.2.15
 
 # Production
 gunicorn==26.2.0

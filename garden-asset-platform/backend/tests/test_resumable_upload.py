@@ -8,6 +8,21 @@ from PIL import Image
 from app.extensions import db
 from app.models import Asset, AssetVersion
 from app.models.extra import UploadSession
+from app.services.upload_session_service import calculate_upload_fingerprint
+
+
+def _fingerprint(tmp_path, payload):
+    path = tmp_path / 'fingerprint-source.bin'
+    path.write_bytes(payload)
+    return calculate_upload_fingerprint(str(path), len(payload))
+
+
+def _claim(client, headers, upload_id, fingerprint=None, **extra):
+    return client.post(
+        f'/api/assets/upload/session/{upload_id}/claim',
+        headers=headers,
+        json={'fingerprint': fingerprint, **extra},
+    )
 
 
 def _jpeg_bytes(color=(40, 90, 70)):
@@ -362,3 +377,116 @@ def test_resumable_duplicate_does_not_leak_foreign_asset(
     )
     assert duplicate.status_code == 400
     assert duplicate.get_json()['data'] is None
+
+
+def test_upload_lease_blocks_other_page_and_requires_token(
+    client, app, auth_header, tmp_path
+):
+    payload = _jpeg_bytes((45, 65, 85))
+    fingerprint = _fingerprint(tmp_path, payload)
+    session = _start_session(client, auth_header, payload)
+    upload_id = session['upload_id']
+
+    claimed = _claim(client, auth_header, upload_id, fingerprint)
+    assert claimed.status_code == 200, claimed.get_json()
+    lease = claimed.get_json()['data']['lease_token']
+    assert claimed.get_json()['data']['fingerprint'] == fingerprint
+
+    # 没有当前标签页租约的另一个页面不能认领或写入
+    other_page = _claim(client, auth_header, upload_id, fingerprint)
+    assert other_page.status_code == 409
+    assert other_page.get_json()['error'] == 'upload_lease_required'
+    denied = _put_chunk(client, auth_header, upload_id, 0, payload)
+    assert denied.status_code == 409
+    denied_metadata = client.patch(
+        f'/api/assets/upload/session/{upload_id}',
+        headers=auth_header,
+        json={'title': '其他页面修改'},
+    )
+    assert denied_metadata.status_code == 409
+    allowed_metadata = client.patch(
+        f'/api/assets/upload/session/{upload_id}',
+        headers={**auth_header, 'X-Upload-Lease': lease},
+        json={'title': '当前页面修改'},
+    )
+    assert allowed_metadata.status_code == 200
+
+    allowed = client.put(
+        f'/api/assets/upload/session/{upload_id}',
+        data=payload,
+        headers={**auth_header, 'X-Upload-Lease': lease},
+        content_type='application/octet-stream',
+    )
+    # 必须同时提供偏移和租约
+    assert allowed.status_code == 409
+    allowed = client.put(
+        f'/api/assets/upload/session/{upload_id}',
+        data=payload,
+        headers={
+            **auth_header,
+            'X-Upload-Lease': lease,
+            'X-Upload-Offset': '0',
+        },
+        content_type='application/octet-stream',
+    )
+    assert allowed.status_code == 200, allowed.get_json()
+
+    # 同一个标签页刷新后携带原租约可以立即继续
+    renewed = _claim(
+        client, auth_header, upload_id, fingerprint, lease_token=lease
+    )
+    assert renewed.status_code == 200
+    assert renewed.get_json()['data']['lease_token'] == lease
+
+    completed = client.post(
+        f'/api/assets/upload/session/{upload_id}/complete',
+        headers={**auth_header, 'X-Upload-Lease': lease},
+    )
+    assert completed.status_code == 200, completed.get_json()
+
+
+def test_upload_fingerprint_rejects_wrong_file_and_content_change(
+    client, app, auth_header, tmp_path
+):
+    payload = _jpeg_bytes((15, 95, 35))
+    fingerprint = _fingerprint(tmp_path, payload)
+    session = _start_session(client, auth_header, payload)
+    upload_id = session['upload_id']
+    with app.app_context():
+        row = db.session.get(UploadSession, upload_id)
+        row.file_fingerprint = fingerprint
+        db.session.commit()
+
+    wrong = _claim(client, auth_header, upload_id, '0' * 64)
+    assert wrong.status_code == 409
+    assert '不一致' in wrong.get_json()['message']
+
+    claimed = _claim(client, auth_header, upload_id, fingerprint)
+    lease = claimed.get_json()['data']['lease_token']
+    response = client.put(
+        f'/api/assets/upload/session/{upload_id}',
+        data=payload,
+        headers={
+            **auth_header,
+            'X-Upload-Lease': lease,
+            'X-Upload-Offset': '0',
+        },
+        content_type='application/octet-stream',
+    )
+    assert response.status_code == 200
+
+    # 模拟另一个来源篡改了已上传内容；合并前必须拒绝
+    with app.app_context():
+        row = db.session.get(UploadSession, upload_id)
+        with open(row.temp_path, 'r+b') as handle:
+            handle.seek(len(payload) // 2)
+            handle.write(b'not-the-original-file')
+
+    completed = client.post(
+        f'/api/assets/upload/session/{upload_id}/complete',
+        headers={**auth_header, 'X-Upload-Lease': lease},
+    )
+    assert completed.status_code == 400
+    assert '不一致' in completed.get_json()['message']
+    with app.app_context():
+        assert db.session.get(UploadSession, upload_id).status == 'failed'

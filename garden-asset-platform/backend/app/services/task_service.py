@@ -175,7 +175,12 @@ def _run_watermark(task, asset, user):
 
 
 def _run_blockchain(task, asset, user):
-    if asset.watermark_status not in ('embedded', 'verified'):
+    # 与同步入口一致：仅影像/矢量要求盲水印；模型、文档、视频
+    # 直接按文件哈希与版本存证，不能在 worker 中被误拒绝。
+    if (
+        asset.asset_type in ('image', 'vector')
+        and asset.watermark_status not in ('embedded', 'verified')
+    ):
         raise TaskFailure('上链前需先完成水印嵌入', retryable=False)
 
     result = blockchain_service.register_asset(asset, user)
@@ -504,8 +509,14 @@ def retry_task(task, reset_attempts=True):
 def cancel_task(task):
     if not task or task.status != 'queued':
         return False
-    task.status = 'cancelled'
-    task.finished_at = datetime.utcnow()
+    result = db.session.execute(
+        update(AsyncTask)
+        .where(AsyncTask.id == task.id, AsyncTask.status == 'queued')
+        .values(status='cancelled', finished_at=datetime.utcnow())
+    )
+    if result.rowcount != 1:
+        db.session.rollback()
+        return False
     if task.asset_id:
         asset = Asset.query.get(task.asset_id)
         if asset:
@@ -514,6 +525,7 @@ def cancel_task(task):
             else:
                 asset.chain_status = 'none'
     db.session.commit()
+    db.session.expire(task)
     return True
 
 

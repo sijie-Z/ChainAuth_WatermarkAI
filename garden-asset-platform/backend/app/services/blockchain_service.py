@@ -13,6 +13,7 @@ from flask import current_app
 from app.extensions import db
 from app.models.blockchain import BlockchainTransaction, Certificate
 from app.models.asset import Asset, AssetVersion
+from app.services.object_storage import hash_ref, ref_exists
 
 
 logger = logging.getLogger(__name__)
@@ -152,8 +153,8 @@ class BlockchainService:
         """
         version = self.current_version(asset)
         file_hash = None
-        if asset.storage_path and os.path.exists(asset.storage_path):
-            file_hash = self.generate_file_hash(asset.storage_path)
+        if asset.storage_path and ref_exists(asset.storage_path):
+            file_hash = hash_ref(asset.storage_path)
         elif version and version.file_hash:
             file_hash = version.file_hash
 
@@ -408,13 +409,9 @@ class BlockchainService:
         candidate_paths.extend([asset.storage_path, asset.watermarked_path])
         candidate_hashes = []
         for file_path in candidate_paths:
-            if not file_path or not os.path.exists(file_path):
+            if not file_path or not ref_exists(file_path):
                 continue
-            sha256 = hashlib.sha256()
-            with open(file_path, 'rb') as file_obj:
-                for chunk in iter(lambda: file_obj.read(8192), b''):
-                    sha256.update(chunk)
-            candidate_hashes.append(sha256.hexdigest())
+            candidate_hashes.append(hash_ref(file_path))
 
         if candidate_hashes and certificate.file_hash:
             checks['file_hash'] = certificate.file_hash in candidate_hashes

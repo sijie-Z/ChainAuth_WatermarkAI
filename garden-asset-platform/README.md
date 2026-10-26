@@ -33,7 +33,7 @@
 
 | 模块 | 功能 | 技术实现 |
 |------|------|----------|
-| 资产管理 | 数字资产上传、浏览、分类、检索、下载；8MB+ 文件分块断点续传，刷新/换设备后可恢复未完成上传 | Vue3 + Flask + SQLite/PostgreSQL |
+| 资产管理 | 数字资产上传、浏览、分类、检索、下载；所有文件开始上传后均可分块续传，刷新/换设备后可恢复未完成上传；完整 SHA-256 防误认领，短期租约防并发写入 | Vue3 + Flask + SQLite/PostgreSQL |
 | 数字水印 | DCT + QIM 盲水印嵌入与提取，对 JPEG、噪声与 50%–150% 缩放具备恢复能力，具体以水印实验室实测为准；模型/文档/视频没有盲水印能力，按文件哈希与版本存证 | Python OpenCV + NumPy |
 | 水印实验室 | 上传图片后真实执行嵌入与 8 项攻击，返回 PSNR、NC、水印 ID 恢复情况与每项耗时，可下载 Markdown 报告 | DCT/QIM + Flask + Vue3 |
 | 区块链存证 | 按文件版本签发存证证书，支持历史版本证书追溯；默认本地模拟，可配置接入 FISCO BCOS | FISCO BCOS + Python SDK（可选） |
@@ -148,7 +148,7 @@ FLASK_APP=run.py flask db upgrade
 ### 运行测试
 
 ```bash
-# 后端测试（395个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/授权视图/资产回收站/侵权线索/批量巡检/备份恢复/存储巡检/水印鲁棒性实验/证据包导出与核验/审计日志完整性/HTTP错误处理/对象级可见性/断点续传/魔数校验）
+# 后端测试（407个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/授权视图/资产回收站/侵权线索/批量巡检/备份恢复/存储巡检/对象存储/水印鲁棒性实验/证据包导出与核验/审计日志完整性/HTTP错误处理/对象级可见性/断点续传/魔数校验）
 cd backend && python -m pytest tests/ -v
 
 # Windows 内存受限时：逐文件隔离子进程运行（推荐）
@@ -189,7 +189,7 @@ garden-asset-platform/
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
 │   ├── migrations/                # Alembic 迁移（baseline + versions）
-│   ├── tests/                     # pytest测试（395个用例）
+│   ├── tests/                     # pytest测试（407个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -238,7 +238,8 @@ garden-asset-platform/
 |------|------|------|
 | GET | `/api/assets` | 资产列表（分页、筛选、搜索） |
 | POST | `/api/assets/upload` | 上传资产（含魔数校验） |
-| POST | `/api/assets/upload/session` | 创建断点续传会话（8MB+ 文件分块上传） |
+| POST | `/api/assets/upload/session` | 创建断点续传会话（所有文件开始上传后均可恢复） |
+| POST | `/api/assets/upload/session/:upload_id/claim` | 认领会话并签发 120 秒写入租约（完整 SHA-256 防误认领） |
 | GET | `/api/assets/upload/sessions` | 列出当前用户未完成的上传会话（刷新页面/换设备后可恢复） |
 | GET/PUT/PATCH/DELETE | `/api/assets/upload/session/:upload_id` | 查询已接收偏移 / 追加分块（`X-Upload-Offset`）/ 续传前同步元数据 / 放弃并清理临时文件 |
 | POST | `/api/assets/upload/session/:upload_id/complete` | 合并分块、校验并创建资产 |
@@ -419,6 +420,8 @@ Docker 部署见 `garden-asset-platform/.env.example`；本地开发见 `backend
 | `EVIDENCE_PACKAGE_MAX_BYTES` | 证据包允许打包的二进制总大小，超出时仅导出清单与证书 | `209715200`（200MB） |
 | `EVIDENCE_VERIFY_MAX_BYTES` | 证据包核验上传大小上限 | `20971520`（20MB） |
 | `DOWNLOAD_TICKET_MAX_AGE` | 下载票据有效期（秒），过期需重新申请 | `120` |
+| `STORAGE_BACKEND` | 原件存储后端：`local` 或 `minio`/`s3`/`object` | `local` |
+| `MINIO_ENDPOINT` / `MINIO_BUCKET` | 对象存储地址与桶名（启用时自动建桶） | `localhost:9000` / `garden-assets` |
 | `RESUMABLE_CHUNK_SIZE` | 断点续传分块大小（字节） | `4194304`（4MB） |
 | `UPLOAD_SESSION_TTL_HOURS` | 未完成上传会话保留小时数，超时自动标记过期并清理临时文件 | `48` |
 | `PREVIEW_TICKET_MAX_AGE` | 预览票据有效期（秒），需覆盖一次播放/阅读会话 | `3600` |
@@ -435,7 +438,7 @@ Docker 部署见 `garden-asset-platform/.env.example`；本地开发见 `backend
 
 > 站内实时通知使用 SSE，Docker 后端已切换为 `gthread` worker 并放宽超时；每个在线连接占用一个线程。大规模部署建议改用 Redis Pub/Sub + gevent/eventlet，或把 SSE 拆成独立服务。邮件通知默认关闭，配置 `MAIL_ENABLED`/`MAIL_HOST` 后由 worker 每分钟派发。
 
-> 文件默认保存在 `backend/uploads/`（Docker 中为挂载卷）。`docker-compose.yml` 中的 MinIO 服务为可选组件，当前版本尚未接入对象存储后端。
+> 文件默认保存在 `backend/uploads/`（Docker 中为挂载卷）。设置 `STORAGE_BACKEND=minio` 后，新上传的原件与历史版本写入 MinIO（`minio://bucket/key`），缩略图、水印、指纹和证据包临时文件仍使用本地共享卷；旧的本地绝对路径与新对象引用可混存，不自动迁移。默认 `STORAGE_BACKEND=local`。
 
 > AI 对话 SDK `zhipuai` 的元数据要求 `pyjwt<2.9`，与安全版 PyJWT（≥2.11）冲突，因此不在核心依赖中。需要 GLM 对话时执行：`pip install --no-deps zhipuai==2.0.1 httpx pydantic cachetools`。
 

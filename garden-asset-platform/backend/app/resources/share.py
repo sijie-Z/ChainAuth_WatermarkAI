@@ -8,7 +8,7 @@ import secrets
 import uuid
 from datetime import datetime, timedelta
 
-from flask import request, send_file, current_app
+from flask import request, current_app
 from flask_restful import Resource
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from werkzeug.security import generate_password_hash
@@ -17,6 +17,7 @@ from sqlalchemy import or_, update
 from app.extensions import db
 from app.models import Asset, AssetShare, ShareDownload, User
 from app.models.log import OperationLog
+from app.services.object_storage import ref_exists, send_ref
 from app.services.evidence_service import build_evidence
 from app.utils.middleware import rate_limit
 
@@ -53,7 +54,7 @@ def _verify_share_ticket(ticket):
 
 def _share_file_path(asset):
     raw_path = asset.watermarked_path or asset.storage_path
-    return os.path.abspath(raw_path) if raw_path else ''
+    return raw_path or ''
 
 
 def _share_download_error(share):
@@ -345,8 +346,19 @@ class PublicShareDownloadResource(Resource):
             return download_error
 
         file_path = _share_file_path(asset)
-        if not file_path or not os.path.isfile(file_path):
+        if not file_path or not ref_exists(file_path):
             return {'code': 404, 'message': '文件不存在'}, 404
+
+        actual_ext = os.path.splitext(file_path)[1].lstrip('.').lower()
+        download_ext = actual_ext or (asset.file_format or '').lower()
+        download_name = (
+            f"{asset.asset_code}.{download_ext}"
+            if download_ext else asset.asset_code
+        )
+        # 先确认响应可以构造，避免发送失败却留下成功台账
+        response = send_ref(
+            file_path, download_name, as_attachment=True
+        )
 
         # 原子占用一次下载配额：并发请求只有一个能把计数从上限前推进
         quota = db.session.execute(
@@ -370,26 +382,27 @@ class PublicShareDownloadResource(Resource):
             ip_address=request.remote_addr,
             user_agent=request.headers.get('User-Agent', '')[:500]
         ))
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception:
+            response.close()
+            raise
 
-        OperationLog.log(
-            user=None,
-            action='share_download',
-            module='asset',
-            description=f'通过分享链接下载: {asset.asset_code}',
-            target_type='asset',
-            target_id=asset.id,
-            request=request,
-            extra_data={'share_id': share.id}
-        )
+        try:
+            OperationLog.log(
+                user=None,
+                action='share_download',
+                module='asset',
+                description=f'通过分享链接下载: {asset.asset_code}',
+                target_type='asset',
+                target_id=asset.id,
+                request=request,
+                extra_data={'share_id': share.id}
+            )
+        except Exception:
+            current_app.logger.warning('记录分享下载日志失败', exc_info=True)
 
-        actual_ext = os.path.splitext(file_path)[1].lstrip('.').lower()
-        download_ext = actual_ext or (asset.file_format or '').lower()
-        download_name = (
-            f"{asset.asset_code}.{download_ext}"
-            if download_ext else asset.asset_code
-        )
-        return send_file(file_path, as_attachment=True, download_name=download_name)
+        return response
 
 
 class PublicShareDownloadTicketResource(Resource):
@@ -415,7 +428,7 @@ class PublicShareDownloadTicketResource(Resource):
             return download_error
 
         file_path = _share_file_path(asset)
-        if not file_path or not os.path.isfile(file_path):
+        if not file_path or not ref_exists(file_path):
             return {'code': 404, 'message': '文件不存在'}, 404
 
         ticket = _share_ticket_serializer().dumps({

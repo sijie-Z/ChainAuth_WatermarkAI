@@ -368,8 +368,10 @@ watch(query, value => {
 })
 
 let searchTimer = null
+let searchSeq = 0
 function scheduleAssetSearch(value) {
   if (searchTimer) clearTimeout(searchTimer)
+  const requestId = ++searchSeq
   const keyword = String(value || '').trim()
   if (!keyword || !isLoggedIn.value) {
     assetResults.value = []
@@ -380,13 +382,14 @@ function scheduleAssetSearch(value) {
   searchTimer = setTimeout(async () => {
     try {
       const response = await assetApi.getList({ keyword, per_page: 6, page: 1 })
+      if (requestId !== searchSeq || keyword !== String(query.value || '').trim()) return
       if (response.data?.code === 200) {
         assetResults.value = response.data.data?.items || []
       }
     } catch {
-      assetResults.value = []
+      if (requestId === searchSeq) assetResults.value = []
     } finally {
-      loading.value = false
+      if (requestId === searchSeq) loading.value = false
     }
   }, 260)
 }
@@ -415,6 +418,7 @@ function open() {
 function close() {
   visible.value = false
   document.body.style.overflow = ''
+  searchSeq += 1
   query.value = ''
   assetResults.value = []
   activeIndex.value = 0

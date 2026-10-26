@@ -19,10 +19,10 @@
 - Flask-JWT-Extended (认证)
 - Flask-RESTful (API)
 - Pillow / GeoPandas (图像处理)
-- Celery + Redis (异步任务)
+- 数据库持久化任务队列 + Redis（可选缓存/限流），不依赖 Celery
 
 **前端**
-- Vue 3.4 + Vite 5
+- Vue 3.5 + Vite 8 / Rolldown
 - Element Plus (UI)
 - Pinia (状态管理)
 - Vue Router (路由)
@@ -32,7 +32,8 @@
 - PostgreSQL (数据库)
 - Redis (缓存/队列)
 - FISCO BCOS (区块链)
-- Milvus (向量检索)
+- MinIO（可选原件/历史版本对象存储）
+- Milvus (可选向量检索)
 - Docker (容器化)
 
 ## 二、功能模块
@@ -67,11 +68,11 @@
 - 授权合同生成
 - 区块链授权记录
 
-### 6. AI智能模块
-- GLM-4-Flash智能问答
-- CLIP特征提取
-- DINOv2场景分类
-- Milvus相似度检索
+### 6. AI智能模块（可选，默认关闭）
+- GLM-4-Flash智能问答（需 API Key）
+- CLIP特征提取（需模型）
+- DINOv2场景分类（需模型）
+- Milvus相似度检索（可选）
 
 ## 三、项目结构
 
@@ -79,10 +80,10 @@
 garden-asset-platform/
 ├── backend/                    # 后端代码
 │   ├── app/
-│   │   ├── models/             # 数据模型 (8个)
-│   │   ├── resources/          # API资源 (8个模块)
-│   │   ├── services/           # 业务服务 (3个)
-│   │   └── utils/              # 工具模块 (17个)
+│   │   ├── models/             # 数据模型 (31 张表)
+│   │   ├── resources/          # API资源 (21 个模块)
+│   │   ├── services/           # 业务服务 (18 个)
+│   │   └── utils/              # 工具模块 (26 个)
 │   ├── algorithm/              # 水印算法
 │   ├── contracts/              # 智能合约
 │   ├── scripts/                # 脚本文件
@@ -91,8 +92,8 @@ garden-asset-platform/
 │
 ├── frontend/                   # 前端代码
 │   ├── src/
-│   │   ├── views/              # 页面组件 (19个)
-│   │   ├── components/         # 公共组件 (4个)
+│   │   ├── views/              # 页面组件 (40 个)
+│   │   ├── components/         # 公共组件 (11 个)
 │   │   ├── api/                # API封装 (7个模块)
 │   │   ├── utils/              # 工具函数
 │   │   ├── hooks/              # Vue Hooks

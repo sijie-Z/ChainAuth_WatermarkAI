@@ -136,10 +136,10 @@
             @selection-change="handleSelectionChange"
           >
             <el-table-column
-              v-if="canProcessAssets"
+              v-if="canProcessAssets || canApprove"
               type="selection"
               width="44"
-              :selectable="row => row.status !== 'deleted'"
+              :selectable="row => row.status !== 'deleted' && (canProcessAssets || canApproveRow(row))"
             />
             <el-table-column prop="asset_code" label="编码" width="220" class-name="cell-code" />
             <el-table-column label="标题" min-width="200">
