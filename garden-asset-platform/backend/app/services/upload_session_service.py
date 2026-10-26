@@ -8,24 +8,93 @@
 - 过期会话回收（默认 48 小时，可在配置中调整）；
 - 同会话并发分块写入的跨线程/跨进程互斥。
 """
+import hashlib
 import os
 import re
 import shutil
 import threading
+import time
+import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 
 from flask import current_app
 from sqlalchemy import update
+from sqlalchemy.exc import OperationalError
 
 from app.extensions import db
 from app.models.extra import UploadSession
 from app.utils.paths import path_inside
 
 _UPLOAD_ID_RE = re.compile(r'^[0-9a-f]{32}$')
+_FINGERPRINT_RE = re.compile(r'^[0-9a-f]{64}$')
+FINGERPRINT_SAMPLE_SIZE = 64 * 1024
+UPLOAD_LEASE_SECONDS = 120
 
 _session_locks = {}
 _session_locks_guard = threading.Lock()
+
+
+def normalize_fingerprint(value):
+    value = str(value or '').strip().lower()
+    return value if _FINGERPRINT_RE.fullmatch(value) else None
+
+
+def calculate_upload_fingerprint(path, size):
+    """计算完整 SHA-256，防止同名同大小文件被拼接成错误资产。"""
+    digest = hashlib.sha256()
+    actual_size = 0
+    with open(path, 'rb') as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b''):
+            actual_size += len(chunk)
+            digest.update(chunk)
+    if actual_size != size:
+        raise ValueError('file size changed while calculating fingerprint')
+    return digest.hexdigest()
+
+
+def calculate_prefix_hash(path, size=FINGERPRINT_SAMPLE_SIZE):
+    with open(path, 'rb') as handle:
+        return hashlib.sha256(handle.read(size)).hexdigest()
+
+
+def lease_is_valid(session):
+    return bool(
+        session.lease_token
+        and session.lease_expires_at
+        and session.lease_expires_at > datetime.utcnow()
+    )
+
+
+def claim_upload_session(session, fingerprint=None):
+    """为当前上传者签发短期写入租约，返回 (token, error)。
+
+    已有有效租约时，只有同一个 token 能续租；其他页面收到冲突提示，
+    不再向同一临时文件并发写入。完成/取消后租约清空。
+    """
+    fingerprint = normalize_fingerprint(fingerprint)
+    if session.file_fingerprint and fingerprint != session.file_fingerprint:
+        return None, '所选文件内容与未完成上传不一致，请选择原文件'
+    if session.lease_expires_at and not lease_is_valid(session):
+        session.lease_token = None
+        session.lease_expires_at = None
+    if lease_is_valid(session):
+        session.lease_expires_at = datetime.utcnow() + timedelta(
+            seconds=UPLOAD_LEASE_SECONDS
+        )
+        return session.lease_token, None
+    session.lease_token = uuid.uuid4().hex
+    session.lease_expires_at = datetime.utcnow() + timedelta(
+        seconds=UPLOAD_LEASE_SECONDS
+    )
+    if fingerprint and not session.file_fingerprint:
+        session.file_fingerprint = fingerprint
+    return session.lease_token, None
+
+
+def clear_upload_lease(session):
+    session.lease_token = None
+    session.lease_expires_at = None
 
 
 def resumable_root():
@@ -45,13 +114,17 @@ def session_dir(upload_id):
         return None
 
 
-def remove_session_files(session):
-    """删除会话的临时目录；目录名只由已校验的会话 ID 推导。"""
-    directory = session_dir(getattr(session, 'id', ''))
+def remove_upload_session_dir(upload_id):
+    directory = session_dir(upload_id)
     if directory and os.path.isdir(directory):
         shutil.rmtree(directory, ignore_errors=True)
         return True
     return False
+
+
+def remove_session_files(session):
+    """删除会话的临时目录；目录名只由已校验的会话 ID 推导。"""
+    return remove_upload_session_dir(getattr(session, 'id', ''))
 
 
 def purge_stale_upload_sessions(ttl_hours=None, user_id=None):
@@ -90,6 +163,7 @@ def purge_stale_upload_sessions(ttl_hours=None, user_id=None):
                 ):
                     continue
                 session.status = 'expired'
+                clear_upload_lease(session)
                 db.session.commit()
                 expired_ids.append(session.id)
         except TimeoutError:
@@ -129,11 +203,22 @@ def upload_session_lock(upload_id, timeout=10.0):
     if not lock.acquire(timeout=timeout):
         raise TimeoutError('上传会话正忙，请稍后重试')
     try:
-        db.session.execute(
-            update(UploadSession)
-            .where(UploadSession.id == upload_id)
-            .values(updated_at=UploadSession.updated_at)
-        )
+        for attempt in range(3):
+            try:
+                db.session.execute(
+                    update(UploadSession)
+                    .where(UploadSession.id == upload_id)
+                    .values(updated_at=UploadSession.updated_at)
+                )
+                break
+            except OperationalError as exc:
+                db.session.rollback()
+                message = str(exc).lower()
+                if not any(word in message for word in ('locked', 'busy', 'timeout')):
+                    raise
+                if attempt == 2:
+                    raise TimeoutError('上传会话正忙，请稍后重试') from exc
+                time.sleep(0.05 * (attempt + 1))
         yield
     finally:
         lock.release()

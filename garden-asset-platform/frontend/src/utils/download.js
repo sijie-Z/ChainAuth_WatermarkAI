@@ -14,7 +14,8 @@ export async function startAssetDownload(assetId, params = {}) {
   const baseURL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
   const link = document.createElement('a')
   link.href = `${baseURL}/assets/${assetId}/download?ticket=${encodeURIComponent(data.ticket)}`
-  link.rel = 'noopener'
+  link.rel = 'noopener noreferrer'
+  link.target = '_blank'
   link.style.display = 'none'
   document.body.appendChild(link)
   link.click()
@@ -37,7 +38,8 @@ export async function startVersionDownload(assetId, versionId) {
   const baseURL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
   const link = document.createElement('a')
   link.href = `${baseURL}/assets/${assetId}/versions/${versionId}/download?ticket=${encodeURIComponent(data.ticket)}`
-  link.rel = 'noopener'
+  link.rel = 'noopener noreferrer'
+  link.target = '_blank'
   link.style.display = 'none'
   document.body.appendChild(link)
   link.click()
@@ -76,7 +78,8 @@ export async function startShareDownload(token, code = '') {
   const baseURL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
   const link = document.createElement('a')
   link.href = `${baseURL}/shares/${token}/download?ticket=${encodeURIComponent(data.ticket)}`
-  link.rel = 'noopener'
+  link.rel = 'noopener noreferrer'
+  link.target = '_blank'
   link.style.display = 'none'
   document.body.appendChild(link)
   link.click()

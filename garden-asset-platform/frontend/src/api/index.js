@@ -119,6 +119,7 @@ api.interceptors.response.use(
         if (!refreshToken) throw new Error('no refresh token')
 
         const response = await axios.post(`${baseURL}/refresh`, {}, {
+          timeout: 30000,
           headers: { Authorization: `Bearer ${refreshToken}` }
         })
 

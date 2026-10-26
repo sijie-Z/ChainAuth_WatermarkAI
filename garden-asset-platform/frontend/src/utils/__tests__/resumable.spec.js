@@ -1,5 +1,10 @@
-import { describe, it, expect } from 'vitest'
-import { findResumableSession, sessionProgress } from '@/utils/resumable'
+import { describe, it, expect, vi, beforeAll } from 'vitest'
+import { webcrypto } from 'node:crypto'
+import { computeFileFingerprint, findResumableSession, sessionProgress } from '@/utils/resumable'
+
+beforeAll(() => {
+  if (!globalThis.crypto?.subtle) vi.stubGlobal('crypto', webcrypto)
+})
 
 function session(overrides = {}) {
   return {
@@ -50,5 +55,38 @@ describe('findResumableSession', () => {
   it('returns null for empty input', () => {
     expect(findResumableSession(null, file)).toBeNull()
     expect(findResumableSession([], null)).toBeNull()
+  })
+
+  it('does not match a different file fingerprint', () => {
+    const other = session({ fingerprint: 'a'.repeat(64) })
+    const same = session({ upload_id: 'c'.repeat(32), fingerprint: 'b'.repeat(64) })
+    expect(findResumableSession([other], file, 'b'.repeat(64))).toBeNull()
+    expect(findResumableSession([other, same], file, 'b'.repeat(64))?.upload_id)
+      .toBe(same.upload_id)
+  })
+})
+
+describe('computeFileFingerprint', () => {
+  it('falls back to incremental SHA-256 without SubtleCrypto', async () => {
+    const original = globalThis.crypto
+    try {
+      vi.stubGlobal('crypto', undefined)
+      const file = new File(['abc'], 'abc.txt')
+      expect(await computeFileFingerprint(file)).toBe(
+        'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
+      )
+    } finally {
+      vi.stubGlobal('crypto', original)
+    }
+  })
+  it('is stable for identical bytes and changes with content', async () => {
+    const first = new File([new Uint8Array(200000).fill(7)], 'a.jpg')
+    const same = new File([new Uint8Array(200000).fill(7)], 'renamed.jpg')
+    const different = new File([new Uint8Array(200000).fill(8)], 'a.jpg')
+    const hash = await computeFileFingerprint(first)
+    expect(hash).toMatch(/^[0-9a-f]{64}$/)
+    expect(await computeFileFingerprint(same)).toBe(hash)
+    expect(await computeFileFingerprint(different)).not.toBe(hash)
+    expect(await computeFileFingerprint(new File([], 'empty.jpg'))).toBe('')
   })
 })

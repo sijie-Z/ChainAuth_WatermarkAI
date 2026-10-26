@@ -11,7 +11,7 @@ import shutil
 import uuid
 from datetime import datetime
 
-from flask import current_app, request, send_file
+from flask import current_app, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restful import Resource
 from sqlalchemy import func, or_
@@ -26,6 +26,14 @@ from app.models.task import AsyncTask
 from app.models.user import User
 from app.resources.asset import allowed_file, calculate_file_hash, validate_magic_bytes
 from app.services.blockchain_service import blockchain_service
+from app.services.object_storage import (
+    delete_ref_quietly,
+    is_object_ref,
+    materialize_ref,
+    ref_exists,
+    send_ref,
+    store_original,
+)
 from app.services.notification_service import add_notification_event
 from app.utils.paths import VERSION_EXT_ALIASES, canonical_extension, uuid_filename
 
@@ -178,11 +186,12 @@ def _apply_version_file(asset, file_path, file_hash, file_size, file_format,
 
 
 def _create_version(asset, user_id, file_path, file_name, file_format,
-                    file_size, file_hash, thumbnail_path, change_note):
+                    file_size, file_hash, thumbnail_path, change_note,
+                    storage_ref=None):
     version = AssetVersion(
         asset_id=asset.id,
         version_no=_next_version_no(asset.id),
-        file_path=file_path,
+        file_path=storage_ref or file_path,
         file_name=file_name[:255] if file_name else None,
         file_format=file_format,
         file_size=file_size,
@@ -195,7 +204,8 @@ def _create_version(asset, user_id, file_path, file_name, file_format,
     db.session.flush()
     asset.current_version_no = version.version_no
     _apply_version_file(
-        asset, file_path, file_hash, file_size, file_format, thumbnail_path
+        asset, storage_ref or file_path, file_hash, file_size, file_format,
+        thumbnail_path
     )
     _cancel_queued_tasks(asset.id)
     _notify_version_outdated(asset, version)
@@ -216,13 +226,28 @@ def _commit_new_version(asset, user_id, **kwargs):
     last_error = None
     for _ in range(3):
         current = db.session.get(Asset, asset_id)
+        storage_ref = None
         try:
-            version = _create_version(current, user_id, **kwargs)
+            source_format = kwargs.get('file_format') or ''
+            extension = f'.{source_format.lower()}' if source_format else ''
+            storage_ref = store_original(
+                kwargs['file_path'], asset_id, extension, kind='versions'
+            )
+            version = _create_version(
+                current, user_id, storage_ref=storage_ref, **kwargs
+            )
             db.session.commit()
             return current, version
         except IntegrityError as exc:
             db.session.rollback()
+            if storage_ref and is_object_ref(storage_ref):
+                delete_ref_quietly(storage_ref)
             last_error = exc
+        except Exception:
+            db.session.rollback()
+            if storage_ref and is_object_ref(storage_ref):
+                delete_ref_quietly(storage_ref)
+            raise
     raise last_error
 
 
@@ -487,8 +512,8 @@ class AssetVersionDownloadResource(Resource):
         if not version or version.asset_id != asset.id:
             return {'code': 404, 'message': '版本不存在'}, 404
 
-        file_path = os.path.abspath(version.file_path or '')
-        if not file_path or not os.path.isfile(file_path):
+        file_path = version.file_path or ''
+        if not file_path or not ref_exists(file_path):
             return {'code': 404, 'message': '版本文件不存在'}, 404
 
         ext = (version.file_format or os.path.splitext(file_path)[1].lstrip('.')).lower()
@@ -496,7 +521,7 @@ class AssetVersionDownloadResource(Resource):
         if ext:
             download_name = f'{download_name}.{ext}'
 
-        return send_file(file_path, as_attachment=True, download_name=download_name)
+        return send_ref(file_path, download_name, as_attachment=True)
 
 
 class AssetVersionDownloadTicketResource(Resource):
@@ -515,8 +540,8 @@ class AssetVersionDownloadTicketResource(Resource):
         version = AssetVersion.query.get(version_id)
         if not version or version.asset_id != asset.id:
             return {'code': 404, 'message': '版本不存在'}, 404
-        file_path = os.path.abspath(version.file_path or '')
-        if not file_path or not os.path.isfile(file_path):
+        file_path = version.file_path or ''
+        if not file_path or not ref_exists(file_path):
             return {'code': 404, 'message': '版本文件不存在'}, 404
 
         ticket = _version_ticket_serializer().dumps({
@@ -559,18 +584,19 @@ class AssetVersionRestoreResource(Resource):
         if not source or source.asset_id != asset.id:
             return {'code': 404, 'message': '版本不存在'}, 404
 
-        source_path = os.path.abspath(source.file_path or '')
-        if not source_path or not os.path.isfile(source_path):
+        source_ref = source.file_path or ''
+        if not source_ref or not ref_exists(source_ref):
             return {'code': 404, 'message': '版本文件不存在'}, 404
 
         # 复制为新文件，保留历史版本文件不动
         raw_ext = '.' + (
-            source.file_format or os.path.splitext(source_path)[1].lstrip('.')
+            source.file_format or os.path.splitext(source_ref)[1].lstrip('.')
         ).lower().lstrip('.')
         ext = VERSION_EXT_ALIASES.get(raw_ext)
         save_dir = _version_save_dir(asset.id)
         file_path = os.path.join(save_dir, uuid_filename(ext or ''))
-        shutil.copy2(source_path, file_path)
+        with materialize_ref(source_ref, raw_ext) as source_path:
+            shutil.copy2(source_path, file_path)
 
         file_hash = _hash_file(file_path)
         file_size = os.path.getsize(file_path)

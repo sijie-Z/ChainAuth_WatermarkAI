@@ -17,7 +17,10 @@ def generate_fingerprint_code():
 class DownloadFingerprint(db.Model):
     __tablename__ = 'download_fingerprints'
     __table_args__ = (
-        db.UniqueConstraint('license_id', 'asset_id', name='uk_license_asset_fingerprint'),
+        db.UniqueConstraint(
+            'license_id', 'asset_id', 'source_hash',
+            name='uk_license_asset_source_fingerprint'
+        ),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -36,6 +39,8 @@ class DownloadFingerprint(db.Model):
     )
 
     file_path = db.Column(db.String(500), nullable=False)
+    # 指纹副本必须绑定实际源文件；换版后不能复用旧版本文件
+    source_hash = db.Column(db.String(64), nullable=True, index=True)
     file_hash = db.Column(db.String(64), nullable=True)
     file_size = db.Column(db.BigInteger, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
@@ -52,5 +57,6 @@ class DownloadFingerprint(db.Model):
             'license_id': self.license_id,
             'user_id': self.user_id,
             'file_hash': self.file_hash,
+            'source_hash': self.source_hash,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }

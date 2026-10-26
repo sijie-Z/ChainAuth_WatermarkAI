@@ -92,7 +92,7 @@ describe('api request interceptor', () => {
     expect(axiosPost).toHaveBeenCalledWith(
       `${createdConfig.baseURL}/refresh`,
       {},
-      { headers: { Authorization: 'Bearer refresh-1' } }
+      { timeout: 30000, headers: { Authorization: 'Bearer refresh-1' } }
     )
     expect(error.config._retry).toBe(true)
     expect(error.config.headers.Authorization).toBe('Bearer new-token')

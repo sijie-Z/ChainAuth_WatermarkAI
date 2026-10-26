@@ -13,6 +13,7 @@ from PIL import Image, ImageDraw, ImageFont
 from app.extensions import db
 from app.models import DownloadFingerprint
 from app.models.fingerprint import generate_fingerprint_code
+from app.services.object_storage import hash_ref, materialize_ref, ref_exists
 
 logger = logging.getLogger(__name__)
 
@@ -73,22 +74,32 @@ def get_or_create_fingerprint(asset, license_row, user):
     if asset.asset_type != 'image':
         return None, False
 
-    existing = DownloadFingerprint.query.filter_by(
-        license_id=license_row.id, asset_id=asset.id
-    ).first()
     source = asset.watermarked_path or asset.storage_path
+    if not source or not ref_exists(source):
+        return None, False
+    try:
+        source_hash = hash_ref(source)
+    except OSError:
+        return None, False
+
+    existing = DownloadFingerprint.query.filter_by(
+        license_id=license_row.id,
+        asset_id=asset.id,
+        source_hash=source_hash,
+    ).first()
     if existing and existing.file_path and os.path.isfile(existing.file_path):
         return existing, False
 
-    if not source or not os.path.isfile(source):
+    if not source or not ref_exists(source):
         return None, False
 
     try:
-        with Image.open(source) as source_image:
-            width, height = source_image.size
-            if width * height > MAX_FINGERPRINT_PIXELS:
-                return None, False
-            image = source_image.convert('RGB')
+        with materialize_ref(source, os.path.splitext(source)[1]) as source_path:
+            with Image.open(source_path) as source_image:
+                width, height = source_image.size
+                if width * height > MAX_FINGERPRINT_PIXELS:
+                    return None, False
+                image = source_image.convert('RGB')
     except Exception:
         logger.warning('读取下载指纹源图失败', exc_info=True)
         return None, False
@@ -130,13 +141,23 @@ def get_or_create_fingerprint(asset, license_row, user):
             license_id=license_row.id,
             user_id=user.id,
             file_path=path,
+            source_hash=source_hash,
         )
         db.session.add(record)
 
     record.file_path = path
     record.file_hash = _hash_file(path)
     record.file_size = os.path.getsize(path)
-    db.session.flush()
+    try:
+        db.session.flush()
+    except Exception:
+        # 外层可能使用 SAVEPOINT 回滚；新文件不能因 DB 失败变成孤儿。
+        if not existing:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        raise
     return record, True
 
 
