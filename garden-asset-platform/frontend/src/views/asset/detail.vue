@@ -1005,6 +1005,8 @@ const activeTask = ref(null)
 const previewUrl = ref('')
 const previewLoading = ref(false)
 const previewError = ref(false)
+let detailRequestSeq = 0
+let extrasRequestSeq = 0
 const downloadDialogVisible = ref(false)
 const downloadForm = reactive({
   purpose: 'personal_learning',
@@ -1032,7 +1034,7 @@ const VERSION_ACCEPT = {
 const versionAccept = computed(() => VERSION_ACCEPT[asset.value.asset_type] || '')
 const currentVersionNo = computed(() => {
   const current = versions.value.find(item => item.is_current)
-  return current?.version_no || versions.value[0]?.version_no || 1
+  return current?.version_no || versions.value[0]?.version_no || asset.value.current_version_no || 1
 })
 const currentVersionId = computed(() => {
   const current = versions.value.find(item => item.is_current)
@@ -1058,15 +1060,19 @@ const canManage = computed(() => {
 })
 const licenseUsable = license => {
   if (license.status !== 'active') return false
-  if (license.end_time && new Date(license.end_time).getTime() <= Date.now()) return false
+  if (license.end_time) {
+    const end = parseBackendDate(license.end_time)
+    if (!end || end.getTime() <= Date.now()) return false
+  }
   return !license.version_stale
 }
 const activeLicense = computed(() => myLicenses.value.find(licenseUsable) || null)
-const staleLicense = computed(() => myLicenses.value.find(license => (
-  license.status === 'active'
-  && (!license.end_time || new Date(license.end_time).getTime() > Date.now())
-  && license.version_stale
-)) || null)
+const staleLicense = computed(() => myLicenses.value.find(license => {
+  if (license.status !== 'active' || !license.version_stale) return false
+  if (!license.end_time) return true
+  const end = parseBackendDate(license.end_time)
+  return Boolean(end && end.getTime() > Date.now())
+}) || null)
 const pendingApplication = computed(() => myApplications.value.find(application =>
   ['pending', 'adm1_approved'].includes(application.status)
 ) || null)
@@ -1118,7 +1124,7 @@ const canSubmitPublish = computed(() =>
 const assetState = computed(() => {
   if (activeLicense.value) {
     const end = activeLicense.value.end_time
-      ? new Date(activeLicense.value.end_time).toLocaleDateString('zh-CN')
+      ? (formatDate(activeLicense.value.end_time) || '未知')
       : '长期有效'
     return {
       tone: 'success',
@@ -1163,14 +1169,40 @@ const assetState = computed(() => {
   return null
 })
 
+function resetAssetState() {
+  asset.value = {}
+  tags.value = []
+  tagsLoaded.value = false
+  tagsError.value = false
+  related.value = []
+  myLicenses.value = []
+  myApplications.value = []
+  favorited.value = false
+  evidence.value = { items: [], summary: null }
+  versions.value = []
+  versionsLoaded.value = false
+  versionsError.value = false
+  previewUrl.value = ''
+  previewLoading.value = false
+  previewError.value = false
+  activeTask.value = null
+  licenseStatusError.value = false
+  editVisible.value = false
+  shareVisible.value = false
+  collectionDialogVisible.value = false
+}
+
 async function loadAsset() {
+  const id = route.params.id
+  const requestId = ++detailRequestSeq
   loading.value = true
   loadError.value = false
   try {
-    const response = await assetApi.getDetail(route.params.id)
+    const response = await assetApi.getDetail(id)
+    if (requestId !== detailRequestSeq || id !== route.params.id) return
     if (response.data.code === 200) {
       asset.value = response.data.data
-      loadExtras()
+      loadExtras(id)
       loadEvidence()
       if (activeDetailTab.value === 'versions') {
         loadVersions()
@@ -1179,14 +1211,14 @@ async function loadAsset() {
       loadError.value = true
     }
   } catch (error) {
-    loadError.value = true
+    if (requestId === detailRequestSeq) loadError.value = true
   } finally {
-    loading.value = false
+    if (requestId === detailRequestSeq) loading.value = false
   }
 }
 
-async function loadExtras() {
-  const id = route.params.id
+async function loadExtras(id = route.params.id) {
+  const requestId = ++extrasRequestSeq
   extrasLoading.value = true
   tagsLoaded.value = false
   tagsError.value = false
@@ -1198,6 +1230,7 @@ async function loadExtras() {
     licenseApi.myApplications({ asset_id: id, per_page: 20 })
   ])
 
+  if (requestId !== extrasRequestSeq || id !== route.params.id) return
   if (results[0].status === 'fulfilled' && results[0].value.data?.code === 200) {
     favorited.value = Boolean(results[0].value.data.data?.favorited)
   }
@@ -1220,7 +1253,7 @@ async function loadExtras() {
   licenseStatusError.value = [results[3], results[4]].some(
     result => result.status !== 'fulfilled' || result.value.data?.code !== 200
   )
-  extrasLoading.value = false
+  if (requestId === extrasRequestSeq) extrasLoading.value = false
 }
 
 async function openAssetLicenses() {
@@ -1711,8 +1744,8 @@ async function performDownload(params) {
     const ticket = await startAssetDownload(asset.value.id, params)
     ElMessage.success(
       ticket.fingerprint_code
-        ? `下载已开始，指纹 ${ticket.fingerprint_code}`
-        : '下载已开始'
+        ? `已发起下载，指纹 ${ticket.fingerprint_code}`
+        : '已发起下载，请在浏览器下载列表中查看'
     )
     loadExtras()
   } catch (error) {
@@ -2013,6 +2046,12 @@ onMounted(() => {
   if (['evidence', 'annotations', 'versions', 'comments'].includes(tab)) {
     activeDetailTab.value = tab
   }
+  loadAsset()
+})
+
+watch(() => route.params.id, (id, previousId) => {
+  if (!id || id === previousId) return
+  resetAssetState()
   loadAsset()
 })
 

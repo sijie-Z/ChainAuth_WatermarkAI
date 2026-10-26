@@ -240,7 +240,7 @@ async function downloadAsset() {
         asset.value.share.download_remaining = Math.max(asset.value.share.download_remaining - 1, 0)
       }
     }
-    ElMessage.success('下载已开始')
+    ElMessage.success('已发起下载，请在浏览器下载列表中查看')
   } catch (error) {
     const parsed = parseError(error)
     ElMessage.error(parsed.message)

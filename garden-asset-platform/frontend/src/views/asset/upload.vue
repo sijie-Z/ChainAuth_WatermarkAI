@@ -89,9 +89,10 @@
                 size="small"
                 type="primary"
                 plain
+                :disabled="!canResumeSession(session)"
                 @click="pickFileForResume(session)"
               >
-                选择文件继续
+                {{ canResumeSession(session) ? '选择文件继续' : '其他页面续传中' }}
               </el-button>
               <el-button
                 size="small"
@@ -146,10 +147,11 @@
                 <span>{{ formatFileSize(item.size) }}</span>
                 <span class="queue-file-name">{{ item.name }}</span>
                 <el-tag
-                  v-if="item.resumeSession"
+                  v-if="item.resumeSession && !item.assetId && ['ready', 'failed'].includes(item.status)"
                   size="small"
                   type="warning"
                   effect="plain"
+                  disable-transitions
                 >
                   续传 {{ sessionProgressText(item.resumeSession) }}%
                 </el-tag>
@@ -314,7 +316,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Files, UploadFilled } from '@element-plus/icons-vue'
 import { assetApi, gardenApi, watermarkApi, blockchainApi, taskApi } from '@/api/modules'
 import { formatFileSize } from '@/utils'
-import { findResumableSession, sessionProgress } from '@/utils/resumable'
+import { computeFileFingerprint, computeFilePrefixHash, findResumableSession, sessionProgress } from '@/utils/resumable'
 
 const router = useRouter()
 
@@ -330,12 +332,12 @@ const uploadMessage = ref('')
 const overallStatus = ref('')
 const queue = ref([])
 let queueSeq = 0
-const RESUMABLE_THRESHOLD = 8 * 1024 * 1024
 const pendingSessions = ref([])
 const pendingLoading = ref(false)
 const pendingError = ref('')
 const pendingTtlHours = ref(48)
 const resumeTargetId = ref('')
+let pendingRefreshTimer = null
 
 const TYPE_BY_EXT = {
   jpg: 'image', jpeg: 'image', png: 'image', gif: 'image', bmp: 'image', tiff: 'image', webp: 'image',
@@ -419,6 +421,7 @@ function sessionProgressText(session) {
 }
 
 async function loadPendingSessions() {
+  if (pendingLoading.value) return
   pendingLoading.value = true
   pendingError.value = ''
   try {
@@ -465,6 +468,7 @@ async function cancelPending(session) {
   try {
     const response = await assetApi.cancelUploadSession(session.upload_id)
     if (response.data?.code === 200) {
+      saveUploadLease(session.upload_id, '')
       pendingSessions.value = pendingSessions.value.filter(
         row => row.upload_id !== session.upload_id
       )
@@ -527,10 +531,14 @@ function validateFile(raw) {
     ElMessage.error(`${raw.name} 超过 500MB 上传限制`)
     return null
   }
+  if (raw.size <= 0) {
+    ElMessage.error(`${raw.name} 是空文件，不能上传`)
+    return null
+  }
   return ext
 }
 
-function handleFileChange(uploadFile) {
+async function handleFileChange(uploadFile) {
   const raw = uploadFile.raw
   if (!raw) return
   const ext = validateFile(raw)
@@ -550,6 +558,13 @@ function handleFileChange(uploadFile) {
   }
 
   const detectedType = TYPE_BY_EXT[ext]
+  let fingerprint = ''
+  try {
+    fingerprint = await computeFileFingerprint(raw)
+  } catch (error) {
+    ElMessage.error(errorText(error, '无法计算文件指纹，请使用现代浏览器'))
+    return
+  }
   const item = {
     uid: `queue-${++queueSeq}`,
     raw,
@@ -567,6 +582,8 @@ function handleFileChange(uploadFile) {
     watermarkReady: false,
     published: false,
     publishing: false,
+    fingerprint,
+    uploadLease: '',
     resumeSession: null
   }
 
@@ -584,9 +601,10 @@ function handleFileChange(uploadFile) {
     targeted
     && targeted.filename === raw.name
     && Number(targeted.expected_size) === raw.size
+    && (!targeted.fingerprint || targeted.fingerprint === fingerprint)
   )
     ? targeted
-    : findResumableSession(availableSessions, raw)
+    : findResumableSession(availableSessions, raw, fingerprint)
   resumeTargetId.value = ''
   if (matched) {
     item.resumeSession = matched
@@ -674,39 +692,88 @@ async function waitForTask(taskId, onProgress) {
   throw new Error('任务处理超时，请稍后在资产详情页查看')
 }
 
-async function resolveUploadSession(item, title) {
+function savedUploadLease(uploadId) {
+  try {
+    return sessionStorage.getItem(`upload-lease:${uploadId}`) || ''
+  } catch {
+    return ''
+  }
+}
+
+function saveUploadLease(uploadId, token) {
+  try {
+    if (token) sessionStorage.setItem(`upload-lease:${uploadId}`, token)
+    else sessionStorage.removeItem(`upload-lease:${uploadId}`)
+  } catch {
+    // 浏览器禁用存储时仍可在当前页面续传
+  }
+}
+
+function canResumeSession(session) {
+  return !session.lease_active || Boolean(savedUploadLease(session.upload_id))
+}
+
+async function claimSession(item, session) {
+  const payload = {
+    fingerprint: item.fingerprint,
+    lease_token: savedUploadLease(session.upload_id) || undefined
+  }
+  if (!session.fingerprint) {
+    payload.prefix_hash = await computeFilePrefixHash(item.raw)
+  }
+  const response = await assetApi.claimUploadSession(session.upload_id, payload)
+  const data = response.data?.data
+  if (response.data?.code !== 200 || !data?.lease_token) {
+    throw new Error(response.data?.message || '认领上传会话失败')
+  }
+  item.uploadLease = data.lease_token
+  item.resumeSession = data
+  saveUploadLease(session.upload_id, data.lease_token)
+  return data
+}
+
+async function resolveUploadSession(item, title, options) {
   const candidate = item.resumeSession
   if (candidate) {
+    let current = null
     try {
       const response = await assetApi.getUploadSession(candidate.upload_id)
-      const session = response.data?.data
-      if (
-        response.data?.code === 200
-        && session?.status === 'uploading'
-        && Number(session.expected_size) === item.raw.size
-      ) {
-        // 用户在断点恢复后可能修改了标题/园林/标签，续传前同步到会话
-        try {
-          const synced = await assetApi.updateUploadSession(
-            candidate.upload_id,
-            {
-              title,
-              description: form.value.description,
-              garden_id: form.value.garden_id,
-              tags: form.value.tags,
-              asset_type: resolveType(item)
-            }
-          )
-          if (synced.data?.code === 200 && synced.data.data) {
-            return synced.data.data
-          }
-        } catch {
-          // 元数据同步失败不阻塞续传，继续使用会话原有信息
+      current = response.data?.data
+    } catch (error) {
+      if (error.response?.status !== 404) throw error
+    }
+    if (current?.status === 'completed' && current.asset_id) {
+      item.resumeSession = null
+      item.uploadLease = ''
+      saveUploadLease(candidate.upload_id, '')
+      return {
+        session: null,
+        completed: {
+          data: { code: 200, data: { asset_id: current.asset_id } }
         }
-        return session
       }
-    } catch {
-      // 会话已在服务端过期或被取消，退回新建流程
+    }
+    if (
+      current?.status === 'uploading'
+      && Number(current.expected_size) === item.raw.size
+    ) {
+      const claimed = await claimSession(item, current)
+      // 用户在断点恢复后可能修改了标题/园林/标签，续传前同步到会话
+      const synced = await assetApi.updateUploadSession(
+        candidate.upload_id,
+        {
+          title,
+          description: options.description,
+          garden_id: options.garden_id,
+          tags: options.tags,
+          asset_type: options.type
+        },
+        { headers: { 'X-Upload-Lease': item.uploadLease } }
+      )
+      if (synced.data?.code === 200 && synced.data.data) {
+        return { session: { ...claimed, ...synced.data.data }, completed: null }
+      }
+      throw new Error(synced.data?.message || '同步上传信息失败')
     }
     item.resumeSession = null
   }
@@ -714,21 +781,26 @@ async function resolveUploadSession(item, title) {
   const sessionResponse = await assetApi.createUploadSession({
     filename: item.raw.name,
     size: item.raw.size,
-    asset_type: resolveType(item),
+    asset_type: options.type,
     title,
-    description: form.value.description,
-    garden_id: form.value.garden_id,
-    tags: form.value.tags
+    description: options.description,
+    garden_id: options.garden_id,
+    tags: options.tags,
+    fingerprint: item.fingerprint
   })
   if (sessionResponse.data?.code !== 200) {
     throw new Error(sessionResponse.data?.message || '创建上传会话失败')
   }
-  return sessionResponse.data.data
+  const session = sessionResponse.data.data
+  const claimed = await claimSession(item, session)
+  return { session: claimed, completed: null }
 }
 
-async function uploadResumable(item) {
+async function uploadResumable(item, options) {
   const title = item.title.trim() || item.name.replace(/\.[^/.]+$/, '')
-  const session = await resolveUploadSession(item, title)
+  const resolved = await resolveUploadSession(item, title, options)
+  if (resolved.completed) return resolved.completed
+  const session = resolved.session
   const chunkSize = session.chunk_size || 4 * 1024 * 1024
   let received = Number(session.received_size || 0)
   let attempts = 0
@@ -748,6 +820,7 @@ async function uploadResumable(item) {
         received,
         {
           timeout: 0,
+          headers: { 'X-Upload-Lease': item.uploadLease },
           onUploadProgress: (event) => {
             if (!event.total) return
             const uploaded = received + event.loaded
@@ -767,11 +840,23 @@ async function uploadResumable(item) {
       recalcOverall()
     } catch (error) {
       attempts += 1
-      if (attempts >= 3) throw error
-      // 网络中断后查询服务端已接收位置，从断点继续
       const statusResponse = await assetApi.getUploadSession(session.upload_id).catch(() => null)
-      const serverOffset = Number(statusResponse?.data?.data?.received_size)
-      if (Number.isFinite(serverOffset) && serverOffset > received) {
+      const current = statusResponse?.data?.data
+      if (current?.status === 'completed' && current.asset_id) {
+        item.resumeSession = null
+        item.uploadLease = ''
+        saveUploadLease(session.upload_id, '')
+        return {
+          data: { code: 200, data: { asset_id: current.asset_id } }
+        }
+      }
+      if (attempts >= 3) throw error
+      if (error.response?.data?.error === 'upload_lease_required') {
+        await claimSession(item, current || session)
+      }
+      // 网络中断后查询服务端已接收位置，从断点继续
+      const serverOffset = Number(current?.received_size)
+      if (Number.isFinite(serverOffset) && serverOffset >= 0) {
         received = serverOffset
       }
       if (received >= item.raw.size) break
@@ -779,15 +864,23 @@ async function uploadResumable(item) {
     }
   }
 
-  const completed = await assetApi.completeUploadSession(session.upload_id)
+  const completed = await assetApi.completeUploadSession(session.upload_id, {
+    headers: { 'X-Upload-Lease': item.uploadLease }
+  })
   if (completed.data?.code !== 200) {
     throw new Error(completed.data?.message || '合并文件失败')
   }
   item.resumeSession = null
+  item.uploadLease = ''
+  saveUploadLease(session.upload_id, '')
   return completed
 }
 
-async function processItem(item) {
+async function processItem(item, batchForm) {
+  const options = {
+    ...batchForm,
+    type: batchForm.asset_type || item.detectedType
+  }
   item.status = 'uploading'
   item.progress = 1
   item.error = ''
@@ -795,25 +888,8 @@ async function processItem(item) {
   recalcOverall()
 
   try {
-    const formData = new FormData()
-    formData.append('file', item.raw)
-    formData.append('title', item.title.trim() || item.name.replace(/\.[^/.]+$/, ''))
-    formData.append('asset_type', resolveType(item))
-    formData.append('garden_id', form.value.garden_id)
-    formData.append('description', form.value.description)
-    formData.append('tags', JSON.stringify(form.value.tags))
-
-    const response = item.raw.size >= RESUMABLE_THRESHOLD
-      ? await uploadResumable(item)
-      : await assetApi.create(formData, {
-        // 大文件可能远超全局 30 秒超时
-        timeout: 0,
-        onUploadProgress: (event) => {
-          if (!event.total) return
-          item.progress = Math.min(55, Math.max(1, Math.round((event.loaded / event.total) * 55)))
-          recalcOverall()
-        }
-      })
+    // 所有大小的文件都走会话上传：开始上传后刷新页面也能恢复。
+    const response = await uploadResumable(item, options)
     if (response.data.code !== 200) {
       throw new Error(response.data.message || '创建资产失败')
     }
@@ -825,12 +901,12 @@ async function processItem(item) {
     item.progress = 60
     recalcOverall()
 
-    const type = resolveType(item)
+    const type = options.type
     const needsWatermark = ['image', 'vector'].includes(type)
 
     if (!needsWatermark) {
       item.watermarkReady = true
-    } else if (form.value.auto_watermark) {
+    } else if (options.auto_watermark) {
       item.status = 'watermarking'
       item.progress = 65
       recalcOverall()
@@ -856,7 +932,7 @@ async function processItem(item) {
     }
 
     if (
-      form.value.auto_chain
+      options.auto_chain
       && (item.watermarkReady || !needsWatermark)
     ) {
       item.status = 'chaining'
@@ -927,6 +1003,10 @@ async function submitUpload() {
   uploadMessage.value = `开始处理 ${targets.length} 个文件…`
   overallProgress.value = 0
 
+  const batchForm = {
+    ...form.value,
+    tags: [...(form.value.tags || [])]
+  }
   // 上传与任务轮询彼此独立；并发 2 个可显著缩短多文件等待，
   // 同时避免一次性占满后端缩略图/水印 CPU。
   let cursor = 0
@@ -940,7 +1020,7 @@ async function submitUpload() {
         item.progress = 0
       }
       uploadMessage.value = `正在处理：${item.name}`
-      await processItem(item)
+      await processItem(item, batchForm)
     }
   }
   const workerCount = Math.min(2, targets.length)
@@ -1001,10 +1081,12 @@ function resetForm() {
 onMounted(() => {
   loadGardens()
   loadPendingSessions()
+  pendingRefreshTimer = window.setInterval(loadPendingSessions, 30000)
   window.addEventListener('beforeunload', handleBeforeUnload)
 })
 
 onUnmounted(() => {
+  if (pendingRefreshTimer) window.clearInterval(pendingRefreshTimer)
   window.removeEventListener('beforeunload', handleBeforeUnload)
   queue.value.forEach(item => {
     if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)

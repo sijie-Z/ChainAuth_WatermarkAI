@@ -86,6 +86,7 @@ describe('api modules', () => {
   it('assetApi supports resumable upload sessions', () => {
     assetApi.createUploadSession({ filename: 'a.jpg', size: 10 })
     assetApi.getUploadSession('u-1')
+    assetApi.claimUploadSession('u-1', { fingerprint: 'abc' })
     assetApi.uploadChunk('u-1', Buffer.from('x'), 4, { timeout: 0 })
     assetApi.completeUploadSession('u-1')
 
@@ -93,6 +94,9 @@ describe('api modules', () => {
       filename: 'a.jpg', size: 10
     })
     expect(api.get).toHaveBeenCalledWith('/assets/upload/session/u-1')
+    expect(api.post).toHaveBeenCalledWith('/assets/upload/session/u-1/claim', {
+      fingerprint: 'abc'
+    })
     expect(api.put).toHaveBeenCalledWith(
       '/assets/upload/session/u-1',
       Buffer.from('x'),
@@ -104,7 +108,7 @@ describe('api modules', () => {
         }
       }
     )
-    expect(api.post).toHaveBeenCalledWith('/assets/upload/session/u-1/complete')
+    expect(api.post).toHaveBeenCalledWith('/assets/upload/session/u-1/complete', undefined, undefined)
   })
 
   it('assetApi.download forwards declared usage scope', () => {

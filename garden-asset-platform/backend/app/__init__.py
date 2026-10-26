@@ -233,6 +233,7 @@ def register_api_resources(app):
         AssetListResource, AssetResource, AssetUploadResource,
         AssetUploadSessionResource, AssetUploadSessionDetailResource,
         AssetUploadSessionCompleteResource, AssetUploadSessionListResource,
+        AssetUploadSessionClaimResource,
         AssetDownloadResource, AssetDownloadTicketResource,
         AssetFavoriteResource, AssetStatsResource,
         MyAssetsResource, AssetTagsResource, AssetPublishResource, AssetApproveResource,
@@ -256,6 +257,10 @@ def register_api_resources(app):
     api.add_resource(AssetUploadResource, '/assets/upload')
     api.add_resource(AssetUploadSessionResource, '/assets/upload/session')
     api.add_resource(AssetUploadSessionListResource, '/assets/upload/sessions')
+    api.add_resource(
+        AssetUploadSessionClaimResource,
+        '/assets/upload/session/<string:upload_id>/claim'
+    )
     api.add_resource(
         AssetUploadSessionDetailResource,
         '/assets/upload/session/<string:upload_id>'
@@ -500,6 +505,9 @@ def init_services(app):
 
     ai_service.init_app(app)
     blockchain_service.init_app(app)
+
+    from app.services.object_storage import init_object_storage
+    init_object_storage(app)
 
 
 def init_scheduler(app):

@@ -3,7 +3,7 @@ openapi: 3.0.0
 info:
   title: 苏州园林数字资产平台 API
   description: 基于数字水印和AI推理的苏州园林数字资产安全分发与溯源系统
-  version: 1.0.0
+  version: 1.12.0
   contact:
     name: 苏州园林数字资产平台团队
 
@@ -183,6 +183,128 @@ paths:
       responses:
         '200':
           description: 申请提交成功
+
+  /assets/upload/session:
+    post:
+      tags: [asset]
+      summary: 创建断点续传会话
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filename, size, title]
+              properties:
+                filename: {type: string}
+                size: {type: integer, format: int64}
+                title: {type: string}
+                asset_type: {type: string}
+                garden_id: {type: integer}
+                description: {type: string}
+                tags: {type: array, items: {type: string}}
+                fingerprint: {type: string, description: 完整文件 SHA-256}
+      responses:
+        '200': {description: 会话创建成功}
+        '400': {description: 参数或文件类型错误}
+  /assets/upload/sessions:
+    get:
+      tags: [asset]
+      summary: 查询当前用户未完成的上传会话
+      responses:
+        '200': {description: 会话列表（不含写入租约 token）}
+  /assets/upload/session/{upload_id}/claim:
+    post:
+      tags: [asset]
+      summary: 认领会话并签发短期写入租约
+      parameters:
+        - name: upload_id
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fingerprint: {type: string}
+                prefix_hash: {type: string, description: 旧会话文件头 SHA-256}
+                lease_token: {type: string, description: 当前标签页已有租约}
+      responses:
+        '200': {description: 返回会话与 lease_token}
+        '409': {description: 文件指纹不一致或其他页面正在续传}
+  /assets/upload/session/{upload_id}:
+    get:
+      tags: [asset]
+      summary: 查询会话偏移和状态
+      parameters:
+        - name: upload_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {description: 会话状态}
+        '404': {description: 会话不存在}
+    put:
+      tags: [asset]
+      summary: 追加一个分块
+      parameters:
+        - name: upload_id
+          in: path
+          required: true
+          schema: {type: string}
+        - name: X-Upload-Offset
+          in: header
+          required: true
+          schema: {type: integer, format: int64}
+        - name: X-Upload-Lease
+          in: header
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: {type: string, format: binary}
+      responses:
+        '200': {description: 返回已接收偏移}
+        '409': {description: 偏移或租约冲突}
+    patch:
+      tags: [asset]
+      summary: 续传前同步标题、园林、描述、标签与类型
+      parameters:
+        - name: upload_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {description: 元数据已更新}
+    delete:
+      tags: [asset]
+      summary: 放弃会话并删除临时分块
+      parameters:
+        - name: upload_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {description: 已取消}
+  /assets/upload/session/{upload_id}/complete:
+    post:
+      tags: [asset]
+      summary: 校验完整文件并创建资产
+      parameters:
+        - name: upload_id
+          in: path
+          required: true
+          schema: {type: string}
+        - name: X-Upload-Lease
+          in: header
+          schema: {type: string}
+      responses:
+        '200': {description: 资产创建成功（重复调用幂等返回 asset_id）}
+        '400': {description: 文件不完整、魔数/SHA-256 校验失败或重复文件}
+        '409': {description: 会话结束或租约冲突}
 
 components:
   securitySchemes:

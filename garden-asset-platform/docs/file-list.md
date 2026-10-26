@@ -1,6 +1,6 @@
 # 项目完整文件清单
 
-## 后端文件 (85 个 Python 文件)
+## 后端文件 (86 个 Python 文件)
 
 ### 核心模块
 ```
@@ -34,7 +34,7 @@ backend/
 │   │   ├── license.py           # 授权API (5个端点)
 │   │   └── ai.py                # AI API (4个端点)
 │   │
-│   ├── services/                # 业务服务 (17 个)
+│   ├── services/                # 业务服务 (18 个)
 │   │   ├── __init__.py
 │   │   ├── watermark_service.py
 │   │   ├── blockchain_service.py

@@ -522,8 +522,8 @@ async function downloadAsset(row) {
     const ticket = await startAssetDownload(row.asset_id, params)
     ElMessage.success(
       ticket.fingerprint_code
-        ? `下载开始，指纹 ${ticket.fingerprint_code}`
-        : '下载开始'
+        ? `已发起下载，指纹 ${ticket.fingerprint_code}`
+        : '已发起下载，请在浏览器下载列表中查看'
     )
   } catch (error) {
     ElMessage.error(

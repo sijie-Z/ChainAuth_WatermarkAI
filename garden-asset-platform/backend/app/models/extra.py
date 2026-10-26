@@ -408,6 +408,9 @@ class UploadSession(db.Model):
     received_size = db.Column(db.BigInteger, default=0, nullable=False)
     chunk_size = db.Column(db.Integer, nullable=False)
     temp_path = db.Column(db.String(500), nullable=False)
+    file_fingerprint = db.Column(db.String(64), nullable=True)
+    lease_token = db.Column(db.String(64), nullable=True)
+    lease_expires_at = db.Column(db.DateTime, nullable=True)
     status = db.Column(db.String(20), default='uploading', nullable=False)
     asset_id = db.Column(db.String(36), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -433,6 +436,16 @@ class UploadSession(db.Model):
             'expected_size': self.expected_size,
             'received_size': self.received_size,
             'chunk_size': self.chunk_size,
+            'fingerprint': self.file_fingerprint,
+            'lease_active': bool(
+                self.lease_token
+                and self.lease_expires_at
+                and self.lease_expires_at > datetime.utcnow()
+            ),
+            'lease_expires_at': (
+                self.lease_expires_at.isoformat()
+                if self.lease_expires_at else None
+            ),
             'status': self.status,
             'asset_id': self.asset_id,
             'created_at': self.created_at.isoformat() if self.created_at else None,

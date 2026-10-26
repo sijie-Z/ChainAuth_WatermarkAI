@@ -11,6 +11,7 @@ from app.extensions import db
 from app.models.asset import Asset, AssetVersion
 from app.models.blockchain import BlockchainTransaction, Certificate
 from app.models.user import User
+from app.services.task_service import _run_blockchain
 
 
 def _draft_document(app, with_certificate=True):
@@ -61,6 +62,17 @@ def _draft_document(app, with_certificate=True):
 
 class TestBlockchain:
     """区块链测试类"""
+
+    def test_async_worker_allows_document_without_blind_watermark(
+        self, app, auth_header
+    ):
+        asset_id, _ = _draft_document(app, with_certificate=False)
+        with app.app_context():
+            asset = db.session.get(Asset, asset_id)
+            user = User.query.filter_by(username='testuser').one()
+            result = _run_blockchain(None, asset, user)
+            assert result['certificate_id']
+            assert result['simulated'] is True
 
     def test_blockchain_status(self, client):
         """测试区块链连接状态"""

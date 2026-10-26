@@ -18,6 +18,12 @@ from flask import current_app
 from app.models.asset import AssetVersion
 from app.models.blockchain import Certificate
 from app.services.evidence_service import build_evidence
+from app.services.object_storage import (
+    is_object_ref,
+    materialize_ref,
+    ref_exists,
+    ref_size,
+)
 
 PACKAGE_SCHEMA = 'chainauth-evidence-package/1'
 DEFAULT_MAX_BYTES = 200 * 1024 * 1024
@@ -67,20 +73,19 @@ def _file_candidates(asset, current_version):
     def add(role, path, recorded_hash, file_name=None, file_format=None):
         if not path:
             return
-        absolute = os.path.abspath(path)
-        key = os.path.normcase(absolute)
+        key = path if is_object_ref(path) else os.path.normcase(os.path.abspath(path))
         if key in seen:
             return
         seen.add(key)
-        exists = os.path.isfile(absolute)
+        exists = ref_exists(path)
         candidates.append({
             'role': role,
-            'path': absolute,
+            'path': path if is_object_ref(path) else os.path.abspath(path),
             'exists': exists,
             'recorded_hash': recorded_hash,
             'file_name': file_name or os.path.basename(path),
             'file_format': file_format or os.path.splitext(path)[1].lstrip('.').upper(),
-            'size': os.path.getsize(absolute) if exists else None,
+            'size': ref_size(path) if exists else None,
         })
 
     if current_version and current_version.file_path:
@@ -99,6 +104,19 @@ def _file_candidates(asset, current_version):
     add('watermarked', asset.watermarked_path, None, None, None)
 
     return candidates
+
+
+def _materialize_candidates(candidates, workdir):
+    """把对象原件放入本次导出目录，避免把对象路径传给 ZipFile。"""
+    for index, item in enumerate(candidates):
+        if not item['exists'] or not is_object_ref(item['path']):
+            continue
+        extension = os.path.splitext(item['path'])[1]
+        with materialize_ref(item['path'], extension) as source_path:
+            target = os.path.join(workdir, f'object-{index}{extension}')
+            shutil.copyfile(source_path, target)
+        item['path'] = target
+        item['size'] = os.path.getsize(target)
 
 
 def _version_payload(asset, current_version):
@@ -215,6 +233,13 @@ def build_evidence_package(asset, user=None, include_files=True):
         omitted_reason = f'文件总大小超过 {max_bytes // 1024 // 1024}MB 限制'
     elif not existing:
         omitted_reason = '服务器上未找到当前文件'
+
+    if include_binaries:
+        try:
+            _materialize_candidates(candidates, workdir)
+        except Exception:
+            shutil.rmtree(workdir, ignore_errors=True)
+            raise
 
     files_meta = []
     binary_entries = []

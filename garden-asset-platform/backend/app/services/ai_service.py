@@ -11,6 +11,7 @@ from PIL import Image
 from flask import current_app
 from app.extensions import db
 from app.models.asset import Asset, AssetFeature
+from app.services.object_storage import materialize_ref, ref_exists
 
 
 logger = logging.getLogger(__name__)
@@ -326,16 +327,20 @@ class AIService:
         if not self.enabled:
             return {'success': False, 'message': 'AI服务未启用'}
 
-        if not asset.storage_path or not os.path.exists(asset.storage_path):
+        if not asset.storage_path or not ref_exists(asset.storage_path):
             return {'success': False, 'message': '文件不存在'}
 
         if asset.asset_type != 'image':
             return {'success': False, 'message': '仅支持图像类型'}
 
         results = {}
+        with materialize_ref(
+            asset.storage_path, os.path.splitext(asset.storage_path)[1]
+        ) as source_path:
+            vector = self.extract_features(source_path)
+            scene_result = self.classify_scene(source_path)
 
         # 1. 提取特征向量
-        vector = self.extract_features(asset.storage_path)
         if vector is not None:
             # 存储到Milvus
             self.store_vector(
@@ -351,7 +356,6 @@ class AIService:
             asset.feature_status = 'done'
 
         # 2. 场景分类
-        scene_result = self.classify_scene(asset.storage_path)
         if scene_result.get('success'):
             # 保存场景特征
             feature = AssetFeature(

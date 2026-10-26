@@ -5,6 +5,7 @@ import os
 import uuid
 import hashlib
 import json
+import mimetypes
 from datetime import datetime, timedelta
 from flask import request, current_app
 from flask_restful import Resource
@@ -18,9 +19,25 @@ from app.models.log import OperationLog
 from app.utils.middleware import rate_limit
 from app.utils.paths import VERSION_EXT_ALIASES, canonical_extension, uuid_filename
 from app.services.notification_service import add_notification_event
+from app.services.object_storage import (
+    delete_ref_quietly,
+    is_object_ref,
+    ref_exists,
+    send_ref,
+    send_ref_range,
+    store_original,
+)
 from app.services.upload_session_service import (
+    UPLOAD_LEASE_SECONDS,
+    calculate_prefix_hash,
+    calculate_upload_fingerprint,
+    claim_upload_session,
+    clear_upload_lease,
+    lease_is_valid,
+    normalize_fingerprint,
     purge_stale_upload_sessions,
     remove_session_files,
+    remove_upload_session_dir,
     upload_session_lock,
 )
 from sqlalchemy import case, func, or_, update
@@ -729,11 +746,14 @@ class AssetUploadResource(Resource):
             except Exception as e:
                 current_app.logger.warning(f'缩略图生成失败: {e}', exc_info=True)
 
-        # 初始版本与资产在同一事务内入库，保证资产一定有 v1
+        # 初始版本与资产在同一事务内入库，保证资产一定有 v1。
+        # 对象存储只决定新写位置；缩略图仍基于刚保存的本地文件生成。
+        storage_ref = store_original(file_path, asset.id, f'.{ext}', kind='original')
+        asset.storage_path = storage_ref
         db.session.add(AssetVersion(
             asset_id=asset.id,
             version_no=1,
-            file_path=os.path.abspath(file_path),
+            file_path=storage_ref,
             file_name=original_name[:255],
             file_format=ext.upper(),
             file_size=file_size,
@@ -743,7 +763,13 @@ class AssetUploadResource(Resource):
             created_by=user_id
         ))
 
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            if is_object_ref(storage_ref):
+                delete_ref_quietly(storage_ref)
+            raise
 
         # 记录日志
         OperationLog.log(
@@ -817,10 +843,12 @@ def _create_asset_from_saved_file(
                 '缩略图生成失败: %s', exc, exc_info=True
             )
 
+    storage_ref = store_original(file_path, asset.id, f'.{ext}', kind='original')
+    asset.storage_path = storage_ref
     db.session.add(AssetVersion(
         asset_id=asset.id,
         version_no=1,
-        file_path=os.path.abspath(file_path),
+        file_path=storage_ref,
         file_name=(original_name or '')[:255],
         file_format=ext.upper(),
         file_size=file_size,
@@ -829,10 +857,15 @@ def _create_asset_from_saved_file(
         change_note='初始版本',
         created_by=user_id,
     ))
-    if commit:
-        db.session.commit()
-    else:
-        db.session.flush()
+    try:
+        if commit:
+            db.session.commit()
+        else:
+            db.session.flush()
+    except Exception:
+        if is_object_ref(storage_ref):
+            delete_ref_quietly(storage_ref)
+        raise
     return asset
 
 
@@ -867,6 +900,9 @@ class AssetUploadSessionResource(Resource):
             }, 400
         if not isinstance(tags, list):
             return {'code': 400, 'message': '标签格式错误'}, 400
+        fingerprint = normalize_fingerprint(data.get('fingerprint'))
+        if data.get('fingerprint') and not fingerprint:
+            return {'code': 400, 'message': '文件指纹格式无效'}, 400
         tags = [
             str(tag).strip()[:50] for tag in tags[:20] if str(tag).strip()
         ]
@@ -891,35 +927,113 @@ class AssetUploadSessionResource(Resource):
             'resumable',
         )
         session_dir = os.path.join(upload_root, upload_id)
-        os.makedirs(session_dir, exist_ok=True)
         temp_path = os.path.join(session_dir, 'data.part')
-        with open(temp_path, 'wb'):
-            pass
+        try:
+            os.makedirs(session_dir, exist_ok=True)
+            with open(temp_path, 'wb'):
+                pass
 
-        session = UploadSession(
-            id=upload_id,
-            user_id=user_id,
-            filename=filename[:255],
-            asset_type=asset_type,
-            title=title[:255],
-            description=(data.get('description') or '')[:2000],
-            garden_id=garden_id,
-            tags_json=json.dumps(tags[:20], ensure_ascii=False),
-            expected_size=expected_size,
-            received_size=0,
-            chunk_size=current_app.config.get(
-                'RESUMABLE_CHUNK_SIZE', 4 * 1024 * 1024
-            ),
-            temp_path=temp_path,
-            status='uploading',
-        )
-        db.session.add(session)
-        db.session.commit()
+            session = UploadSession(
+                id=upload_id,
+                user_id=user_id,
+                filename=filename[:255],
+                asset_type=asset_type,
+                title=title[:255],
+                description=str(data.get('description') or '')[:2000],
+                garden_id=garden_id,
+                tags_json=json.dumps(tags[:20], ensure_ascii=False),
+                expected_size=expected_size,
+                received_size=0,
+                chunk_size=current_app.config.get(
+                    'RESUMABLE_CHUNK_SIZE', 4 * 1024 * 1024
+                ),
+                temp_path=temp_path,
+                file_fingerprint=fingerprint,
+                status='uploading',
+            )
+            db.session.add(session)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            remove_upload_session_dir(upload_id)
+            raise
         return {
             'code': 200,
             'message': '上传会话已创建',
             'data': session.to_dict(),
         }, 200
+
+
+class AssetUploadSessionClaimResource(Resource):
+    """认领未完成会话并签发短期写入租约"""
+
+    @jwt_required()
+    @rate_limit(limit=120, window=60)
+    def post(self, upload_id):
+        from app.models.extra import UploadSession
+        data = request.get_json(silent=True) or {}
+        fingerprint = normalize_fingerprint(data.get('fingerprint'))
+        if data.get('fingerprint') and not fingerprint:
+            return {'code': 400, 'message': '文件指纹格式无效'}, 400
+        try:
+            with upload_session_lock(upload_id):
+                session = db.session.get(UploadSession, upload_id)
+                if not session or session.user_id != get_jwt_identity():
+                    return {'code': 404, 'message': '上传会话不存在'}, 404
+                if session.status != 'uploading':
+                    return {'code': 409, 'message': '上传会话已结束'}, 409
+                supplied_lease = data.get('lease_token')
+                if session.file_fingerprint and fingerprint != session.file_fingerprint:
+                    return {
+                        'code': 409,
+                        'message': '所选文件内容与未完成上传不一致，请选择原文件'
+                    }, 409
+                if (
+                    session.lease_token
+                    and supplied_lease != session.lease_token
+                    and lease_is_valid(session)
+                ):
+                    return {
+                        'code': 409,
+                        'error': 'upload_lease_required',
+                        'message': '该文件正在其他页面续传，请稍后重试',
+                        'data': {
+                            'received_size': session.received_size,
+                            'lease_expires_at': (
+                                session.lease_expires_at.isoformat()
+                            ),
+                        },
+                    }, 409
+                # 旧会话没有指纹时，至少核对已接收文件头；完成时还会
+                # 对完整文件做 SHA-256 校验。
+                if (
+                    not session.file_fingerprint
+                    and fingerprint
+                    and session.received_size >= 64 * 1024
+                ):
+                    prefix = str(data.get('prefix_hash') or '').lower()
+                    if (
+                        not normalize_fingerprint(prefix)
+                        or calculate_prefix_hash(session.temp_path) != prefix
+                    ):
+                        return {
+                            'code': 409,
+                            'message': '所选文件与已上传内容不一致，请重新选择原文件'
+                        }, 409
+                token, error = claim_upload_session(session, fingerprint)
+                if error:
+                    return {'code': 409, 'message': error}, 409
+                db.session.commit()
+                return {
+                    'code': 200,
+                    'data': {
+                        **session.to_dict(),
+                        'lease_token': token,
+                        'lease_expires_in': UPLOAD_LEASE_SECONDS,
+                    },
+                }, 200
+        except TimeoutError as exc:
+            return {'code': 409, 'message': str(exc)}, 409
 
 
 class AssetUploadSessionListResource(Resource):
@@ -943,6 +1057,24 @@ class AssetUploadSessionListResource(Resource):
                 ),
             },
         }, 200
+
+
+def _upload_lease_error(session):
+    if not session.lease_token:
+        return None
+    if not lease_is_valid(session):
+        return {
+            'code': 409,
+            'error': 'upload_lease_required',
+            'message': '上传租约已过期，请重新认领会话',
+        }, 409
+    if request.headers.get('X-Upload-Lease') != session.lease_token:
+        return {
+            'code': 409,
+            'error': 'upload_lease_required',
+            'message': '该文件正在其他页面续传，请稍后重试',
+        }, 409
+    return None
 
 
 class AssetUploadSessionDetailResource(Resource):
@@ -980,6 +1112,9 @@ class AssetUploadSessionDetailResource(Resource):
             return {'code': 404, 'message': '上传会话不存在'}, 404
         if session.status != 'uploading':
             return {'code': 409, 'message': '上传会话已结束'}, 409
+        lease_error = _upload_lease_error(session)
+        if lease_error:
+            return lease_error
 
         data = request.get_json(silent=True) or {}
         if 'title' in data:
@@ -1030,6 +1165,9 @@ class AssetUploadSessionDetailResource(Resource):
             return {'code': 404, 'message': '上传会话不存在'}, 404
         if session.status != 'uploading':
             return {'code': 409, 'message': '上传会话已结束'}, 409
+        lease_error = _upload_lease_error(session)
+        if lease_error:
+            return lease_error
 
         try:
             offset = int(
@@ -1075,6 +1213,10 @@ class AssetUploadSessionDetailResource(Resource):
             {
                 UploadSession.received_size: offset + len(chunk),
                 UploadSession.updated_at: datetime.utcnow(),
+                UploadSession.lease_expires_at: (
+                    datetime.utcnow() + timedelta(seconds=UPLOAD_LEASE_SECONDS)
+                    if session.lease_token else None
+                ),
             },
             synchronize_session=False,
         )
@@ -1110,6 +1252,7 @@ class AssetUploadSessionDetailResource(Resource):
                     return {'code': 409, 'message': '已完成的上传不能取消'}, 409
                 if session.status == 'uploading':
                     session.status = 'cancelled'
+                    clear_upload_lease(session)
                     db.session.commit()
         except TimeoutError as exc:
             return {'code': 409, 'message': str(exc)}, 409
@@ -1152,6 +1295,9 @@ class AssetUploadSessionCompleteResource(Resource):
             }, 200
         if session.status != 'uploading':
             return {'code': 409, 'message': '上传会话已结束'}, 409
+        lease_error = _upload_lease_error(session)
+        if lease_error:
+            return lease_error
         if session.received_size != session.expected_size:
             return {
                 'code': 400,
@@ -1163,6 +1309,7 @@ class AssetUploadSessionCompleteResource(Resource):
             }, 400
         if not os.path.isfile(session.temp_path):
             session.status = 'expired'
+            clear_upload_lease(session)
             db.session.commit()
             return {
                 'code': 409,
@@ -1171,6 +1318,7 @@ class AssetUploadSessionCompleteResource(Resource):
         if os.path.getsize(session.temp_path) != session.expected_size:
             actual_size = os.path.getsize(session.temp_path)
             session.status = 'failed'
+            clear_upload_lease(session)
             db.session.commit()
             return {
                 'code': 400,
@@ -1186,13 +1334,28 @@ class AssetUploadSessionCompleteResource(Resource):
         )
         if not canonical_ext:
             session.status = 'failed'
+            clear_upload_lease(session)
             db.session.commit()
             return {'code': 400, 'message': '不支持的文件类型'}, 400
         ext = canonical_ext.lstrip('.')
         if not validate_magic_bytes_path(session.temp_path, ext):
             session.status = 'failed'
+            clear_upload_lease(session)
             db.session.commit()
             return {'code': 400, 'message': '文件内容与扩展名不匹配'}, 400
+        if (
+            session.file_fingerprint
+            and calculate_upload_fingerprint(
+                session.temp_path, session.expected_size
+            ) != session.file_fingerprint
+        ):
+            session.status = 'failed'
+            clear_upload_lease(session)
+            db.session.commit()
+            return {
+                'code': 400,
+                'message': '文件内容与认领时不一致，请重新选择原文件上传'
+            }, 400
 
         file_hash = calculate_file_hash_path(session.temp_path)
         existing = Asset.query.filter(
@@ -1201,6 +1364,7 @@ class AssetUploadSessionCompleteResource(Resource):
         ).first()
         if existing:
             session.status = 'failed'
+            clear_upload_lease(session)
             db.session.commit()
             # 与普通上传保持一致：只向能查看该资产的人返回 ID/编码，
             # 避免用哈希探测他人草稿/待审资产。
@@ -1232,13 +1396,13 @@ class AssetUploadSessionCompleteResource(Resource):
         os.makedirs(save_dir, exist_ok=True)
         file_path = os.path.join(save_dir, uuid_filename(canonical_ext))
         os.replace(session.temp_path, file_path)
-        file_size = os.path.getsize(file_path)
-
+        asset = None
         try:
-            tag_names = json.loads(session.tags_json or '[]')
-        except (TypeError, ValueError):
-            tag_names = []
-        try:
+            file_size = os.path.getsize(file_path)
+            try:
+                tag_names = json.loads(session.tags_json or '[]')
+            except (TypeError, ValueError):
+                tag_names = []
             asset = _create_asset_from_saved_file(
                 user_id=user_id,
                 title=session.title,
@@ -1256,15 +1420,24 @@ class AssetUploadSessionCompleteResource(Resource):
             # 资产、v1 与会话状态同一事务提交，避免重试时误判重复文件
             session.status = 'completed'
             session.asset_id = asset.id
+            clear_upload_lease(session)
             db.session.commit()
         except Exception:
-            db.session.rollback()
             current_app.logger.exception('断点续传创建资产失败')
+            if asset and is_object_ref(asset.storage_path):
+                delete_ref_quietly(asset.storage_path)
+            # 先恢复文件，再回滚释放会话行锁；否则其他 worker 可能
+            # 在恢复前把会话误判为临时文件丢失。
             try:
-                os.unlink(file_path)
+                os.replace(file_path, session.temp_path)
             except OSError:
-                # 清理失败不掩盖原始异常
-                pass
+                db.session.rollback()
+                session.status = 'failed'
+                clear_upload_lease(session)
+                db.session.commit()
+                current_app.logger.exception('断点续传临时文件恢复失败')
+            else:
+                db.session.rollback()
             raise
 
         user = User.query.get(user_id)
@@ -1459,7 +1632,7 @@ def _record_denied_download(asset, user, user_id, purpose, territory,
 
 def _asset_file_path(asset):
     raw_path = asset.watermarked_path or asset.storage_path
-    return os.path.abspath(raw_path) if raw_path else ''
+    return raw_path or ''
 
 
 def _download_file_path(asset, license_row, user):
@@ -1468,8 +1641,13 @@ def _download_file_path(asset, license_row, user):
     if license_row and asset.asset_type == 'image':
         try:
             from app.services.fingerprint_service import get_or_create_fingerprint
-            fingerprint, _ = get_or_create_fingerprint(asset, license_row, user)
+            # 指纹生成失败只回滚指纹保存点，不能污染外层授权/配额事务
+            with db.session.begin_nested():
+                fingerprint, _ = get_or_create_fingerprint(
+                    asset, license_row, user
+                )
         except Exception:
+            fingerprint = None
             current_app.logger.warning(
                 '生成下载指纹失败，回退到普通水印副本', exc_info=True
             )
@@ -1543,7 +1721,7 @@ class AssetDownloadResource(Resource):
 
         # 先确认原始文件存在，避免“下载失败但配额已经占用”
         base_path = _asset_file_path(asset)
-        if not base_path or not os.path.isfile(base_path):
+        if not base_path or not ref_exists(base_path):
             return {'code': 404, 'message': '文件不存在'}, 404
 
         # 原子占用一次授权下载配额，防止并发请求同时越过上限
@@ -1574,8 +1752,22 @@ class AssetDownloadResource(Resource):
         file_path, fingerprint = _download_file_path(
             asset, selected_license, user
         )
-        if not file_path or not os.path.isfile(file_path):
+        if not file_path or not ref_exists(file_path):
+            db.session.rollback()
             return {'code': 404, 'message': '文件不存在'}, 404
+
+        # 先构造发送响应；send_ref 在这一步会检查文件是否可读，
+        # 失败时不会留下“已扣次数但没有文件”的成功台账。
+        try:
+            response = send_ref(
+                file_path,
+                _download_display_name(asset, file_path),
+                as_attachment=True,
+            )
+        except Exception:
+            db.session.rollback()
+            current_app.logger.warning('下载文件读取失败', exc_info=True)
+            return {'code': 502, 'message': '文件读取失败，请稍后重试'}, 502
 
         # 记录下载（关联本次使用的授权与指纹副本，便于后续审计）
         record = DownloadRecord(
@@ -1592,24 +1784,26 @@ class AssetDownloadResource(Resource):
         db.session.add(record)
         # 使用 SQL 表达式自增，避免并发下载互相覆盖计数
         asset.download_count = Asset.download_count + 1
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception:
+            response.close()
+            raise
 
-        OperationLog.log(
-            user=user,
-            action='download',
-            module='asset',
-            description=f'下载资产: {asset.asset_code}',
-            target_type='asset',
-            target_id=asset_id,
-            request=request
-        )
+        try:
+            OperationLog.log(
+                user=user,
+                action='download',
+                module='asset',
+                description=f'下载资产: {asset.asset_code}',
+                target_type='asset',
+                target_id=asset_id,
+                request=request
+            )
+        except Exception:
+            # 审计日志异常不能阻断已经构造好的合法下载
+            current_app.logger.warning('记录下载日志失败', exc_info=True)
 
-        from flask import send_file as flask_send_file
-        response = flask_send_file(
-            file_path,
-            as_attachment=True,
-            download_name=_download_display_name(asset, file_path)
-        )
         if fingerprint:
             response.headers['X-Download-Fingerprint'] = (
                 fingerprint.fingerprint_code
@@ -1653,7 +1847,7 @@ class AssetDownloadTicketResource(Resource):
             return {'code': 403, 'message': denial_reason}, 403
 
         file_path = _asset_file_path(asset)
-        if not file_path or not os.path.isfile(file_path):
+        if not file_path or not ref_exists(file_path):
             return {'code': 404, 'message': '文件不存在'}, 404
 
         fingerprint_code = None
@@ -1662,9 +1856,10 @@ class AssetDownloadTicketResource(Resource):
                 from app.services.fingerprint_service import (
                     get_or_create_fingerprint
                 )
-                fingerprint, _ = get_or_create_fingerprint(
-                    asset, selected_license, user
-                )
+                with db.session.begin_nested():
+                    fingerprint, _ = get_or_create_fingerprint(
+                        asset, selected_license, user
+                    )
                 # 签票请求结束后 session 会被回收；必须显式提交，
                 # 否则指纹记录回滚而副本文件保留，指纹码与文件不一致。
                 db.session.commit()
@@ -1763,13 +1958,13 @@ def _preview_asset_error(asset, user, user_id):
 def _send_preview_file(asset, file_path):
     ext = os.path.splitext(file_path)[1].lstrip('.').lower()
     download_name = f'{asset.asset_code}.{ext}' if ext else asset.asset_code
-    from flask import send_file as flask_send_file
-    return flask_send_file(
-        file_path,
-        as_attachment=False,
-        download_name=download_name,
-        conditional=True,
-    )
+    mimetype = {
+        'gltf': 'model/gltf+json',
+        'glb': 'model/gltf-binary',
+        'stl': 'model/stl',
+        'obj': 'text/plain',
+    }.get(ext) or mimetypes.guess_type(download_name)[0]
+    return send_ref_range(file_path, download_name, mimetype=mimetype)
 
 
 class AssetPreviewResource(Resource):
@@ -1807,7 +2002,7 @@ class AssetPreviewResource(Resource):
             return error
 
         file_path = _asset_file_path(asset)
-        if not file_path or not os.path.isfile(file_path):
+        if not file_path or not ref_exists(file_path):
             return {'code': 404, 'message': '文件不存在'}, 404
 
         return _send_preview_file(asset, file_path)
@@ -1830,7 +2025,7 @@ class AssetPreviewTicketResource(Resource):
             return error
 
         file_path = _asset_file_path(asset)
-        if not file_path or not os.path.isfile(file_path):
+        if not file_path or not ref_exists(file_path):
             return {'code': 404, 'message': '文件不存在'}, 404
 
         ticket = _preview_ticket_serializer().dumps({

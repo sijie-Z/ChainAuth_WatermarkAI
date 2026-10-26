@@ -36,6 +36,18 @@ def test_rejects_short_secrets():
     assert '长度不足 32 位' in str(exc.value)
 
 
+def test_rejects_default_minio_credentials_when_enabled():
+    app = make_app('a' * 64, 'b' * 64)
+    app.config.update(
+        STORAGE_BACKEND='minio',
+        MINIO_ACCESS_KEY='minioadmin',
+        MINIO_SECRET_KEY='minioadmin',
+    )
+    with pytest.raises(RuntimeError) as exc:
+        validate_production_config(app)
+    assert 'MINIO_ACCESS_KEY' in str(exc.value)
+
+
 def test_accepts_generated_length_secrets():
     app = make_app('a' * 64, 'b' * 64)
     validate_production_config(app)

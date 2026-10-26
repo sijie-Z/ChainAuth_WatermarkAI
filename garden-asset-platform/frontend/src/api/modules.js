@@ -44,7 +44,12 @@ export const assetApi = {
   createUploadSession: (data) => api.post('/assets/upload/session', data),
   listUploadSessions: () => api.get('/assets/upload/sessions'),
   getUploadSession: (uploadId) => api.get(`/assets/upload/session/${uploadId}`),
-  updateUploadSession: (uploadId, data) => api.patch(`/assets/upload/session/${uploadId}`, data),
+  claimUploadSession: (uploadId, data) => api.post(
+    `/assets/upload/session/${uploadId}/claim`, data
+  ),
+  updateUploadSession: (uploadId, data, config) => api.patch(
+    `/assets/upload/session/${uploadId}`, data, config
+  ),
   cancelUploadSession: (uploadId) => api.delete(`/assets/upload/session/${uploadId}`),
   uploadChunk: (uploadId, chunk, offset, config) => api.put(
     `/assets/upload/session/${uploadId}`,
@@ -52,13 +57,14 @@ export const assetApi = {
     {
       ...config,
       headers: {
+        ...(config?.headers || {}),
         'Content-Type': 'application/octet-stream',
         'X-Upload-Offset': String(offset)
       }
     }
   ),
-  completeUploadSession: (uploadId) => api.post(
-    `/assets/upload/session/${uploadId}/complete`
+  completeUploadSession: (uploadId, config) => api.post(
+    `/assets/upload/session/${uploadId}/complete`, undefined, config
   ),
   update: (id, data) => api.put(`/assets/${id}`, data),
   delete: (id) => api.delete(`/assets/${id}`),

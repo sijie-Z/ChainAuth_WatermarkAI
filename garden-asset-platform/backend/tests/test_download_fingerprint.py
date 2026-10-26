@@ -178,6 +178,38 @@ def test_download_ticket_streams_with_fingerprint(
         assert db.session.get(License, license_id).download_count == 1
 
 
+def test_fingerprint_is_recreated_when_source_file_changes(
+    client, app, tmp_path, auth_header
+):
+    asset_id, license_id, licensee_id, _ = setup_licensed_asset(
+        client, app, tmp_path, auth_header
+    )
+    from app.services.fingerprint_service import get_or_create_fingerprint
+
+    with app.app_context():
+        asset = db.session.get(Asset, asset_id)
+        license_row = db.session.get(License, license_id)
+        user = db.session.get(User, licensee_id)
+        first, created = get_or_create_fingerprint(asset, license_row, user)
+        assert created is True
+        assert first.source_hash
+        old_code = first.fingerprint_code
+
+        new_path = tmp_path / 'changed-source.jpg'
+        new_path.write_bytes(make_jpeg((200, 30, 30)).getvalue())
+        asset.storage_path = str(new_path)
+        asset.watermarked_path = None
+        second, created_again = get_or_create_fingerprint(
+            asset, license_row, user
+        )
+        assert created_again is True
+        assert second.fingerprint_code != old_code
+        assert second.source_hash != first.source_hash
+        assert DownloadFingerprint.query.filter_by(
+            license_id=license_id, asset_id=asset_id
+        ).count() == 2
+
+
 def test_download_ticket_rejects_tampering_and_wrong_asset(
     client, app, tmp_path, auth_header
 ):

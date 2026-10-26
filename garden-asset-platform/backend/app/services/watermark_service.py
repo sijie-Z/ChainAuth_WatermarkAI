@@ -9,6 +9,7 @@ from flask import current_app
 
 from app.extensions import db
 from app.models.asset import Asset
+from app.services.object_storage import materialize_ref
 from app.models.log import OperationLog
 
 
@@ -194,17 +195,20 @@ class WatermarkService:
             # 根据资产类型选择嵌入算法
             if asset.asset_type == 'vector':
                 # 矢量数据水印嵌入（ZIP 解压到临时目录，用完立即清理）
-                vector_source = WatermarkService.resolve_vector_path(asset.storage_path)
-                try:
-                    result = embed_vector_watermark(
-                        shpfile_path=vector_source,
-                        watermark_path=watermark_path,
-                        output_folder=output_folder,
-                        garden_code=garden_code,
-                        asset_type_code=asset_type_code
-                    )
-                finally:
-                    WatermarkService.cleanup_vector_temp(vector_source)
+                with materialize_ref(
+                    asset.storage_path, os.path.splitext(asset.storage_path)[1]
+                ) as source_path:
+                    vector_source = WatermarkService.resolve_vector_path(source_path)
+                    try:
+                        result = embed_vector_watermark(
+                            shpfile_path=vector_source,
+                            watermark_path=watermark_path,
+                            output_folder=output_folder,
+                            garden_code=garden_code,
+                            asset_type_code=asset_type_code
+                        )
+                    finally:
+                        WatermarkService.cleanup_vector_temp(vector_source)
 
                 asset.watermarked_path = os.path.abspath(result['zip_file_path'])
                 asset.vr_value = str(result['vr'])  # 存储验证值
@@ -213,25 +217,28 @@ class WatermarkService:
                 # 栅格图像水印嵌入：彩色图保留颜色，灰度图走单通道
                 from PIL import Image as PILImage
 
-                with PILImage.open(asset.storage_path) as source:
-                    is_color = source.mode in ('RGB', 'RGBA')
+                with materialize_ref(
+                    asset.storage_path, os.path.splitext(asset.storage_path)[1]
+                ) as source_path:
+                    with PILImage.open(source_path) as source:
+                        is_color = source.mode in ('RGB', 'RGBA')
 
-                if is_color:
-                    result = embed_raster_watermark_color(
-                        image_path=asset.storage_path,
-                        watermark_path=watermark_path,
-                        output_folder=output_folder,
-                        method='dct',
-                        garden_code=garden_code
-                    )
-                else:
-                    result = embed_raster_watermark(
-                        image_path=asset.storage_path,
-                        watermark_path=watermark_path,
-                        output_folder=output_folder,
-                        method='dct',
-                        garden_code=garden_code
-                    )
+                    if is_color:
+                        result = embed_raster_watermark_color(
+                            image_path=source_path,
+                            watermark_path=watermark_path,
+                            output_folder=output_folder,
+                            method='dct',
+                            garden_code=garden_code
+                        )
+                    else:
+                        result = embed_raster_watermark(
+                            image_path=source_path,
+                            watermark_path=watermark_path,
+                            output_folder=output_folder,
+                            method='dct',
+                            garden_code=garden_code
+                        )
 
                 asset.watermarked_path = os.path.abspath(result['watermarked_path'])
 

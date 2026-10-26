@@ -134,11 +134,17 @@ class SystemStatusResource(Resource):
                 },
                 'storage': {
                     **storage,
+                    'backend': current_app.config.get('STORAGE_BACKEND', 'local'),
+                    'bucket': (
+                        current_app.config.get('MINIO_BUCKET')
+                        if current_app.config.get('STORAGE_BACKEND', 'local') != 'local'
+                        else None
+                    ),
                     'label': (
                         f"{storage['files']} 个文件 · "
                         f"{storage['bytes'] / 1024 / 1024:.1f} MB"
                     ),
-                    'description': '上传、水印与提取目录占用；孤儿文件可用 flask storage report 巡检'
+                    'description': '上传、水印与提取目录占用；对象原件按 STORAGE_BACKEND 写入，孤儿文件可用 flask storage report 巡检'
                 }
             }
         }, 200

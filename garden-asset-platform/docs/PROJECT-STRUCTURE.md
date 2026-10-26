@@ -2,10 +2,10 @@
 
 ## 文件统计
 
-- **总文件数**: 145+
-- **Python文件**: 78个
-- **Vue文件**: 23个
-- **JavaScript文件**: 14个
+- **总文件数**: 400+（含测试、文档与工程配置）
+- **Python文件**: 86个（`backend/app`）
+- **Vue文件**: 52个
+- **JavaScript文件**: 22个（`frontend/src`）
 - **配置文件**: 15+
 - **文档文件**: 15+
 
@@ -20,7 +20,7 @@ garden-asset-platform/
 │   │   ├── config.py                 # 配置管理
 │   │   ├── extensions.py             # 扩展初始化
 │   │   │
-│   │   ├── models/                   # 数据模型 (8个)
+│   │   ├── models/                   # 数据模型 (31 张表)
 │   │   │   ├── __init__.py
 │   │   │   ├── user.py               # 用户模型
 │   │   │   ├── garden.py             # 园林模型
@@ -30,7 +30,7 @@ garden-asset-platform/
 │   │   │   ├── log.py                # 日志模型
 │   │   │   └── extra.py              # 扩展模型
 │   │   │
-│   │   ├── resources/                # API资源 (8个)
+│   │   ├── resources/                # API资源 (21 个)
 │   │   │   ├── __init__.py
 │   │   │   ├── auth.py               # 认证API
 │   │   │   ├── asset.py              # 资产API
@@ -40,13 +40,13 @@ garden-asset-platform/
 │   │   │   ├── license.py            # 授权API
 │   │   │   └── ai.py                 # AI服务API
 │   │   │
-│   │   ├── services/                 # 业务服务 (4个)
+│   │   ├── services/                 # 业务服务 (18 个)
 │   │   │   ├── __init__.py
 │   │   │   ├── watermark_service.py  # 水印服务
 │   │   │   ├── blockchain_service.py # 区块链服务
 │   │   │   └── ai_service.py         # AI服务
 │   │   │
-│   │   └── utils/                    # 工具函数 (17个)
+│   │   └── utils/                    # 工具函数 (26 个)
 │   │       ├── response.py           # 响应格式化
 │   │       ├── file_utils.py         # 文件工具
 │   │       ├── datetime_utils.py     # 时间工具
