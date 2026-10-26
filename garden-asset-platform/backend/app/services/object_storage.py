@@ -267,6 +267,7 @@ def materialize_ref(ref, extension=''):
         try:
             os.remove(path)
         except OSError:
+            # 临时副本可能已被外部清理流程删除
             pass
 
 

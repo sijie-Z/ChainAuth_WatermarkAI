@@ -1203,7 +1203,7 @@ async function loadAsset() {
     if (response.data.code === 200) {
       asset.value = response.data.data
       loadExtras(id)
-      loadEvidence(id)
+      loadEvidence()
       if (activeDetailTab.value === 'versions') {
         loadVersions()
       }

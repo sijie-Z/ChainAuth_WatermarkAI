@@ -156,6 +156,7 @@ def get_or_create_fingerprint(asset, license_row, user):
             try:
                 os.remove(path)
             except OSError:
+                # 清理失败不掩盖数据库异常
                 pass
         raise
     return record, True
