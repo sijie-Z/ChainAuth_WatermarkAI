@@ -89,7 +89,7 @@ services:
 
   # PostgreSQL数据库
   db:
-    image: postgres:14-alpine
+    image: postgres:18-alpine
     container_name: garden-db
     restart: unless-stopped
     environment:
