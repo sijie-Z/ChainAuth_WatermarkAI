@@ -3,7 +3,7 @@ openapi: 3.0.0
 info:
   title: 苏州园林数字资产平台 API
   description: 基于数字水印和AI推理的苏州园林数字资产安全分发与溯源系统
-  version: 1.12.0
+  version: 1.12.1
   contact:
     name: 苏州园林数字资产平台团队
 

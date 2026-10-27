@@ -57,7 +57,7 @@
                       │
                       ├──→ Flask REST API ──→ PostgreSQL
                       │                    ├──→ Redis (缓存/限流)
-                      │                    ├──→ MinIO (可选对象存储，当前默认本地磁盘)
+                      │                    ├──→ 本地持久化上传目录
                       │                    └──→ Milvus (向量检索)
                       │
                       ├──→ 异步任务 worker（水印/存证）──→ 同一数据库/上传目录
@@ -71,7 +71,7 @@
 |------|------|
 | 前端 | Vue 3.5, Vite 8, Pinia, Element Plus, ECharts 6, three.js |
 | 后端 | Flask 3.1, Flask-RESTful, SQLAlchemy 2, Flask-JWT-Extended |
-| 存储 | PostgreSQL, Redis, Milvus；MinIO 为可选服务（当前默认本地磁盘） |
+| 存储 | PostgreSQL, Redis, Milvus（可选）；原件与派生文件使用本地持久化磁盘 |
 | 区块链 | FISCO BCOS 3.x（可选，默认本地模拟存证） |
 | AI | CLIP / 智谱 GLM（可选，需自行安装与配置） |
 | 部署 | Docker Compose, Gunicorn, Nginx |
@@ -94,7 +94,7 @@ cp .env.example .env
 python backend/scripts/generate_secrets.py
 # 编辑 .env，填入数据库密码等 Docker Compose 变量
 
-# 启动所有服务（后端、任务 worker、前端、PostgreSQL、Redis、MinIO）
+# 启动所有服务（后端、任务 worker、前端、PostgreSQL、Redis）
 docker compose up -d
 
 # 初始化数据库
@@ -107,7 +107,6 @@ docker exec garden-backend python scripts/create_test_data.py
 服务端口：
 - 前端页面: http://localhost
 - 后端API: http://localhost:5000/api
-- MinIO控制台: http://localhost:9001
 - 健康检查: http://localhost:5000/health
 
 ### 本地开发
@@ -148,7 +147,7 @@ FLASK_APP=run.py flask db upgrade
 ### 运行测试
 
 ```bash
-# 后端测试（407个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/授权视图/资产回收站/侵权线索/批量巡检/备份恢复/存储巡检/对象存储/水印鲁棒性实验/证据包导出与核验/审计日志完整性/HTTP错误处理/对象级可见性/断点续传/魔数校验）
+# 后端测试（401个用例，覆盖API/模型/安全/迁移/异步任务/worker健康度/版本证书/通知渠道/授权范围/授权视图/资产回收站/侵权线索/批量巡检/备份恢复/本地存储/水印鲁棒性实验/证据包导出与核验/审计日志完整性/HTTP错误处理/对象级可见性/断点续传/魔数校验）
 cd backend && python -m pytest tests/ -v
 
 # Windows 内存受限时：逐文件隔离子进程运行（推荐）
@@ -189,7 +188,7 @@ garden-asset-platform/
 │   ├── contracts/                 # Solidity智能合约
 │   ├── scripts/                   # 初始化与种子数据脚本
 │   ├── migrations/                # Alembic 迁移（baseline + versions）
-│   ├── tests/                     # pytest测试（407个用例）
+│   ├── tests/                     # pytest测试（401个用例）
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/                       # Vue3前端
@@ -420,8 +419,6 @@ Docker 部署见 `garden-asset-platform/.env.example`；本地开发见 `backend
 | `EVIDENCE_PACKAGE_MAX_BYTES` | 证据包允许打包的二进制总大小，超出时仅导出清单与证书 | `209715200`（200MB） |
 | `EVIDENCE_VERIFY_MAX_BYTES` | 证据包核验上传大小上限 | `20971520`（20MB） |
 | `DOWNLOAD_TICKET_MAX_AGE` | 下载票据有效期（秒），过期需重新申请 | `120` |
-| `STORAGE_BACKEND` | 原件存储后端：`local` 或 `minio`/`s3`/`object` | `local` |
-| `MINIO_ENDPOINT` / `MINIO_BUCKET` | 对象存储地址与桶名（启用时自动建桶） | `localhost:9000` / `garden-assets` |
 | `RESUMABLE_CHUNK_SIZE` | 断点续传分块大小（字节） | `4194304`（4MB） |
 | `UPLOAD_SESSION_TTL_HOURS` | 未完成上传会话保留小时数，超时自动标记过期并清理临时文件 | `48` |
 | `PREVIEW_TICKET_MAX_AGE` | 预览票据有效期（秒），需覆盖一次播放/阅读会话 | `3600` |
@@ -438,7 +435,7 @@ Docker 部署见 `garden-asset-platform/.env.example`；本地开发见 `backend
 
 > 站内实时通知使用 SSE，Docker 后端已切换为 `gthread` worker 并放宽超时；每个在线连接占用一个线程。大规模部署建议改用 Redis Pub/Sub + gevent/eventlet，或把 SSE 拆成独立服务。邮件通知默认关闭，配置 `MAIL_ENABLED`/`MAIL_HOST` 后由 worker 每分钟派发。
 
-> 文件默认保存在 `backend/uploads/`（Docker 中为挂载卷）。设置 `STORAGE_BACKEND=minio` 后，新上传的原件与历史版本写入 MinIO（`minio://bucket/key`），缩略图、水印、指纹和证据包临时文件仍使用本地共享卷；旧的本地绝对路径与新对象引用可混存，不自动迁移。默认 `STORAGE_BACKEND=local`。
+> 文件统一保存在 `backend/uploads/`（Docker 中为挂载卷），原件、历史版本、缩略图、水印、指纹和证据包临时文件均使用本地存储。当前版本不包含 MinIO 或其他外部对象存储依赖，单机部署即可完整运行。
 
 > AI 对话 SDK `zhipuai` 的元数据要求 `pyjwt<2.9`，与安全版 PyJWT（≥2.11）冲突，因此不在核心依赖中。需要 GLM 对话时执行：`pip install --no-deps zhipuai==2.0.1 httpx pydantic cachetools`。
 

@@ -506,9 +506,6 @@ def init_services(app):
     ai_service.init_app(app)
     blockchain_service.init_app(app)
 
-    from app.services.object_storage import init_object_storage
-    init_object_storage(app)
-
 
 def init_scheduler(app):
     """初始化任务调度器"""
