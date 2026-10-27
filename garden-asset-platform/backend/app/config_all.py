@@ -93,12 +93,7 @@ MODEL_PATH = './data/models'
 # MinIO对象存储配置
 # ===========================================
 
-STORAGE_BACKEND = 'local'
-MINIO_ENDPOINT = 'localhost:9000'
-MINIO_ACCESS_KEY = 'minioadmin'
-MINIO_SECRET_KEY = 'minioadmin'
-MINIO_BUCKET = 'garden-assets'
-MINIO_SECURE = False
+# 文件统一使用本地磁盘存储
 
 # ===========================================
 # Celery配置

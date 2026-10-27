@@ -218,7 +218,7 @@ python scripts/seed_demo_assets.py --reset
 ## 7. 测试
 
 ```bash
-# 后端 407 个用例
+# 后端 401 个用例
 cd backend && python -m pytest tests/ -q
 
 # Windows 内存不足时：每个测试文件独立进程运行
