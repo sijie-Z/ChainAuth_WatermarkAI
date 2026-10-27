@@ -254,7 +254,7 @@ garden-asset-platform/
 - PostgreSQL - 主数据库
 - Redis - 缓存
 - Milvus Lite - 向量数据库
-- MinIO - 对象存储
+- 本地持久化磁盘（原件、历史版本与派生文件）
 - FISCO BCOS - 区块链
 
 ## 开发规范

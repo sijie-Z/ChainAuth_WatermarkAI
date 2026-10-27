@@ -32,7 +32,7 @@
 - PostgreSQL (数据库)
 - Redis (缓存/队列)
 - FISCO BCOS (区块链)
-- MinIO（可选原件/历史版本对象存储）
+- 本地持久化磁盘与备份卷
 - Milvus (可选向量检索)
 - Docker (容器化)
 

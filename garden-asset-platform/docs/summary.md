@@ -1,13 +1,13 @@
 # 项目文件统计
 
-> 基于当前代码库实测统计（2026-10-26，v1.12.0）
+> 基于当前代码库实测统计（2026-10-27，v1.12.1）
 
 ## 后端
 
 - Python 文件：86（`backend/app`）
 - 数据模型：31 张表（`backend/app/models`）
 - API 资源模块：21（`backend/app/resources`）
-- 服务层：18（水印、存证、授权范围、任务队列、通知、证据包、对象存储、存储巡检等）
+- 服务层：18（水印、存证、授权范围、任务队列、通知、证据包、本地存储、存储巡检等）
 - 工具模块：26（鉴权、路径安全、审计签名、备份、限流、迁移等）
 - 测试文件：53（pytest，按文件子进程串行执行）
 
@@ -19,7 +19,7 @@
 
 ## 配置文件
 
-- Docker：后端/前端 Dockerfile、docker-compose.yml（PostgreSQL/Redis/MinIO 可选服务）
+- Docker：后端/前端 Dockerfile、docker-compose.yml（PostgreSQL/Redis，本地持久化卷）
 - Nginx：`frontend/nginx.conf`
 - CI/CD：`.github/workflows/`（CI、CodeQL、E2E、Docker、Release、Scorecard、密钥扫描等）
 - 测试：`pytest.ini`、`vitest.config.js`、`playwright.config.js`
@@ -62,4 +62,4 @@
 4. 长时任务持久化队列与 worker 健康度
 5. 短时票据流式下载/预览，避免大文件进入 JS 内存
 6. 跨页面断点续传与会话生命周期治理
-7. 完整测试覆盖：后端 53 个 pytest 文件（407 个用例）、前端 63 个 Vitest、25 个 Playwright E2E
+7. 完整测试覆盖：后端 53 个 pytest 文件（402 个用例）、前端 63 个 Vitest、25 个 Playwright E2E

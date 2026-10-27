@@ -417,7 +417,7 @@ flask reset-password user1 newpassword
 | Redis | 缓存/消息队列 |
 | FISCO BCOS | 区块链 |
 | Milvus | 向量数据库 |
-| MinIO | 对象存储（可选，当前默认本地磁盘） |
+| 本地磁盘 | 原件、历史版本与派生文件存储（默认且唯一存储方式） |
 
 ## 项目亮点
 
@@ -486,7 +486,7 @@ flask reset-password user1 newpassword
 | 授权审批 | ✅ | 95% | 双重审批、合同生成、5种授权类型 |
 | AI分析 | ✅ | 80% | GLM-4/CLIP集成，需配置API Key |
 | 前端界面 | ✅ | 90% | 19页面+骨架屏+设计系统 |
-| 单元测试 | ✅ | 95% | 后端 407 个用例 + 前端 63 个用例 + 25 个 Playwright 用例，CI 全量执行 |
+| 单元测试 | ✅ | 95% | 后端 402 个用例 + 前端 63 个用例 + 25 个 Playwright 用例，CI 全量执行 |
 | Docker部署 | ✅ | 90% | 多服务编排、健康检查、HTTPS待配置 |
 | CI/CD | ✅ | 100% | Git Flow + 16 个工作流 + 机器人体系 |
 

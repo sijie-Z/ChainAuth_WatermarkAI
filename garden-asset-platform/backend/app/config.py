@@ -72,16 +72,8 @@ class Config:
     # Redis配置
     REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
 
-    # 原件存储：默认本地磁盘；minio/s3/object 时新原件写对象存储，
-    # 历史绝对路径仍按本地文件读取，不自动迁移。
-    STORAGE_BACKEND = os.environ.get('STORAGE_BACKEND', 'local').lower()
-
-    # MinIO配置
-    MINIO_ENDPOINT = os.environ.get('MINIO_ENDPOINT', 'localhost:9000')
-    MINIO_ACCESS_KEY = os.environ.get('MINIO_ACCESS_KEY', 'minioadmin')
-    MINIO_SECRET_KEY = os.environ.get('MINIO_SECRET_KEY', 'minioadmin')
-    MINIO_BUCKET = os.environ.get('MINIO_BUCKET', 'garden-assets')
-    MINIO_SECURE = os.environ.get('MINIO_SECURE', 'false').lower() == 'true'
+    # 文件统一使用本地磁盘存储；上传、版本与派生文件共享 UPLOAD_FOLDER。
+    # MinIO 不再作为平台依赖或可选组件。
 
     # 区块链配置
     BLOCKCHAIN_ENABLED = os.environ.get('BLOCKCHAIN_ENABLED', 'false').lower() == 'true'
@@ -283,12 +275,6 @@ def validate_production_config(app):
             problems.append(f'{key} 长度不足 32 位')
         elif any(marker in lowered for marker in PLACEHOLDER_SECRET_MARKERS):
             problems.append(f'{key} 仍包含示例占位文本')
-    storage_backend = str(app.config.get('STORAGE_BACKEND', 'local')).lower()
-    if storage_backend in ('minio', 's3', 'object'):
-        for key in ('MINIO_ACCESS_KEY', 'MINIO_SECRET_KEY'):
-            value = str(app.config.get(key) or '')
-            if not value or value.lower() in ('minioadmin', 'change-me', 'changeme'):
-                problems.append(f'{key} 启用对象存储时必须替换默认凭证')
     if problems:
         raise RuntimeError(
             '生产配置不安全：' + '；'.join(problems)
