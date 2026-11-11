@@ -44,7 +44,7 @@ APScheduler==3.10.4
 # web3==7.6.0
 
 # Watermark algorithm
-opencv-python-headless==4.8.1.78
+opencv-python-headless==5.0.0.93
 geopandas==1.1.2
 shapely==2.0.6
 # GeoPandas 1.1 使用 pyogrio 做 I/O；fiona 1.10 修复了内置 GDAL 的 CVE-2023-45853
