@@ -14,7 +14,7 @@ psycopg2-binary==2.9.13
 alembic==1.12.1
 
 # Data processing
-numpy==1.26.2
+numpy==2.5.4
 Pillow==13.0.0
 
 # AI related
